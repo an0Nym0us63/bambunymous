@@ -3235,10 +3235,19 @@ async def _save_v3anim(folder: Path, file: UploadFile, style: str = "", bg: str 
     if not _V3ANIM_RE.fullmatch(name):
         name = f"Vue3D_anim.{ext}"
     folder.mkdir(parents=True, exist_ok=True)
+    prev = _v3anim(folder, fresh=True)                      # celle deja en tete de fiche, s'il y en a une
     tmp = folder / (name + ".part")
     tmp.write_bytes(raw)
     os.replace(tmp, folder / name)
-    (folder / V3_ANIM_OFF).unlink(missing_ok=True)          # une animation qu'on vient de faire : on veut la voir
+    # (09/11/2026) une animation qu'on vient de faire ne va pas d'office en haut de la fiche (🧊 Fiche l'y met) : celle qui y
+    # etait y reste (la nouvelle passe juste derriere elle), sinon aucune
+    if prev:
+        try:
+            os.utime(folder / name, (prev["v"] - 1, prev["v"] - 1))
+        except OSError:
+            pass
+    else:
+        (folder / V3_ANIM_OFF).touch()
     _ANIM_OFF.pop(str(folder), None)
     gallery_touched()
     _LAST_ANIM.pop(str(folder), None)

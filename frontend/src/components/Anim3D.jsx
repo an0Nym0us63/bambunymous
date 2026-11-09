@@ -176,7 +176,7 @@ export async function startAnim(animate, opts, target, onSaved) {
     const { data } = await client.post(`${base}/vue3d/anim`, fd, { timeout: 180000, onUploadProgress: e => e.total && show({ state: "upload", text: `Envoi · ${(r.blob.size / 1048576).toFixed(1)} Mo`, p: e.loaded / e.total }) });
     const url = data.anim ? `/api/v1${target.kind === "group" ? `/prints/groups/${target.id}/photo` : `/prints/${target.id}/file`}/${data.anim.name}?v=${data.anim.v}` : null;
     egg("animation_3d");
-    show({ state: "done", text: `${fx} ${what} enregistré${r.alpha ? " (fond transparent)" : ""} · en tête de la fiche et dans 🧊 Vues 3D`, url });
+    show({ state: "done", text: `${fx} ${what} enregistré${r.alpha ? " (fond transparent)" : ""} · dans 🧊 Vues 3D (🧊 Fiche la met en haut de la fiche)`, url });
     onSaved?.(data.anim);
     // (09/11/2026) la fiche ouverte (et la liste) se relisent : l'animation est en tete, on doit la voir sans rouvrir
     window.dispatchEvent(new CustomEvent("bn-prints-changed", { detail: { kind: target.kind === "group" ? "group" : "print", id: target.id } }));
