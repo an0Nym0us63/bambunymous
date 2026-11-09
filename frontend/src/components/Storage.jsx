@@ -177,7 +177,8 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       .bn-ct-name{font-size:11px;font-weight:900;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
       .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
-      .bn-pastille{display:inline-flex}.bn-pastille svg{width:min(40px,72cqw);height:auto}
+      .bn-pastille{display:inline-flex}.bn-pastille svg{width:96cqw;height:auto}
+      .bn-cell-p{padding:2px}.bn-cell-p .bn-num{position:absolute;top:2px;left:3px;margin:0;z-index:1;padding:1px 3px;border-radius:5px;background:color-mix(in srgb,var(--surface) 80%,transparent)}
       @container (max-width:34px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`;
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
 const spanOf = p => p.span === -1 ? { gridColumn: "1 / -1" } : p.span > 1 ? { gridColumn: `span ${p.span}` } : {};
@@ -469,7 +470,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     const occ = p.spools.find(x => fo(x.id)) || p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null), hit = isHit(p);
     const num = `${p.single ? "" : "📚"}${shortName(p, by)}`;
     // (08/11/2026) le meme dessin que la vue du stock : numero, tranche, nom, sous-type · marque
-    return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
+    return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}${occ && !edge && !embed ? " bn-cell-p" : ""}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
       data-swap-src={occ && marks?.[occ.id] != null ? marks[occ.id] : undefined}
       data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
       style={{ cursor: readOnly ? "default" : "pointer", zIndex: hit ? 2 : undefined, animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
@@ -499,6 +500,12 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
     </div>
   </div>;
+  // (09/11/2026) condense : des cases a largeur fixe selon la vue (debout, couchee, pastille), les zones a leur largeur ;
+  // rien ne s'etire pour remplir la fenetre. En integre (les echanges), la grille d'avant
+  const cellW = q => { const e = edgeOf(q, by); return e === "v" ? 40 : e ? 104 : 50; };
+  const tightCells = (tpl, q, n) => embed ? tpl : tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, ${cellW(q)}px)`
+    : tpl.replace(/minmax\(0, 1fr\)/g, `${cellW(q)}px`);
+  const tightZones = tpl => embed ? tpl : tpl.replace(/minmax\(0, 1fr\)/g, "max-content");
   const Zone = ({ p, many }) => {
     const ch = kids[p.id] || [];
     const cells = ch.filter(c => c.leaf), subs = ch.filter(c => !c.leaf);
@@ -512,7 +519,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
           {embed ? p.name.replace(/^(\p{L})\p{L}*\s*(\d+)$/u, "$1$2") : p.name}</span>
         {!embed && <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 " : ""}{takenOf(p, kids)}/{leafCountOf(p, kids)}</span>}
       </button>
-      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
+      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: tightCells(a.tpl, p, cells.length), justifyContent: "center" }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(30px, 1fr))"))}
       {subs.length > 0 && <Zones parent={p} list={subs}/>}
       {!readOnly && <div style={{ display: "flex", gap: 3 }}>
@@ -524,7 +531,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   };
   // les zones cote a cote, chacune a sa hauteur (07/11/2026 : elles s'etiraient a la plus haute) ; 5 tiennent sur un telephone
   const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, `repeat(${Math.min(list.length, 4)}, minmax(0, 1fr))`);
-    return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl, alignItems: "start" }}>
+    return <div style={{ display: "grid", gap: 4, gridTemplateColumns: tightZones(a.tpl), alignItems: "start", justifyContent: embed ? undefined : "start" }}>
       {a.items.map(z => <div key={z.id} style={{ minWidth: 0, ...spanOf(z) }}>{z.leaf ? <Vrac p={z}/> : <Zone p={z} many={list.length > 1 && !wide(z)}/>}</div>)}</div>; };
   const ch = kids[root.id] || [];
   // les cases sans zone d'un cote ; les zones et les emplacements en vrac (communs) de l'autre, cote a cote
@@ -567,7 +574,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
           dans la carte Rangements pour y ranger tes bobines.</div>}
         {root.leaf && !readOnly && <div style={{ ...small, padding: 12, border: "1px dashed var(--border)", borderRadius: 12 }}>
           Un emplacement commun : autant de bobines qu'on veut.{root.spools.length ? " Il tient des bobines : range-les ailleurs pour le découper en zones ou en cases." : " « ＋ Une zone » ou « ＋ Des emplacements » le découpent."}</div>}
-        {direct.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: a.tpl }}>
+        {direct.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: embed ? a.tpl : a.tpl.includes("auto-fill") ? `repeat(auto-fill, ${cellW(root)}px)` : tightCells(a.tpl, root, direct.length) }}>
           {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(direct, root, false, "repeat(auto-fill, minmax(34px, 1fr))"))}
         {zones.length > 0 && <Zones parent={root} list={zones}/>}
       </div>;
