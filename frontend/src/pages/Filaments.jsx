@@ -2376,7 +2376,7 @@ function SpoolsView({ filaments, showArchived }) {
       {!loading && !spools.length && <EmptyCard icon={showArchived ? "🗄" : "🧵"} text={allSpools.length ? "Aucune bobine ne correspond." : showArchived ? "Aucune bobine archivée." : "Aucune bobine en stock."}/>}
       {/* 01/11/2026 : plus larges des que l'ecran le permet (136px sur ordinateur), pour lire le sous-type en entier */}
       {showArchived && spools.length > 0 && <ArchiveWall spools={spools} onOpen={setSelected} menu={spoolMenu}/>}
-      {!showArchived && view === "storage" && spools.length > 0 && <StorageMap spools={spools} admin={isAdmin} onOpen={setSelected}
+      {!showArchived && view === "storage" && spools.length > 0 && <StorageMap spools={spools} admin={isAdmin} onOpen={setSelected} filtering={spools.length < allSpools.length}
         renderSpool={s => <SpoolCard key={s.id} s={s} colorsList={parseColorsList(s.filament_color, s.filament_colors_array)} onClick={()=>setSelected(s)} menu={() => spoolMenu(s)}/>}/>}
       {!showArchived && view !== "storage" && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(clamp(108px, 28vw, 136px),1fr))", gap:8 }}>
         {spools.map(s => {

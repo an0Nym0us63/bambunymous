@@ -271,7 +271,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     return ks.length ? arrange({ pins: Object.fromEntries(ks.map(k => [k, n])) }) : null; };
   const laterDay = d => { const mv = frozen(d).free.map(j => j.key), s = new Set(mv);         // tout plus tard : en fin de file, libres
     return mv.length ? arrange({ order: [...keys.filter(k => !s.has(k)), ...mv], pins: Object.fromEntries(mv.map(k => [k, null])) }) : null; };
-  const onHead = d => { pickDay(d); if (edit && frozen(d).all.length) setDayMenu(d); };
+  // l'engrenage de l'en-tete (09/11/2026) : les actions de la journee ; toucher l'en-tete, lui, choisit le jour
+  const onHead = edit ? d => { pickDay(d); if (frozen(d).all.length) setDayMenu(d); } : null;
   const shift = (day, n) => { const d = new Date(`${day}T12:00`); d.setDate(d.getDate() + n); return iso(d); };
   const go = n => {
     if (view === "month") return setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));

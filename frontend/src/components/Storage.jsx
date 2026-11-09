@@ -182,6 +182,8 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       .bn-tight{padding:2px;border-radius:8px;gap:0}.bn-tight .bn-num{position:absolute;top:1px;left:2px;margin:0;z-index:1;padding:0 3px;border-radius:5px;font-size:8.5px;line-height:12px;
         background:color-mix(in srgb,var(--surface) 82%,transparent)}
       .bn-tight .bn-band{min-height:0}
+      .bn-match{border:2px solid #F59E0B;box-shadow:0 0 0 2px color-mix(in srgb,#F59E0B 30%,transparent),0 0 14px -2px rgba(245,158,11,.75);animation:bnMatch 1.6s ease-in-out 2}
+      @keyframes bnMatch{50%{box-shadow:0 0 0 4px color-mix(in srgb,#F59E0B 18%,transparent),0 0 20px 0 rgba(245,158,11,.9)}}
       .bn-cell.bn-free.bn-tightf{min-height:30px;padding:2px;border-radius:8px}
       @container (max-width:34px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`;
 // condense (09/11/2026) : la largeur fixe d'une case selon la vue de ses bobines (debout, couchee, pastille), et la grille
@@ -203,6 +205,50 @@ const icoBox = (c, size = 30, r = 10) => ({ width: size, height: size, borderRad
   background: `color-mix(in srgb, ${c} 16%, var(--surface))`, border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))` });
 
 const spoolName = s => s.filament_translated_name || s.filament_name || s.name || `Bobine #${s.id}`;
+
+// la fiche d'identite d'une bobine au survol (09/11/2026) : une carte qui apparait au-dessus de la case (souris seulement ;
+// au toucher, la case ouvre sa fiche ou sa fenetre). idTip(s, extra) a poser sur l'element ; <SpoolIdHost/> une fois par vue.
+const _idTip = { cur: null, subs: new Set() };
+const idTipSet = v => { _idTip.cur = v; _idTip.subs.forEach(f => f(v)); };
+const idTip = (s, extra = null) => s ? {
+  onPointerEnter: e => { if (e.pointerType === "mouse") idTipSet({ s, extra, r: e.currentTarget.getBoundingClientRect() }); },
+  onPointerLeave: e => { if (e.pointerType === "mouse") idTipSet(null); },
+  onPointerDown: () => idTipSet(null),
+} : {};
+function SpoolIdHost() {
+  const [t, setT] = useState(null);
+  useEffect(() => { const f = v => setT(v); _idTip.subs.add(f); const off = () => idTipSet(null);
+    window.addEventListener("scroll", off, true); return () => { _idTip.subs.delete(f); window.removeEventListener("scroll", off, true); }; }, []);
+  if (!t) return null;
+  const { s, extra, r } = t, W = 250;
+  const hex = (parseColorsList(s.filament_color ?? s.color, s.filament_colors_array ?? s.colors_array)[0] || "#8B5CF6").replace(/^#?/, "#").slice(0, 7);
+  const g = s.remaining_weight_g, full = s.filament_weight_g || 1000, pct = g != null ? Math.max(0, Math.min(100, g / full * 100)) : null;
+  const above = r.top > 190, left = Math.max(8, Math.min(window.innerWidth - W - 8, r.left + r.width / 2 - W / 2));
+  const mat = s.filament_fila_type || s.filament_material || s.material, brand = s.filament_manufacturer || s.brand;
+  return createPortal(<div style={{ position: "fixed", left, top: above ? r.top - 8 : r.bottom + 8, transform: above ? "translateY(-100%)" : "none", width: W, zIndex: 9000,
+    pointerEvents: "none", borderRadius: 18, overflow: "hidden", color: "var(--text)", animation: "bnIdIn .16s cubic-bezier(.2,.9,.3,1.2)",
+    background: `linear-gradient(150deg, color-mix(in srgb, ${hex} 30%, transparent) 0%, transparent 62%), var(--sheet-bg, #111827)`, backdropFilter: "blur(10px)",
+    border: `1px solid color-mix(in srgb, ${hex} 45%, var(--border))`, boxShadow: `0 18px 40px -12px rgba(15,23,42,.55), 0 0 0 1px rgba(255,255,255,.04) inset` }}>
+    <style>{"@keyframes bnIdIn{from{opacity:0;transform:translateY(" + (above ? "-94%" : "6%") + ") scale(.96)}to{opacity:1}}"}</style>
+    <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 12px 10px" }}>
+      <div style={{ filter: `drop-shadow(0 6px 10px color-mix(in srgb, ${hex} 45%, transparent))` }}><Swatch s={s} size={58}/></div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.2, overflowWrap: "anywhere" }}>{spoolName(s)}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", marginTop: 2 }}>{[mat, brand].filter(Boolean).join(" · ")}</div>
+        <div style={{ display: "inline-block", marginTop: 5, padding: "1px 7px", borderRadius: 8, fontSize: 10.5, fontWeight: 900, letterSpacing: ".04em",
+          background: `color-mix(in srgb, ${hex} 22%, var(--surface2))`, color: "var(--text2)" }}>#{s.id}</div>
+      </div>
+    </div>
+    {g != null && <div style={{ padding: "0 12px 10px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 800, color: "var(--muted)", marginBottom: 4 }}>
+        <span>Reste</span><span style={{ color: "var(--text)", fontWeight: 900 }}>{Math.round(g)} g{pct != null ? ` · ${Math.round(pct)} %` : ""}</span></div>
+      <div style={{ height: 6, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: `linear-gradient(90deg, color-mix(in srgb, ${hex} 70%, #ffffff), ${hex})` }}/></div>
+    </div>}
+    {(extra || s.location) && <div style={{ padding: "7px 12px 9px", borderTop: "1px dashed var(--border)", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+      📍 {extra || s.location}</div>}
+  </div>, document.body);
+}
 
 const seg = { padding: "7px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)",
   fontSize: 12.5, fontWeight: 800, cursor: "pointer" };
@@ -483,7 +529,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     // (08/11/2026) le meme dessin que la vue du stock : numero, tranche, nom, sous-type · marque
     return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}${embed ? "" : occ ? " bn-tight" : " bn-tightf"}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
       data-swap-src={occ && marks?.[occ.id] != null ? marks[occ.id] : undefined}
-      data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
+      {...idTip(occ, p.path)} data-tip={occ ? undefined : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
       style={{ cursor: readOnly ? "default" : "pointer", zIndex: hit ? 2 : undefined, animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
       {occ && marks?.[occ.id] != null && <span className={`bn-mark${String(marks[occ.id]).startsWith("↩") ? " home" : ""}`}>{marks[occ.id]}</span>}
       {occ ? <>
@@ -505,7 +551,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 stock · " : ""}vrac · {p.spools.length}</span>
     </button>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
-      {p.spools.slice(0, 24).map(x => <span key={x.id} data-tip={`${x.name} · #${x.id}`} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined} style={{ display: "inline-flex", borderRadius: "50%",
+      {p.spools.slice(0, 24).map(x => <span key={x.id} {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined} style={{ display: "inline-flex", borderRadius: "50%",
         animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}><Swatch s={x} size={fo(x.id) ? 22 : 16}/></span>)}
       {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
@@ -550,6 +596,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
 
   const styles = <>
       <style>{CELL_CSS}</style>
+      <SpoolIdHost/>
       <style>{`@keyframes bnDrawer{0%{opacity:0;transform:perspective(900px) rotateX(38deg) translateY(-34px) scale(.92)}
         60%{opacity:1;transform:perspective(900px) rotateX(-4deg) translateY(4px) scale(1.01)}100%{transform:none}}
         @keyframes bnHit{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.9);transform:scale(1);border-color:#F59E0B}
@@ -985,7 +1032,9 @@ export function ToStoreBanner({ onOpen }) {
 
 // ── Le stock par rangement ───────────────────────────────────────────────────
 // spools : la liste filtree de l'onglet Stock ; renderSpool(s) : la carte de bobine de la page.
-export function StorageMap({ spools, onOpen, renderSpool, admin }) {
+// filtering (09/11/2026) : une recherche ou un filtre ecarte des bobines ; les sections qui ont des resultats s'ouvrent, ce qui
+// correspond s'allume, le reste s'estompe
+export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = false }) {
   const st = useStorage();
   const [fold, setFold] = useState(() => { try { return JSON.parse(localStorage.getItem("bn_storage_fold") || "{}"); } catch { return {}; } });
   const [fill, setFill] = useState(null);            // une case libre a remplir
@@ -1034,11 +1083,11 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
           background: `color-mix(in srgb, ${tone} 16%, var(--surface))`, border: `1px solid color-mix(in srgb, ${tone} 35%, var(--border))`, color: tone }}>{icon}</span>
         <span style={{ fontSize: 15, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
         <span style={{ ...small, flexShrink: 0 }}>{n}</span>
-        <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12 }}>{fold[k] ? "▸" : "▾"}</span>
+        <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12 }}>{fold[k] && !(filtering && n > 0) ? "▸" : "▾"}</span>
       </button>
       {aside}
     </div>
-    {!fold[k] && children}
+    {(!fold[k] || (filtering && n > 0)) && children}
   </div>;
 
   // une case : sa bobine (ou son fantome si elle est dans l'imprimante / hors du filtre), sinon « libre »
@@ -1049,10 +1098,10 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     const occ = p.spools[0], full = occ ? byId[occ.id] : null, out = occ && occ.in_printer;
     const free = !occ, edge = edgeOf(p, by), info = infoOf(occ, full), num = shortName(p, by);
     const nm = out ? `🖨 ${unitOf(occ.location)}` : (full ? (full.filament_translated_name || full.filament_name) : occ?.name);
-    return <button type="button" className={`bn-cell${free ? " bn-free bn-tightf" : " bn-tight"}`} onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
-      data-tip={occ ? [occ.name, ...info, `#${occ.id}`, out ? `dans l'imprimante (${occ.location}), sa case l'attend` : null].filter(Boolean).join(" · ")
-        : admin ? `${num} · libre : toucher pour y ranger une bobine` : `${num} · libre`}
-      style={{ cursor: full || (free && admin) ? "pointer" : "default", opacity: occ && !full && !out ? 0.55 : 1 }}>
+    return <button type="button" className={`bn-cell${free ? " bn-free bn-tightf" : " bn-tight"}${filtering && full ? " bn-match" : ""}`} onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
+      {...idTip(occ ? (full || occ) : null, occ ? (out ? `dans l'imprimante (${occ.location}), sa case l'attend` : p.path) : null)}
+      data-tip={occ ? undefined : admin ? `${num} · libre : toucher pour y ranger une bobine` : `${num} · libre`}
+      style={{ cursor: full || (free && admin) ? "pointer" : "default", opacity: occ && !full && !out ? (filtering ? 0.3 : 0.55) : free && filtering ? 0.4 : 1 }}>
       {free ? <span className="bn-num-free">{num}</span> : <>
         <span className="bn-num">{num}</span>
         <span className="bn-band">
@@ -1070,8 +1119,8 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
   const Tile = ({ s, vertical = false, tag = null }) => {
     const edge = vertical ? "v" : edgeOf(p0Of(s), by), info = [s.filament_fila_type || s.filament_material, s.filament_manufacturer].filter(Boolean);
     // le slot (08/11/2026) : une pastille dans le coin de la tuile, a l'ecart de la bobine (il etait colle a sa tranche)
-    return <button type="button" className="bn-cell" onClick={() => onOpen(s)} style={tag ? { position: "relative" } : undefined}
-      data-tip={[spoolName(s), ...info, tag ? s.location : null, `#${s.id}`].filter(Boolean).join(" · ")}>
+    return <button type="button" className={`bn-cell${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} style={tag ? { position: "relative" } : undefined}
+      {...idTip(s)}>
       {tag && <span className="bn-slot">{tag}</span>}
       <span className="bn-band">{edge === "v" ? <SpoolEdge s={s} vertical len={44} thick={22}/> : edge ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/> : <Swatch s={s} size={28}/>}</span>
       <span className="bn-ct-name">{spoolName(s)}</span>
@@ -1079,13 +1128,18 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     </button>;
   };
   const p0Of = s => by[s.place_id] || {};
+  // une bobine en vrac, condensee (09/11/2026) comme une case : sa bobine seule, le nom au survol, la fiche au toucher
+  const Mini = ({ s }) => { const e = edgeOf(p0Of(s), by);
+    return <button type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s, p0Of(s).path)}>
+      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={38} thick={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
+        : <span className="bn-pastille"><Swatch s={s} size={40}/></span>}</span></button>; };
   const Common = ({ p, nested }) => {
     const here = storedHere(p);
     const away = p.spools.filter(x => x.in_printer);
-    return <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: nested ? 8 : 0, borderRadius: 12,
+    return <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: nested ? 5 : 0, borderRadius: 10,
       border: nested ? "1px dashed color-mix(in srgb, #8B5CF6 40%, var(--border))" : "none", background: nested ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent" }}>
-      {nested && <div style={{ fontSize: 12, fontWeight: 900, color: "var(--text2)" }}>{p.name} <span style={small}>vrac · {here.length}</span></div>}
-      {here.length ? <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(86px, 1fr))" }}>{here.map(s => <Tile key={s.id} s={s}/>)}</div>
+      {nested && <div style={{ fontSize: 11.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap" }}>{p.name} <span style={small}>vrac · {here.length}</span></div>}
+      {here.length ? <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.min(here.length, 6)}, ${CELL_W(edgeOf(p, by))}px)` }}>{here.map(s => <Mini key={s.id} s={s}/>)}</div>
         : <div style={{ padding: 10, borderRadius: 12, border: "1.5px dashed var(--border)", textAlign: "center", ...small }}>vide</div>}
       {away.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", ...small }}>🖨 dans l'imprimante :
         {away.map(x => <span key={x.id} data-tip={`${x.name} · ${x.location}`} style={{ display: "inline-flex" }}><Swatch s={x} size={20} dim/></span>)}</div>}
@@ -1104,7 +1158,8 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         <span style={{ ...small, fontSize: 10 }}>{took}/{tot}</span></div>}
       {cells.length > 0 && (a => <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: tightTpl(a.tpl, CELL_W(edgeOf(p, by)), cells.length) }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
-      {commons.map(c => <Common key={c.id} p={c} nested/>)}
+      {/* les emplacements en vrac cote a cote (09/11/2026 : ils s'empilaient en colonne) */}
+      {commons.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "flex-start" }}>{commons.map(c => <Common key={c.id} p={c} nested/>)}</div>}
       {subs.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl.replace(/minmax\(0, 1fr\)/g, "max-content"), justifyContent: "start", alignItems: "start" }}>
         {a.items.map(c => <div key={c.id} style={{ minWidth: 0, ...spanOf(c) }}><Group p={c} many={subs.length > 1 && !wide(c)}/></div>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
@@ -1112,18 +1167,27 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
 
   return <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
     <style>{CELL_CSS}</style>
+    <SpoolIdHost/>
+    {/* (09/11/2026) condense comme les rangements : chaque unite a sa largeur, les bobines debout, serrees, le slot dans le coin */}
     {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
-      {units.map(u => <div key={u} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text2)" }}>{u}</div>
-        <div style={{ ...tiles, gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>{printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true })).map(s => <Tile key={s.id} s={s} vertical tag={slotTag(s)}/>)}</div>
-      </div>)}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-start" }}>
+      {units.map(u => { const list = printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true }));
+        return <div key={u} style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)",
+          background: "color-mix(in srgb, #0EA5E9 4%, var(--surface2))" }}>
+          <div style={{ fontSize: 11, fontWeight: 900, color: "var(--text2)", textAlign: "center" }}>{u}</div>
+          <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.max(1, list.length)}, ${CELL_W("v")}px)` }}>
+            {list.map(s => <button key={s.id} type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s)}>
+              {slotTag(s) && <span className="bn-num">{slotTag(s)}</span>}
+              <span className="bn-band"><SpoolEdge s={s} vertical len={38} thick={18}/></span></button>)}
+          </div></div>; })}
+      </div>
     </Section>}
     {st.mode === "single"
       ? (elsewhere.length > 0 && <Section k="single" icon={<Archive size={16} strokeWidth={2.2}/>} title={st.name} n={elsewhere.length}><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>)
       : <>
         {/* (09/11/2026) condenses, les rangements se mettent cote a cote quand la largeur le permet */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
-        {roots.map(p => <div key={p.id} style={{ flex: p.leaf && !p.single ? "1 1 280px" : "0 1 auto", minWidth: 0, maxWidth: "100%" }}>
+        {roots.map(p => <div key={p.id} style={{ flex: "0 1 auto", minWidth: 0, maxWidth: "100%" }}>
           <Section k={`p${p.id}`} icon={<PlaceIco p={p}/>} tone={p.stock ? "#D97706" : "#8B5CF6"} title={p.stock ? `${p.name} · stock` : p.name} n={countIn(p)}>
           {p.leaf ? (p.single ? <div style={{ maxWidth: 120 }}><Cell p={p}/></div> : <Common p={p}/>) : <Group p={p}/>}
         </Section></div>)}

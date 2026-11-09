@@ -85,9 +85,14 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
       {dates.map(d => {
         const done = (days?.[d]?.duration || 0), planned = evs[d].filter(e => e.kind === "plan").reduce((a, e) => a + (e.b - e.a) * 60, 0);
         const fin = evs[d].filter(e => e.kind === "plan" && e.j.completes).length, finals = evs[d].some(e => e.kind === "plan" && isFinal(e.j));
-        return <button key={d} type="button" onClick={() => (onHead || onPick)(d)}
-          style={{ padding: "6px 4px", border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer", textAlign: "center", minWidth: 0,
+        // (09/11/2026) toucher l'en-tete choisit le jour (on voit ce qu'il contient) ; l'engrenage ouvre les actions de la journee
+        return <button key={d} type="button" onClick={() => onPick(d)}
+          style={{ padding: "6px 4px", border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer", textAlign: "center", minWidth: 0, position: "relative",
             background: d === pick ? "color-mix(in srgb, #6366F1 12%, transparent)" : "transparent" }}>
+          {onHead && planned > 0 && <span role="button" tabIndex={0} aria-label="Actions de la journée" data-tip="Actions de la journée : figer, défiger, décaler…"
+            onClick={e => { e.stopPropagation(); onHead(d); }} onKeyDown={e => { if (e.key === "Enter") { e.stopPropagation(); onHead(d); } }}
+            style={{ position: "absolute", top: 2, right: 2, width: 20, height: 20, borderRadius: 7, display: "grid", placeItems: "center", fontSize: 12,
+              background: "color-mix(in srgb, #6366F1 14%, var(--surface))", border: "1px solid color-mix(in srgb, #6366F1 30%, var(--border))", cursor: "pointer" }}>⚙</span>}
           <div style={{ fontSize: 11, fontWeight: 900, color: d === today ? "#6366F1" : "var(--text2)", textTransform: "capitalize" }}>{dayName(d)}</div>
           <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {done ? hm(done) : ""}{done && planned ? " · " : ""}{planned ? <span style={{ color: "#16A34A" }}>{hm(planned)}</span> : ""}</div>
