@@ -163,8 +163,8 @@ const edgeOf = (p, by) => { let q = p, seen = 0; while (q && seen++ < 20) { if (
 const EDGE_TXT = { h: "sur la tranche, à plat", v: "sur la tranche, debout", p: "pastille" };
 // les cases des rangements (08/11/2026) : le meme dessin dans la vue du stock et la fenetre d'un rangement ; le texte suit
 // la largeur de la case (le nom toujours, sur une ligne quand c'est etroit ; rien que la tranche dans une toute petite case)
-const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;
-        padding:5px 5px 6px;border-radius:12px;border:1px solid color-mix(in srgb,#8B5CF6 22%,var(--border));background:var(--surface);color:var(--text);
+const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;
+        padding:3px 3px 4px;border-radius:10px;border:1px solid color-mix(in srgb,#8B5CF6 22%,var(--border));background:var(--surface);color:var(--text);
         overflow:hidden;font:inherit;text-align:center;transition:transform .12s, box-shadow .12s}
       .bn-cell:not(.bn-free):hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(15,23,42,.35)}
       .bn-cell.bn-free{min-height:40px;justify-content:center;align-items:center;background:transparent;border:1.5px dashed color-mix(in srgb,var(--border) 85%,transparent)}
@@ -177,6 +177,7 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       .bn-ct-name{font-size:11px;font-weight:900;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
       .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
+      .bn-pastille{display:inline-flex}.bn-pastille svg{width:min(40px,72cqw);height:auto}
       @container (max-width:34px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`;
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
 const spanOf = p => p.span === -1 ? { gridColumn: "1 / -1" } : p.span > 1 ? { gridColumn: `span ${p.span}` } : {};
@@ -415,8 +416,13 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       for (const c of kids[p.id] || []) if (c.name.startsWith(p.name + "-")) await patch(c, { name: nv + c.name.slice(p.name.length) });
       return true;
     } });
+  // une case prise (09/11/2026) : sa bobine en tete (les cases n'ecrivent plus son nom) ; son nom, sa matiere, sa marque, ce qu'il reste
+  const occOf = p => p.leaf && p.single ? p.spools[0] : null;
   const menu = (e, p) => readOnly ? null : openMenu(e, {
-    title: p.leaf ? shortName(p, by) : p.name, subtitle: p.path, color: "#8B5CF6",
+    title: occOf(p) ? occOf(p).name : p.leaf ? shortName(p, by) : p.name,
+    subtitle: occOf(p) ? [...infoOf(occOf(p), null), occOf(p).remaining_weight_g != null ? `${Math.round(occOf(p).remaining_weight_g)} g` : null,
+      `#${occOf(p).id}`].filter(Boolean).join(" · ") + ` — case ${shortName(p, by)}` : p.path,
+    lead: occOf(p) ? <Swatch s={occOf(p)} size={48}/> : undefined, color: "#8B5CF6",
     items: [
       { icon: "✏️", label: "Renommer", onClick: () => rename(p) },
       !p.leaf && { icon: "＋", label: "Ajouter des emplacements", onClick: () => addCells(p, p.id === root.id ? null : p.name) },
@@ -471,9 +477,8 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
         <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 40} thick={embed ? 12 : 20}/>
-          : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <Swatch s={occ} size={embed ? 16 : 24}/>}</span>
-        <span className="bn-ct-name">{occ.name}</span>
-        {info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
+          : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
+        {/* (09/11/2026) ni nom ni marque : serre, l'info est dans la fenetre au toucher (et au survol) */}
       </> : <span className="bn-num-free">{num}</span>}
     </button>;
   };

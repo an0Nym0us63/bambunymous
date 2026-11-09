@@ -134,6 +134,8 @@ export function ContextMenuHost() {
       display: "flex", alignItems: "center", gap: 12, position: "relative", overflow: "hidden",
       background: sheet ? `linear-gradient(135deg, color-mix(in srgb, ${accent} 22%, transparent), transparent 70%)` : "none",
       borderBottom: sheet ? "none" : "1px solid var(--border)" }}>
+      {/* lead (09/11/2026) : un dessin a la place de l'image (la bobine d'une case de rangement) */}
+      {menu.lead && <div style={{ flexShrink: 0, display: "grid", placeItems: "center" }}>{menu.lead}</div>}
       {menu.img && <img src={menu.img} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", flexShrink: 0,
         background: "var(--surface2)", border: "1px solid var(--border)" }}/>}
       <div style={{ minWidth: 0 }}>
