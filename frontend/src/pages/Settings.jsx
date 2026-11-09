@@ -1758,6 +1758,87 @@ function CategoriesModal({ onClose }) {
 
 
 // ── Étiquettes filaments (PDF) ─────────────────────────────────────────────
+// (09/11/2026) une planche d'etiquettes libres, au format du modele Word (20 x 10 mm, 8 colonnes, 160 par A4) : des
+// textes, chacun sa couleur de fond, de texte et son nombre ; « commencer a » saute les etiquettes deja utilisees
+const CL_KEY = "bn_custom_labels";
+const CL_PER = 160, CL_COLS = 8;
+const CL_EMPTY = { text: "", bg: "#ffffff", fg: "#000000", n: 1 };
+function CustomLabelsCard({ card, cardTitle }) {
+  const [rows, setRows] = useState(() => { try { return JSON.parse(localStorage.getItem(CL_KEY) || "null") || [CL_EMPTY]; } catch { return [CL_EMPTY]; } });
+  const [skip, setSkip] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  useEffect(() => { try { localStorage.setItem(CL_KEY, JSON.stringify(rows)); } catch { /* indisponible */ } }, [rows]);
+  const set = (i, k, v) => setRows(rs => rs.map((r, j) => j === i ? { ...r, [k]: v } : r));
+  const items = rows.filter(r => r.text.trim()).map(r => ({ ...r, n: Math.max(1, parseInt(r.n) || 1) }));
+  const total = items.reduce((a, r) => a + r.n, 0), sk = Math.max(0, Math.min(CL_PER - 1, parseInt(skip) || 0));
+  const pages = total ? Math.ceil((sk + total) / CL_PER) : 0;
+  const cells = [...Array(sk).fill(null), ...items.flatMap(r => Array(r.n).fill(r))].slice(0, CL_PER);
+  const download = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await client.post("/filaments/labels/custom", { items, skip: sk }, { responseType: "blob" });
+      const blob = new Blob([r.data], { type: "application/pdf" }), fileName = "planche-etiquettes.pdf";
+      if (window.BambuScan?.savePdf) {
+        const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1] || ""); fr.onerror = rej; fr.readAsDataURL(blob); });
+        window.BambuScan.savePdf(b64, fileName);
+      } else {
+        const url = URL.createObjectURL(blob), a = document.createElement("a");
+        a.href = url; a.download = fileName; a.dispatchEvent(new MouseEvent("click")); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }
+      egg("planche_etiquettes");
+    } catch { setErr("Génération impossible"); } finally { setBusy(false); }
+  };
+  const inp = { background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 9px", fontSize: 13, color: "var(--text)", outline: "none" };
+  const sw = { width: 34, height: 32, padding: 2, border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface2)", cursor: "pointer", flexShrink: 0 };
+  return (
+    <div className="card" style={card}>
+      <div style={cardTitle}>🏷 Planche d'étiquettes</div>
+      <CardHelp title="Planche d'étiquettes">
+        Des étiquettes libres (bacs, tiroirs, cartons…) au format de ta planche : A4, étiquettes de 20 × 10 mm, 4 mm entre elles,
+        8 colonnes, 160 par planche. Chaque ligne : un texte, sa couleur de fond, sa couleur de texte et combien d'exemplaires ;
+        le texte prend la plus grande taille qui tient (sur deux lignes au besoin). « Commencer à » saute les étiquettes déjà
+        utilisées d'une planche entamée. Le PDF est aux cotes exactes : imprime-le à 100 %, sans « ajuster à la page ».
+        Tes lignes restent sur cet appareil.
+      </CardHelp>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {rows.map((r, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <input value={r.text} onChange={e => set(i, "text", e.target.value)} placeholder="PLA Basic, Vis M3, Aimants…" maxLength={80}
+            style={{ ...inp, flex: "1 1 140px", minWidth: 0 }}/>
+          <input type="color" value={r.bg} onChange={e => set(i, "bg", e.target.value)} data-tip="Couleur de fond" aria-label="Couleur de fond" style={sw}/>
+          <input type="color" value={r.fg} onChange={e => set(i, "fg", e.target.value)} data-tip="Couleur du texte" aria-label="Couleur du texte" style={sw}/>
+          <input type="number" min={1} max={800} value={r.n} onChange={e => set(i, "n", e.target.value)} data-tip="Nombre d'exemplaires" aria-label="Nombre d'exemplaires"
+            style={{ ...inp, width: 58, textAlign: "right" }}/>
+          <span style={{ width: 52, height: 26, borderRadius: 4, background: r.bg, color: r.fg, border: "1px solid var(--border)", display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: 9, fontWeight: 900, padding: "0 3px", overflow: "hidden", textAlign: "center", lineHeight: 1.05, flexShrink: 0 }}>{r.text || "Aperçu"}</span>
+          <button type="button" onClick={() => setRows(rs => rs.length > 1 ? rs.filter((_, j) => j !== i) : [CL_EMPTY])}
+            aria-label="Retirer" data-tip="Retirer" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 14 }}>✕</button>
+        </div>)}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+        <button type="button" onClick={() => setRows(rs => [...rs, { ...CL_EMPTY, bg: rs[rs.length - 1]?.bg || "#ffffff", fg: rs[rs.length - 1]?.fg || "#000000" }])}
+          style={{ ...inp, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>＋ Une étiquette</button>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>Commencer à
+          <input type="number" min={1} max={CL_PER} value={sk + 1} onChange={e => setSkip(Math.max(0, (parseInt(e.target.value) || 1) - 1))} style={{ ...inp, width: 58, textAlign: "right" }}/></label>
+        <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>{total} étiquette{total > 1 ? "s" : ""}{pages ? ` · ${pages} planche${pages > 1 ? "s" : ""}` : ""}</span>
+        <button type="button" onClick={download} disabled={busy || !total} style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer",
+          background: total ? "#3b82f6" : "var(--surface2)", color: total ? "white" : "var(--muted)", fontSize: 12, fontWeight: 800 }}>{busy ? "…" : "📄 Planche en PDF"}</button>
+      </div>
+      {err && <p style={{ fontSize: 12, color: "#ef4444", margin: "8px 0 0" }}>{err}</p>}
+      {/* la premiere planche, a l'echelle : les cases deja utilisees en hachures */}
+      {total > 0 && <div style={{ marginTop: 10, padding: 8, borderRadius: 10, background: "#fff", border: "1px solid var(--border)", maxWidth: 360 }}>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${CL_COLS}, 1fr)`, columnGap: "2%", rowGap: 4 }}>
+          {Array.from({ length: Math.min(CL_PER, Math.ceil(Math.max(cells.length, 8) / CL_COLS) * CL_COLS) }, (_, k) => { const c = cells[k];
+            return <div key={k} style={{ aspectRatio: "2 / 1", borderRadius: 1.5, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 5.5, fontWeight: 900, lineHeight: 1, textAlign: "center",
+              ...(c ? { background: c.bg, color: c.fg, border: c.bg.toLowerCase() === "#ffffff" ? "0.5px solid #e2e8f0" : "none" }
+                : k < sk ? { background: "repeating-linear-gradient(-45deg, #e2e8f0 0 2px, transparent 2px 4px)" } : { border: "0.5px dashed #e2e8f0" }) }}>{c?.text}</div>; })}
+        </div>
+      </div>}
+    </div>
+  );
+}
+
 function LabelsCard({ card, cardTitle }) {
   const [open, setOpen] = React.useState(false);
   const [fils, setFils] = React.useState([]);
@@ -2218,6 +2299,7 @@ export default function Settings() {
         <DryRulesCard card={card} cardTitle={cardTitle}/>
         <SpoolTaresCard card={card} cardTitle={cardTitle}/>
         <LabelsCard card={card} cardTitle={cardTitle}/>
+        <CustomLabelsCard card={card} cardTitle={cardTitle}/>
         <CatalogMappingsCard card={card} cardTitle={cardTitle}/>
         <PriceReviewSection/>
       </div></AdminOnly>

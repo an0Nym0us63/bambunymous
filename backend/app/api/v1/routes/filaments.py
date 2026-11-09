@@ -542,6 +542,21 @@ async def filament_labels_pdf(
     )
 
 
+@router.post("/labels/custom")
+async def custom_labels_pdf(body: dict = Body({}), _: str = Depends(get_current_user)):
+    """(09/11/2026) Une planche d'etiquettes libres : {items: [{text, bg, fg, n}], skip}, au format de la planche du
+    modele Word (20 x 10 mm, 8 colonnes, 160 par A4). Rien n'est enregistre."""
+    from fastapi.responses import StreamingResponse
+    from ....services import custom_labels as CL
+    try:
+        pdf = CL.render(body.get("items") or [], int(body.get("skip") or 0))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    import io as _io2
+    return StreamingResponse(_io2.BytesIO(pdf), media_type="application/pdf",
+                             headers={"Content-Disposition": 'attachment; filename="planche-etiquettes.pdf"'})
+
+
 @router.get("/store-links")
 async def filament_store_links(_: str = Depends(get_current_user)):
     """Les liens directs de la boutique Bambu (31/10/2026) : par code couleur, la recharge et la bobine de 1 kg ; et le
