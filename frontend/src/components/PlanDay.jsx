@@ -526,6 +526,16 @@ export function SwapSheet({ j, onClose }) {
     : (p.os.live && p.os.out && t.spool_id === p.os.out) || slotIs(a, t, p.os.slot));
   const rail = React.useRef(null);
   const [cur, setCur] = useState(0);
+  const [railH, setRailH] = useState(null);
+  React.useLayoutEffect(() => {
+    const el = rail.current?.children?.[cur];
+    if (!el) return undefined;
+    const fit = () => setRailH(el.offsetHeight);
+    fit();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(fit) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [cur, sections.length]);
   const go = k => { setCur(k); const el = rail.current?.children?.[k]; el && rail.current.scrollTo({ left: el.offsetLeft - rail.current.offsetLeft, behavior: "smooth" }); };
   const onScroll = () => { const el = rail.current; if (el) setCur(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); };
   const when = j.start ? new Date(j.start).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
@@ -540,7 +550,7 @@ export function SwapSheet({ j, onClose }) {
         @keyframes bnSwIn{from{opacity:0}to{opacity:1}}
         .bn-sw-ar{animation:bnBreath 1.9s ease-in-out infinite}
         @keyframes bnBreath{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(99,102,241,.45)}50%{transform:scale(1.14);box-shadow:0 0 0 8px rgba(99,102,241,0),0 0 14px 2px rgba(14,165,233,.35)}}
-        .bn-sw-rail{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:16px;scrollbar-width:none}
+        .bn-sw-rail{display:flex;align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;gap:16px;scrollbar-width:none;transition:height .3s ease}
         .bn-sw-rail::-webkit-scrollbar{display:none}
         .bn-sw-rail>*{flex:0 0 100%;scroll-snap-align:start}
         @media (prefers-reduced-motion:reduce){.bn-sw-link,.bn-sw-ar{animation:none}.bn-sw-ghost{display:none}}`}</style>
@@ -559,7 +569,7 @@ export function SwapSheet({ j, onClose }) {
             fontFamily: "inherit", cursor: "pointer", color: "var(--text)", border: k === cur ? "1.5px solid #F59E0B" : "1px solid var(--border)",
             background: k === cur ? "rgba(245,158,11,0.14)" : "var(--surface2)" }}>📍 {x.title} · {x.ps.length}</button>)}
         </div>}
-        <div ref={rail} className="bn-sw-rail" onScroll={onScroll}>
+        <div ref={rail} className="bn-sw-rail" onScroll={onScroll} style={{ height: sections.length > 1 && railH ? railH : undefined }}>
           {sections.map(x => <SwapSection key={x.key} title={x.title} root={x.root} ps={x.ps} rootOf={id => rootOfSpool(st, id)} loose={x.root == null ? x.ps : []} tgtOf={tgtOf}
             grpReq={req && x.ps.some(p => p.n === req.n) ? req : null} onShow={ns => setShown(m => ({ ...m, [x.key]: ns }))}/>)}
         </div>

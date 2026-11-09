@@ -593,7 +593,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
         <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 48} thick={embed ? 12 : 24}/>
-          : edge === "c" ? <SpoolBox s={occ} h={embed ? 36 : 58}/> : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
+          : edge === "c" ? <SpoolBox s={occ} h={embed ? 36 : 58}/> : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : embed ? <Swatch s={occ} size={20}/> : <span className="bn-pastille"><Swatch s={occ} size={40}/></span>}</span>
         {/* (09/11/2026) ni nom ni marque : serre, l'info est dans la fenetre au toucher (et au survol) */}
       </> : <span className="bn-num-free">{num}</span>}
     </button>;
@@ -610,8 +610,11 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     </button>
     {/* (09/11/2026) ses bobines comme des cases condensees, a sa vue et a sa disposition ; en integre, des pastilles */}
     {embed ? <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
-      {p.spools.slice(0, 24).map(x => <span key={x.id} {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined} style={{ display: "inline-flex", borderRadius: "50%",
-        animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}><Swatch s={x} size={fo(x.id) ? 22 : 16}/></span>)}
+      {p.spools.slice(0, 24).map(x => { const e = edgeOf(p, by);
+        return <span key={x.id} {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined} style={{ display: "inline-flex", borderRadius: e && e !== "p" && e !== "s" ? 4 : "50%",
+          animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
+          {e === "c" ? <SpoolBox s={x} h={36}/> : e === "v" ? <SpoolEdge s={x} vertical len={26} thick={12}/> : e === "h" ? <SpoolEdge s={x} len={26} thick={12}/>
+            : <Swatch s={x} size={e === "s" ? (fo(x.id) ? 18 : 13) : fo(x.id) ? 22 : 16}/>}</span>; })}
       {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
     </div> : p.spools.length ? (() => { const e = edgeOf(p, by), list = p.rev ? [...p.spools].reverse() : p.spools;
@@ -655,8 +658,9 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   // elle elargissait la premiere colonne a sa mesure)
   const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, `repeat(${Math.min(list.length, 4)}, minmax(0, 1fr))`);
     const one = z => z.leaf ? <Vrac p={z}/> : <Zone p={z} many={list.length > 1 && !wide(z)}/>;
-    if (embed) return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl, alignItems: "start" }}>
-      {a.items.map(z => <div key={z.id} style={{ minWidth: 0, ...spanOf(z) }}>{one(z)}</div>)}</div>;
+    if (embed) { const big = z => z.leaf && z.spools.length > 8 && a.items.length > 1;
+      return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.items.some(big) && !a.items.every(big) ? `repeat(${Math.min(4, a.items.filter(z => !big(z)).length)}, minmax(0, 1fr))` : a.tpl, alignItems: "start" }}>
+        {[...a.items.filter(z => !big(z)), ...a.items.filter(big)].map(z => <div key={z.id} style={{ minWidth: 0, ...(big(z) ? { gridColumn: "1 / -1" } : spanOf(z)) }}>{one(z)}</div>)}</div>; }
     const row = a.items.filter(z => z.span !== -1), full = a.items.filter(z => z.span === -1);
     return <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, maxWidth: "100%", minWidth: 0 }}>
       {row.length > 0 && <div style={{ display: "grid", gap: 4, gridTemplateColumns: tightZones(a.tpl), alignItems: "start", justifyContent: "start" }}>
@@ -1131,6 +1135,15 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
     return () => { ts.forEach(clearTimeout); clearTimeout(off); window.removeEventListener("wheel", stop); window.removeEventListener("touchmove", stop); };
   }, [fold]);
   const byId = useMemo(() => Object.fromEntries((spools || []).map(s => [s.id, s])), [spools]);
+  const amsList = usePrinter(s => s.status?.ams_list);
+  useEffect(() => { if (!amsList) usePrinter.getState().fetch?.(); }, [amsList]);
+  const [amsOrder, setAmsOrder] = useState(undefined);
+  useEffect(() => {
+    const load = () => client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order ?? null)).catch(() => setAmsOrder(null));
+    load();
+    window.addEventListener("bn-ams-order", load);
+    return () => window.removeEventListener("bn-ams-order", load);
+  }, []);
   if (!st) return null;
   const { kids, roots, by } = index(st);
   const TO = st.to_store_label || "À ranger";
@@ -1138,6 +1151,11 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
   // les AMS, puis les HT, et le support externe toujours en dernier (07/11/2026)
   const unitRank = u => /^externe/i.test(u) ? 2 : /^HT-/i.test(u) ? 1 : 0;
   const units = [...new Set(printer.map(s => unitOf(s.location)))].sort((a, b) => unitRank(a) - unitRank(b) || a.localeCompare(b, "fr", { numeric: true }));
+  // (10/11/2026) placees comme sur la tuile AMS de l'accueil (la disposition choisie dans ses reglages) ; l'externe dessous
+  const idOf = Object.fromEntries((amsList || []).map(a => [amsName(a.id), a.id]));
+  const placedU = units.filter(u => idOf[u] != null && !isExternal(idOf[u]));
+  const uCols = placedU.length ? grilleAccueil(placedU.map(u => ({ id: idOf[u], u })), amsOrder === undefined ? null : lireDisposition(amsOrder)) : [];
+  const restU = units.filter(u => !placedU.includes(u));
   const waiting = spools.filter(s => !s.ordered && s.location === TO);
   const ordered = spools.filter(s => s.ordered);
   const storedHere = p => spools.filter(s => s.place_id === p.id && !s.ordered && !inPrinter(s.location) && s.location !== TO);
@@ -1250,17 +1268,20 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
     <SpoolIdHost/>
     {/* (09/11/2026) condense comme les rangements : chaque unite a sa largeur, les bobines debout, serrees, le slot dans le coin */}
     {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-start" }}>
-      {units.map(u => { const list = printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true }));
-        return <div key={u} style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)",
+      {(() => { const Unit = ({ u }) => { const list = printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true }));
+        return <div style={{ display: "inline-flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)",
           background: "color-mix(in srgb, #0EA5E9 4%, var(--surface2))" }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: "var(--text2)", textAlign: "center" }}>{u}</div>
           <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.max(1, list.length)}, ${CELL_W("v")}px)` }}>
             {list.map(s => <button key={s.id} type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s)}>
               {slotTag(s) && <span className="bn-num">{slotTag(s)}</span>}
               <span className="bn-band"><SpoolEdge s={s} vertical len={48} thick={24}/></span></button>)}
-          </div></div>; })}
-      </div>
+          </div></div>; };
+        return <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", maxWidth: "100%", overflowX: "auto" }}>
+          {uCols.length > 0 && <div style={{ display: "grid", gap: 8, alignItems: "start", gridTemplateColumns: `repeat(${uCols.length}, max-content)` }}>
+            {uCols.flatMap((col, ci) => col.map((a, ri) => a && <div key={a.u} style={{ gridColumn: ci + 1, gridRow: ri + 1 }}><Unit u={a.u}/></div>))}</div>}
+          {restU.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{restU.map(u => <Unit key={u} u={u}/>)}</div>}
+        </div>; })()}
     </Section>}
     {st.mode === "single"
       ? (elsewhere.length > 0 && <Section k="single" icon={<Archive size={16} strokeWidth={2.2}/>} title={st.name} n={elsewhere.length}><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>)
