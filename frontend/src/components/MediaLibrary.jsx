@@ -8,6 +8,7 @@ import React, { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { showConfirm } from "../utils/dialog";
 import Lightbox from "./Lightbox";
+import { apiAnim } from "../api/client";
 import { fBtn } from "./FicheKit";
 import { useStackZ } from "../utils/zstack";
 import { Images } from "lucide-react";
@@ -33,7 +34,7 @@ function Shown({ title, c, imgs, empty, hint }) {
     <div style={{ display: "flex", gap: 6, alignItems: "center", minHeight: 54 }}>
       {imgs.length ? imgs.slice(0, 5).map(x => { const s = typeof x === "string" ? x : x.src;
         return <span key={s} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-          {x.video ? <video src={s} muted loop autoPlay playsInline style={{ width: 54, height: 54, borderRadius: 10, objectFit: "cover", background: "#111", border: `1.5px solid ${c}` }}/>
+          {x.video ? <video src={apiAnim(s)} muted loop autoPlay playsInline style={{ width: 54, height: 54, borderRadius: 10, objectFit: "cover", background: "#111", border: `1.5px solid ${c}` }}/>
             : <img src={s} alt="" style={{ width: 54, height: 54, borderRadius: 10, objectFit: "contain", background: "var(--surface)", border: `1.5px solid ${c}` }}/>}
           {x.tag && <span style={{ fontSize: 9, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>{x.tag}</span>}
         </span>; })
@@ -168,7 +169,7 @@ export default function MediaLibrary({ title, group, admin, ents, allOf, cover, 
                 <div onClick={() => picking ? (deletable(it) && toggleSel(it)) : open(it)} style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 13, overflow: "hidden",
                   cursor: picking ? "pointer" : "zoom-in", background: it.fit === "contain" ? "var(--surface2)" : "#111",
                   boxShadow: on ? "0 0 0 3px #ef4444" : r ? `0 0 0 2px ${r}` : "0 0 0 1px var(--border)" }}>
-                  {it.video ? <video src={it.src} muted loop autoPlay playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: it.fit || "cover", display: "block" }}/>
+                  {it.video ? <video src={apiAnim(it.src)} muted loop autoPlay playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: it.fit || "cover", display: "block" }}/>
                     : <img src={it.src} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: it.fit || "cover", display: "block" }}/>}
                   {picking && deletable(it) && <span style={{ position: "absolute", top: 6, left: 6, width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
                     background: on ? "#ef4444" : "rgba(0,0,0,.5)", color: "#fff", fontSize: 13, fontWeight: 900, border: "1.5px solid #fff" }}>{on ? "✓" : ""}</span>}

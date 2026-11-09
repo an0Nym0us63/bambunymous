@@ -2,6 +2,7 @@
 // les videos ne montraient que le logo gris de lecture) : une video tourne en boucle, muette ; son nom en bas
 // (Photo, Vue 2, Tour de camera, Capture 50 %…), d'ou elle vient en infobulle.
 import React from "react";
+import { apiAnim } from "../api/client";
 
 const BG = { light: "Clair", sky: "Ciel", mountain: "Montagne", jungle: "Jungle", sunset: "Couchant", aurora: "Aurore", lagoon: "Lagon",
   night: "Nuit", bokeh: "Bokeh", ocean: "Océan", transparent: "Transparent" };
@@ -30,7 +31,7 @@ export default function MediaThumb({ src, video, label, on, onClick, tip, accent
   return <span onClick={onClick} data-tip={tip} style={{ position: "relative", display: "block", width: size, height: size, flexShrink: 0, cursor: "pointer",
     borderRadius: 12, overflow: "hidden", background: "#0f172a", boxSizing: "border-box",
     border: on ? `2.5px solid ${accent}` : "2px solid transparent", opacity: on ? 1 : 0.5, transition: "opacity .15s" }}>
-    {video ? <video src={src} poster={poster || undefined} muted loop autoPlay playsInline preload="metadata"
+    {video ? <video src={apiAnim(src)} poster={poster || undefined} muted loop autoPlay playsInline preload="metadata"
       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}/>
       : <img src={src} alt="" referrerPolicy="no-referrer" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
     {label && <span style={{ position: "absolute", left: 3, right: 3, bottom: 3, fontSize: 9.5, fontWeight: 800, color: "#fff", padding: "1px 5px", borderRadius: 6,

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiAnim } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { AnimPlayer, ANIM_STYLES } from "./Anim3D";
 
@@ -115,7 +115,7 @@ function Picker({ kind, id, shot, onDone, close }) {
           {d.anims.map((a, i) => { const u = apiUrl(a.url.replace(/^\/api\/v1/, ""));
             const mini = { padding: "4px 8px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontWeight: 800, fontSize: 11.5, cursor: "pointer" };
             return <div key={a.name} style={tile}>
-              <video src={u} autoPlay loop muted playsInline onClick={() => setPlay(u)} data-tip="La lire en grand"
+              <video src={apiAnim(u)} autoPlay loop muted playsInline onClick={() => setPlay(u)} data-tip="La lire en grand"
                 style={{ ...img(i === 0), width: 112, height: 112, objectFit: "cover", cursor: "pointer", background: "#111" }}/>
               <span style={{ fontSize: 11.5, fontWeight: 900, textAlign: "center", lineHeight: 1.2 }}>{(ANIM_STYLES.find(s => s[0] === a.style) || [])[1] || "🎞"} {a.label}</span>
               {i === 0 ? <span style={{ ...mini, cursor: "default", color: "#0EA5E9", borderColor: "#0EA5E9", textAlign: "center" }}>★ En tête</span>

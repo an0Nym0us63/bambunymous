@@ -1,14 +1,15 @@
 // Une image d'en-tete de fiche, ou une animation de la vue 3D integree comme elle (08/11/2026) : ses bords fondent dans le
 // halo de la fiche (un masque doux), son decor ne fait plus un rectangle pose dessus. Avec des vues : elle defile parmi
 // elles (CycleImg), le temps de sa boucle (durs : la duree de chaque video, relevee a son chargement).
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { apiAnim } from "../api/client";
 
 export const isVid = u => /\.(webm|mp4|mov|m4v)(\?|$)/i.test(u || "");
 const MASK = "radial-gradient(ellipse closest-side, #000 60%, transparent 100%)";
 
 export default function HeroMedia({ u, on = true, durs = null, className = "bn-plate", shadow = "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }) {
   const base = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", opacity: on ? 1 : 0, transition: "opacity .8s ease" };
-  if (isVid(u)) return <video src={u} autoPlay loop muted playsInline aria-hidden="true"
+  if (isVid(u)) return <video src={apiAnim(u, 2)} autoPlay loop muted playsInline aria-hidden="true"
     onLoadedMetadata={e => { if (durs && isFinite(e.currentTarget.duration)) durs.current[u] = Math.max(2500, e.currentTarget.duration * 1000); }}
     style={{ ...base, WebkitMaskImage: MASK, maskImage: MASK }}/>;
   return <img src={u} alt="" className={className} style={{ ...base, filter: shadow }} onError={e => { e.currentTarget.style.display = "none"; }}/>;
@@ -33,11 +34,24 @@ export function HeroModes({ modes, mode, setMode, style }) {
 export const animDurs = { current: {} };
 export const animPeriod = u => isVid(u) ? animDurs.current[u] || 6000 : 2600;
 
-// une tuile de liste ou de galerie (08/11/2026) : une animation n'y est chargee que si la tuile est a l'ecran et que c'est
-// son tour (des centaines de tuiles ne lancent pas des centaines de videos) ; ses bords fondus comme en haut de fiche
+// une tuile de liste ou de galerie (08/11/2026) : une animation n'y est chargee que si la tuile est a l'ecran (des
+// centaines de tuiles ne lancent pas des centaines de videos) ; ses bords fondus comme en haut de fiche.
+// (09/11/2026) sa petite version (?tile=1 : 320 px, ~100 Ko au lieu de 2-3 Mo), chargee des que la tuile est a l'ecran
+// et en pause hors de son tour : a son tour elle repart du debut, deja prete. Invisible tant qu'elle n'a pas montre
+// sa premiere image (le lecteur vide, noir avec son bouton lecture, clignotait au changement).
 export function TileVideo({ u, on, visible, style }) {
-  if (!on || !visible) return null;
-  return <video src={u} autoPlay loop muted playsInline aria-hidden="true"
+  const v = useRef(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const el = v.current;
+    if (!el) return;
+    if (on) { try { el.currentTime = 0; } catch { /* pas encore chargee */ } el.play?.()?.catch?.(() => {}); }
+    else el.pause();
+  }, [on, visible]);
+  if (!visible) return null;
+  return <video ref={v} src={apiAnim(u)} loop muted playsInline preload="auto" disablePictureInPicture aria-hidden="true"
     onLoadedMetadata={e => { if (isFinite(e.currentTarget.duration)) animDurs.current[u] = Math.max(2500, e.currentTarget.duration * 1000); }}
-    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", WebkitMaskImage: MASK, maskImage: MASK, ...style }}/>;
+    onLoadedData={() => setReady(true)}
+    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", WebkitMaskImage: MASK, maskImage: MASK,
+      opacity: on && ready ? 1 : 0, transition: "opacity .8s ease", pointerEvents: "none", ...style }}/>;
 }

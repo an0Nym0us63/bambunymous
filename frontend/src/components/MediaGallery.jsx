@@ -4,7 +4,7 @@
 // qu'on en fait : ⭐ la couverture de la galerie (une photo ou une vue 3D ; pour un groupe, aussi celle d'une de ses
 // impressions), 🧊 dans la vignette 3D (plusieurs : elles defilent), ⭐ l'animation en tete de fiche, 🗑.
 import React, { useEffect, useState } from "react";
-import client, { apiUrl } from "../api/client";
+import client, { apiUrl, apiAnim } from "../api/client";
 import { showAlert } from "../utils/dialog";
 import { useIsAdmin } from "../store/auth";
 import { currentFriend } from "../store/friend";
@@ -34,7 +34,7 @@ function Tile({ src, video, label, fit = "cover", ring = null, room = 10, onOpen
   return <div style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 12, overflow: "hidden", background: "var(--surface2)",
     boxShadow: ring ? `0 0 0 2px ${ring}` : "0 0 0 1px var(--border)" }}>
     <div onClick={onOpen} style={{ position: "absolute", inset: 0, cursor: "zoom-in" }}>
-      {video ? <video src={src} muted loop autoPlay playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: fit, display: "block" }}/>
+      {video ? <video src={apiAnim(src)} muted loop autoPlay playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: fit, display: "block" }}/>
         : <img src={src} alt={label || ""} loading="lazy" decoding="async" onError={e => { e.currentTarget.style.opacity = "0.2"; }}
           style={{ width: "100%", height: "100%", objectFit: fit, display: "block" }}/>}
     </div>

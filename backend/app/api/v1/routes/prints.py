@@ -1155,8 +1155,9 @@ async def set_group_cover(group_id: int, ref: str = Body("", embed=True), _: str
 
 
 @router.get("/groups/{group_id}/photo/{filename}")
-async def group_photo(group_id: int, filename: str):
-    """Sert une photo de groupe (pas d'auth — utilisée dans des balises <img>)."""
+async def group_photo(group_id: int, filename: str, tile: int = 0):
+    """Sert une photo de groupe (pas d'auth — utilisée dans des balises <img>). tile=1 : la petite version d'une
+    animation, pour les tuiles (09/11/2026)."""
     import mimetypes
     if ".." in filename or "/" in filename:
         raise HTTPException(400)
@@ -1166,8 +1167,20 @@ async def group_photo(group_id: int, filename: str):
     path = d / filename
     if not path.exists():
         raise HTTPException(404)
+    if tile and is_v3anim(filename):
+        small = await _tile_video(path, tile)
+        if small:
+            return FileResponse(str(small), media_type="video/webm")
     mime = mimetypes.guess_type(str(path))[0] or "image/jpeg"
     return FileResponse(str(path), media_type=mime)
+
+
+async def _tile_video(path, size: int = 1):
+    """La petite version d'une animation (core/video_tiles), faite hors de la boucle : ffmpeg prend une seconde ou deux.
+    Seulement les animations de la vue 3D : un timelapse de plusieurs dizaines de Mo bloquerait les autres."""
+    import asyncio
+    from ....core.video_tiles import tile_video
+    return await asyncio.to_thread(tile_video, Path(path), size)
 
 
 @router.delete("/groups/{group_id}")
@@ -2584,14 +2597,18 @@ async def delete_print_upload(print_id: int, filename: str, _: str = Depends(get
     return {"ok": True}
 
 @router.get("/{print_id}/file/{filename}")
-async def print_file(print_id: int, filename: str):
-    """Sert n'importe quel fichier du dossier d'un print."""
+async def print_file(print_id: int, filename: str, tile: int = 0):
+    """Sert n'importe quel fichier du dossier d'un print. tile=1 : la petite version d'une animation (09/11/2026)."""
     import mimetypes
     from ....services.archive import local_or_archive
     if ".." in filename or "/" in filename:
         raise HTTPException(400)
     path = local_or_archive(f"prints/{print_id}/{filename}")       # vide du local : relu sur le NAS
     if not path: raise HTTPException(404)
+    if tile and is_v3anim(filename):
+        small = await _tile_video(path, tile)
+        if small:
+            return FileResponse(str(small), media_type="video/webm")
     mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
     return FileResponse(str(path), media_type=mime)
 

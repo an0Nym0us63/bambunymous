@@ -4,7 +4,7 @@
 // vue de l'appli (edition, plateaux…), « Fiche » la fiche de l'impression ou du groupe.
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import client, { apiUrl, apiThumb } from "../api/client";
+import client, { apiUrl, apiThumb, apiAnim } from "../api/client";
 import { useStackZ } from "../utils/zstack";
 import Piece3D from "./Piece3D";
 
@@ -65,7 +65,7 @@ export default function Vue3DSlides({ item, onClose, onFull, onFiche }) {
         overflow: "hidden", cursor: "pointer", border: k === i ? "2.5px solid #0EA5E9" : "1px solid rgba(255,255,255,.18)", background: "rgba(255,255,255,.06)", opacity: k === i ? 1 : .7,
         display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, fontWeight: 900 }}>
         {s.kind === "3d" ? <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}><span style={{ fontSize: 20 }}>🧊</span>3D</span>
-          : s.kind === "anim" ? <video src={s.src} muted loop autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}/>
+          : s.kind === "anim" ? <video src={apiAnim(s.src)} muted loop autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}/>
           : <img src={apiThumb(s.src, 128)} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }}/>}
       </button>)}
     </div>

@@ -42,6 +42,13 @@ export function apiThumb(url, w = 256) {
   return `${url}${url.includes("?") ? "&" : "?"}w=${w}`;
 }
 
+/** Une animation de la vue 3D en petit (09/11/2026) : size 1 pour une tuile ou une vignette (320 px), 2 pour le haut
+ *  d'une fiche (640 px). L'original (2-3 Mo) ne sert qu'au plein ecran et au partage. Toute autre adresse : inchangee. */
+export function apiAnim(url, size = 1) {
+  if (!url || typeof url !== "string" || !url.startsWith("/api/v1/") || !/\/vue3d_anim[^/?]*\.(webm|mp4)(\?|$)/i.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}tile=${size}`;
+}
+
 const client = axios.create({ baseURL: "/api/v1" });
 
 // Inject token + page courante
