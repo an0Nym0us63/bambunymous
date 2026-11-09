@@ -179,8 +179,15 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
       .bn-pastille{display:inline-flex}.bn-pastille svg{width:96cqw;height:auto}
-      .bn-cell-p{padding:2px}.bn-cell-p .bn-num{position:absolute;top:2px;left:3px;margin:0;z-index:1;padding:1px 3px;border-radius:5px;background:color-mix(in srgb,var(--surface) 80%,transparent)}
+      .bn-tight{padding:2px;border-radius:8px;gap:0}.bn-tight .bn-num{position:absolute;top:1px;left:2px;margin:0;z-index:1;padding:0 3px;border-radius:5px;font-size:8.5px;line-height:12px;
+        background:color-mix(in srgb,var(--surface) 82%,transparent)}
+      .bn-tight .bn-band{min-height:0}
+      .bn-cell.bn-free.bn-tightf{min-height:30px;padding:2px;border-radius:8px}
       @container (max-width:34px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`;
+// condense (09/11/2026) : la largeur fixe d'une case selon la vue de ses bobines (debout, couchee, pastille), et la grille
+// qui en decoule (rien ne s'etire pour remplir la largeur)
+const CELL_W = e => e === "v" ? 32 : e ? 84 : 40;
+const tightTpl = (tpl, w, n) => tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, ${w}px)` : tpl.replace(/minmax\(0, 1fr\)/g, `${w}px`);
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
 const spanOf = p => p.span === -1 ? { gridColumn: "1 / -1" } : p.span > 1 ? { gridColumn: `span ${p.span}` } : {};
 const wide = p => p.span === -1 || p.span > 1;
@@ -474,14 +481,14 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     const occ = p.spools.find(x => fo(x.id)) || p.spools[0], edge = edgeOf(p, by), info = infoOf(occ, null), hit = isHit(p);
     const num = `${p.single ? "" : "📚"}${shortName(p, by)}`;
     // (08/11/2026) le meme dessin que la vue du stock : numero, tranche, nom, sous-type · marque
-    return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}${occ && !edge && !embed ? " bn-cell-p" : ""}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
+    return <button type="button" className={`bn-cell${occ ? "" : " bn-free"}${embed ? "" : occ ? " bn-tight" : " bn-tightf"}`} onClick={e => menu(e, p)} data-hit={hit ? "1" : undefined}
       data-swap-src={occ && marks?.[occ.id] != null ? marks[occ.id] : undefined}
       data-tip={occ ? [occ.name, ...info, `#${occ.id}`].join(" · ") : p.single ? `${num} · case libre` : `${num} · emplacement commun`}
       style={{ cursor: readOnly ? "default" : "pointer", zIndex: hit ? 2 : undefined, animation: hit ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
       {occ && marks?.[occ.id] != null && <span className={`bn-mark${String(marks[occ.id]).startsWith("↩") ? " home" : ""}`}>{marks[occ.id]}</span>}
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
-        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 40} thick={embed ? 12 : 20}/>
+        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 38} thick={embed ? 12 : 18}/>
           : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
         {/* (09/11/2026) ni nom ni marque : serre, l'info est dans la fenetre au toucher (et au survol) */}
       </> : <span className="bn-num-free">{num}</span>}
@@ -506,9 +513,8 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
   </div>;
   // (09/11/2026) condense : des cases a largeur fixe selon la vue (debout, couchee, pastille), les zones a leur largeur ;
   // rien ne s'etire pour remplir la fenetre. En integre (les echanges), la grille d'avant
-  const cellW = q => { const e = edgeOf(q, by); return e === "v" ? 40 : e ? 104 : 50; };
-  const tightCells = (tpl, q, n) => embed ? tpl : tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, ${cellW(q)}px)`
-    : tpl.replace(/minmax\(0, 1fr\)/g, `${cellW(q)}px`);
+  const cellW = q => CELL_W(edgeOf(q, by));
+  const tightCells = (tpl, q, n) => embed ? tpl : tightTpl(tpl, cellW(q), n);
   const tightZones = tpl => embed ? tpl : tpl.replace(/minmax\(0, 1fr\)/g, "max-content");
   const Zone = ({ p, many }) => {
     const ch = kids[p.id] || [];
@@ -523,7 +529,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
           {embed ? p.name.replace(/^(\p{L})\p{L}*\s*(\d+)$/u, "$1$2") : p.name}</span>
         {!embed && <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 " : ""}{takenOf(p, kids)}/{leafCountOf(p, kids)}</span>}
       </button>
-      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 3, gridTemplateColumns: tightCells(a.tpl, p, cells.length), justifyContent: "center" }}>
+      {cells.length > 0 && (a => <div style={{ display: "grid", gap: embed ? 3 : 2, gridTemplateColumns: tightCells(a.tpl, p, cells.length), justifyContent: "center" }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(30px, 1fr))"))}
       {subs.length > 0 && <Zones parent={p} list={subs}/>}
       {!readOnly && <div style={{ display: "flex", gap: 3 }}>
@@ -1043,19 +1049,19 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     const occ = p.spools[0], full = occ ? byId[occ.id] : null, out = occ && occ.in_printer;
     const free = !occ, edge = edgeOf(p, by), info = infoOf(occ, full), num = shortName(p, by);
     const nm = out ? `🖨 ${unitOf(occ.location)}` : (full ? (full.filament_translated_name || full.filament_name) : occ?.name);
-    return <button type="button" className={`bn-cell${free ? " bn-free" : ""}`} onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
+    return <button type="button" className={`bn-cell${free ? " bn-free bn-tightf" : " bn-tight"}`} onClick={() => full ? onOpen(full) : free && admin ? setFill(p) : null}
       data-tip={occ ? [occ.name, ...info, `#${occ.id}`, out ? `dans l'imprimante (${occ.location}), sa case l'attend` : null].filter(Boolean).join(" · ")
         : admin ? `${num} · libre : toucher pour y ranger une bobine` : `${num} · libre`}
       style={{ cursor: full || (free && admin) ? "pointer" : "default", opacity: occ && !full && !out ? 0.55 : 1 }}>
       {free ? <span className="bn-num-free">{num}</span> : <>
         <span className="bn-num">{num}</span>
         <span className="bn-band">
-          {edge === "v" ? <SpoolEdge s={full || occ} vertical len={44} thick={22} dim={out}/>
+          {edge === "v" ? <SpoolEdge s={full || occ} vertical len={38} thick={18} dim={out}/>
             : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
-            : <Swatch s={full || occ} size={28} dim={out}/>}
+            : <span className="bn-pastille"><Swatch s={full || occ} size={40} dim={out}/></span>}
         </span>
-        <span className="bn-ct-name">{nm}</span>
-        {!out && info.length > 0 && <span className="bn-ct-sub">{info.join(" · ")}</span>}
+        {/* (09/11/2026) condense comme la fenetre du rangement : le nom au survol, la fiche au toucher */}
+        {out && <span className="bn-slot" style={{ top: "auto", bottom: 2, left: "auto", right: 2, minWidth: 0, height: 14, fontSize: 9 }}>🖨</span>}
       </>}
     </button>;
   };
@@ -1096,10 +1102,10 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
         <span style={{ fontSize: 11.5, fontWeight: 900, color: "var(--text2)", maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: "anywhere",
           display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.icon ? `${p.icon} ` : ""}{p.name}</span>
         <span style={{ ...small, fontSize: 10 }}>{took}/{tot}</span></div>}
-      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 6, gridTemplateColumns: a.tpl }}>
+      {cells.length > 0 && (a => <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: tightTpl(a.tpl, CELL_W(edgeOf(p, by)), cells.length) }}>
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
       {commons.map(c => <Common key={c.id} p={c} nested/>)}
-      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 5, gridTemplateColumns: a.tpl, alignItems: "start" }}>
+      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl.replace(/minmax\(0, 1fr\)/g, "max-content"), justifyContent: "start", alignItems: "start" }}>
         {a.items.map(c => <div key={c.id} style={{ minWidth: 0, ...spanOf(c) }}><Group p={c} many={subs.length > 1 && !wide(c)}/></div>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
   };
@@ -1115,9 +1121,13 @@ export function StorageMap({ spools, onOpen, renderSpool, admin }) {
     {st.mode === "single"
       ? (elsewhere.length > 0 && <Section k="single" icon={<Archive size={16} strokeWidth={2.2}/>} title={st.name} n={elsewhere.length}><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>)
       : <>
-        {roots.map(p => <Section key={p.id} k={`p${p.id}`} icon={<PlaceIco p={p}/>} tone={p.stock ? "#D97706" : "#8B5CF6"} title={p.stock ? `${p.name} · stock` : p.name} n={countIn(p)}>
+        {/* (09/11/2026) condenses, les rangements se mettent cote a cote quand la largeur le permet */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
+        {roots.map(p => <div key={p.id} style={{ flex: p.leaf && !p.single ? "1 1 280px" : "0 1 auto", minWidth: 0, maxWidth: "100%" }}>
+          <Section k={`p${p.id}`} icon={<PlaceIco p={p}/>} tone={p.stock ? "#D97706" : "#8B5CF6"} title={p.stock ? `${p.name} · stock` : p.name} n={countIn(p)}>
           {p.leaf ? (p.single ? <div style={{ maxWidth: 120 }}><Cell p={p}/></div> : <Common p={p}/>) : <Group p={p}/>}
-        </Section>)}
+        </Section></div>)}
+        </div>
         {elsewhere.length > 0 && <Section k="else" icon={<HelpCircle size={16} strokeWidth={2.2}/>} title="Ailleurs" n={elsewhere.length} tone="#64748B"><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>}
       </>}
     {ordered.length > 0 && <Section k="ordered" icon={<Truck size={16} strokeWidth={2.2}/>} title="En commande" n={ordered.length} tone="#0EA5E9"><div style={tiles}>{ordered.map(s => <Tile key={s.id} s={s} vertical/>)}</div></Section>}
