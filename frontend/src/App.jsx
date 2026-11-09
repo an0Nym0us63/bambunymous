@@ -27,16 +27,26 @@ const Notifications = page("notifications");
 const Objects = page("objects");
 const Filaments = page("filaments");
 const Prints = page("prints");
+// (09/11/2026) avec retenue : une page a la fois, les plus visitees d'abord, seulement quand le navigateur n'a rien
+// d'autre a faire et que l'onglet est visible ; rien en economie de donnees ni sur une connexion lente (avant : les huit
+// d'un coup, 2,5 s apres l'ouverture, meme en 3G)
+const PREFETCH_ORDER = ["prints", "filaments", "home", "stats", "objects", "notifications", "settings", "logs"];
 function usePrefetchPages(on) {
   React.useEffect(() => {
     if (!on) return undefined;
-    let t = null, idle = null;
-    const go = () => Object.values(PAGES).forEach(f => f().catch(() => {}));
-    t = setTimeout(() => {
-      if ("requestIdleCallback" in window) idle = window.requestIdleCallback(go, { timeout: 4000 });
-      else go();
-    }, 2500);
-    return () => { clearTimeout(t); if (idle && "cancelIdleCallback" in window) window.cancelIdleCallback(idle); };
+    const c = navigator.connection;
+    if (c && (c.saveData || /(^|-)2g|3g/.test(c.effectiveType || ""))) return undefined;
+    let t = null, idle = null, i = 0, dead = false;
+    const later = (fn, ms) => { t = setTimeout(() => {
+      if ("requestIdleCallback" in window) idle = window.requestIdleCallback(fn, { timeout: 5000 }); else fn();
+    }, ms); };
+    const next = () => {
+      if (dead || i >= PREFETCH_ORDER.length) return;
+      if (document.hidden) { later(next, 3000); return; }
+      PAGES[PREFETCH_ORDER[i++]]().catch(() => {}).finally(() => later(next, 400));
+    };
+    later(next, 2500);
+    return () => { dead = true; clearTimeout(t); if (idle && "cancelIdleCallback" in window) window.cancelIdleCallback(idle); };
   }, [on]);
 }
 // le guide d'utilisation : charge a la demande
