@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor } from "./PlanDay";
 import Lightbox from "./Lightbox";
 import { useStackZ } from "../utils/zstack";
 import { useSwipeClose } from "../utils/swipeClose";
@@ -516,6 +516,10 @@ export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs,
               {j.locked ? "🔒 " : ""}{j.pinned && !j.locked ? "📌 " : ""}{j.merged ? "🧩 " : ""}{finIc(j, " ")}{plateTxt(j)}{j.qty > 1 ? ` · ${j.copy}e/${j.qty}` : ""}
               {j.load?.length ? " 🧵" : ""}{j.runout?.length ? " 🔄" : ""}{j.awaits_order?.length ? " 🚚" : ""}{j.low_after?.length ? " 📉" : ""}{j.intercalated ? " ↔" : ""}
               {j.prio_p ? ` ${prioOf(j.prio_p)[1]}` : ""}</span>
+            {/* (09/11/2026) une variante de couleur : la couleur qu'il va prendre (sa bobine, finition comprise) */}
+            {String(j.design_id || "").split("~").length === 3 && plateColor(j) && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <FilLink id={plateColor(j).filament_id} label={plateColor(j).name || "sa couleur"}/></span>}
             {bad ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ non planifiable · {(j.blockedWhy || []).join(" · ")}</span>
               : <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)" }}>{dayOf(j.start, now)} <span style={{ fontWeight: 700, color: "var(--muted)" }}>
                 {hhmm(j.start)} → {hhmm(j.end)} · {hm(j.seconds)}</span></span>}

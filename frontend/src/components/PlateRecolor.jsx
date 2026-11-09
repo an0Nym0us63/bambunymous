@@ -129,7 +129,8 @@ async function paint(src, pairs) {
   return res;
 }
 
-export default function PlateRecolor({ src, map, w = 200, style }) {
+// bare (09/11/2026) : la vignette seule, sans bouton ni pastille (les petites vignettes du planning)
+export default function PlateRecolor({ src, map, w = 200, style, bare = false }) {
   const pairs = (map || []).filter(p => rgbOf(p.from) && rgbOf(p.to));
   const active = pairs.some(p => !near(rgbOf(p.from), rgbOf(p.to)));
   const [orig, setOrig] = useState(false);
@@ -162,6 +163,8 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
     return () => { live = false; };
   }, [src, sig, multi, seen]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!active) return <MwImg src={src} w={w} style={style}/>;
+  if (bare) return <div ref={box} style={{ position: "relative", width: "100%", height: "100%" }}>
+    {url ? <img src={url} alt="" style={style}/> : <MwImg src={src} w={w} style={style}/>}</div>;
   const lost = pairs.filter(p => absent.includes(p.from) && !near(rgbOf(p.from), rgbOf(p.to)));
   const toggle = (
     <button type="button" onClick={e => { e.stopPropagation(); setOrig(o => !o); }}

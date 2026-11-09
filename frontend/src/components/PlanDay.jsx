@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { showConfirm } from "../utils/dialog";
 import { apiThumb, apiUrl } from "../api/client";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
+import PlateRecolor from "./PlateRecolor";
 import MwImg from "./MwImg";
 import { LocateSheet, SpoolEdge, PlaceView, AmsMap, rootOfSpool, slotIs, useStorage } from "./Storage";
 import { FSheet, fBtn } from "./FicheKit";
@@ -142,14 +143,23 @@ const Dot = ({ f }) => <span data-tip={f.name} style={{ width: 11, height: 11, b
 // boutons en bas, sur toute la largeur, pour que le texte respire. On le range en le glissant (ordinateur) ou avec ses
 // boutons (telephone).
 export const dueTxt = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+// (09/11/2026) la couleur que va prendre un plateau d'un seul filament (une variante de couleur d'un echantillon : toutes
+// partagent la vignette grise de MakerWorld) : sa bobine choisie, sinon rien
+export const plateColor = j => { const fs = (j?.fils || []).filter(f => f.color);
+  return fs.length === 1 && fs[0].multicolor_type !== "gradient" && fs[0].multicolor_type !== "coaxial" ? fs[0] : null; };
 export function PlateThumb({ j, size = 52, onClick, tip }) {
   const src = j.thumb || j.cover;
+  const pc = plateColor(j);
+  const tint = pc && src && /^https:\/\/([a-z0-9-]+\.)*bblmw\.com\//i.test(src) && /\.(png|webp)(\?|$)/i.test(src);
   return <span onClick={onClick} data-tip={onClick ? tip || "Profil, plateaux et filaments retenus" : undefined}
     style={{ position: "relative", width: size, height: size, borderRadius: 10, flexShrink: 0, overflow: "hidden", cursor: onClick ? "pointer" : "default",
       background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
     {/* une image MakerWorld (couverture du modele ou du profil) passe par la reduction de son CDN (06/11/2026 : apiThumb ne
         reduit que les images de l'API ; la file chargeait des couvertures de plusieurs Mo pour des vignettes de 60 px) */}
-    {src ? (j.thumb || !String(src).startsWith("/api/") ? <MwImg src={src} w={size * 2} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+    {/* repeinte de la couleur de sa bobine (le gris du rendu prend sa teinte, l'ombrage reste) */}
+    {tint ? <PlateRecolor bare src={src} w={size * 2} map={[{ from: "#7a7a7a", to: `#${String(pc.color).replace("#", "").slice(0, 6)}` }]}
+        style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+      : src ? (j.thumb || !String(src).startsWith("/api/") ? <MwImg src={src} w={size * 2} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
       : <img src={apiThumb(src, size * 2)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}
         onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>) : <span style={{ fontSize: size / 3 }}>🧩</span>}
     {j.plates_total > 1 && <span style={{ position: "absolute", left: 2, bottom: 2, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8,

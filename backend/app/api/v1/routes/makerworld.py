@@ -1927,9 +1927,11 @@ async def _todo_options(did: str) -> list:
         if not f or (row, origin, fid) in seen or len(h6(f.color)) != 6:
             continue
         seen.add((row, origin, fid))
+        mcols = [h6(x) for x in str(f.colors_array or "").split(",") if len(h6(x)) == 6] if f.multicolor_type in ("gradient", "coaxial") else []
         out.append({"todo": row, "label": labels.get(row) or "", "origin": origin, "fil": fid, "color": h6(f.color),
                     "name": (f.translated_name or f.name or "")[:60], "kind": " · ".join(x for x in (f.manufacturer, f.fila_type or f.material) if x)[:60],
-                    "finish": (None if f.fila_finish == "none" else f.fila_finish) if f.fila_finish else T.finish_of(f.fila_type, f.name, color=f.color)})
+                    "finish": (None if f.fila_finish == "none" else f.fila_finish) if f.fila_finish else T.finish_of(f.fila_type, f.name, color=f.color),
+                    **({"multi": {"type": f.multicolor_type, "colors": mcols[:3]}} if len(mcols) >= 2 else {})})
     return out
 
 

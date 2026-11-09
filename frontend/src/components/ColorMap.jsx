@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import { openMenu } from "./ContextMenu";
 import { egg } from "../eggs";
+import { colorBg } from "../utils/colors";
 
 // Les couleurs du createur et ce qui les remplace (28/10/2026) : la deduction de l'appli (pieces de meme nom,
 // couleur notee au tranchage, couleur et poids), et, quand elle se trompe, le choix a la main parmi les filaments
@@ -10,8 +11,13 @@ const HOW = { "pièces": "trouvé par les pièces de même nom", tranchage: "mê
   "couleur et poids": "la bobine la plus ressemblante, en couleur et en poids", "élimination": "par élimination : la seule bobine qui restait",
   choisi: "choisi à la main" };
 
-const Sw = ({ c, size = 14 }) => <span style={{ width: size, height: size, borderRadius: "50%", display: "inline-block", flexShrink: 0,
-  border: "1px solid var(--border)", background: c ? `#${c}` : "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }}/>;
+// (09/11/2026) la pastille d'une bobine avec sa finition (soie, marbre, metal, galaxie, paillettes…) et ses couleurs
+// d'un multicolore, comme partout ailleurs dans l'appli : un aplat ne distinguait pas un PLA Silk d'un PLA Basic
+const Sw = ({ c, size = 14, finish = null, multi = null }) => {
+  const cols = multi?.colors?.length >= 2 ? multi.colors.map(x => `#${x}`) : c ? [`#${c}`] : [];
+  return <span style={{ width: size, height: size, borderRadius: "50%", display: "inline-block", flexShrink: 0, border: "1px solid var(--border)",
+    ...(cols.length ? colorBg(cols, multi?.type, finish, { size }) : { background: "repeating-linear-gradient(45deg, var(--surface2) 0 3px, var(--border) 3px 6px)" }) }}/>;
+};
 
 // la rangee de paires ; scope : on peut choisir (onChoose(origin, body) envoie le choix) ; plate : le choix vaut pour ce
 // plateau seulement (03/11/2026 : l'assemble prend les couleurs de chaque plateau)
@@ -29,14 +35,14 @@ export function ColorPairs({ detail = [], options = [], chosen = {}, scope = nul
       if (h) { h.n += 1; h.grams += o.grams || 0; } else byFil.set(k, { ...o, n: 1, grams: o.grams || 0 });
     }
     const g = v => String(Math.round(v * 10) / 10).replace(".", ",");
-    const items = [...byFil.values()].map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name || `Filament n°${o.slot}`}${o.kind ? ` — ${o.kind}` : ""}`,
+    const items = [...byFil.values()].map(o => ({ icon: <Sw c={o.color} finish={o.finish} multi={o.multi} size={16}/>, label: `${o.name || `Filament n°${o.slot}`}${o.kind ? ` — ${o.kind}` : ""}`,
         hint: `${o.n > 1 ? `${o.n} impressions` : o.print_name}${o.grams ? ` · ${g(o.grams)} g` : ""}`,
         onClick: () => onChoose(x.from, { print: o.print, slot: o.slot }) }));
     // les filaments retenus dans « A faire » (06/11/2026) : celui prevu pour cette couleur d'abord, puis les autres
     const seenT = new Set();
     const tItems = [...todo].sort((a, b) => (b.origin === x.from) - (a.origin === x.from))
       .filter(o => { const k = `${o.fil}|${o.todo}`; if (seenT.has(k)) return false; seenT.add(k); return true; })
-      .map(o => ({ icon: <Sw c={o.color} size={16}/>, label: `${o.name}${o.kind ? ` — ${o.kind}` : ""}`,
+      .map(o => ({ icon: <Sw c={o.color} finish={o.finish} multi={o.multi} size={16}/>, label: `${o.name}${o.kind ? ` — ${o.kind}` : ""}`,
         hint: `${o.origin === x.from ? "prévu pour cette couleur · " : ""}À faire${o.label ? ` · ${o.label}` : ""}`,
         onClick: () => onChoose(x.from, { fil: o.fil, color: o.color, finish: o.finish || null }) }));
     const head = t => ({ label: t, disabled: true });
