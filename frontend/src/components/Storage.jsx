@@ -205,6 +205,9 @@ const small = { fontSize: 11.5, fontWeight: 700, color: "var(--muted)" };
 // fenetre, avec ses zones et ses cases, ou tout se retouche.
 const leafCountOf = (p, kids) => p.leaf ? 1 : (kids[p.id] || []).reduce((n, c) => n + leafCountOf(c, kids), 0);
 const takenOf = (p, kids) => p.leaf ? (p.spools.length ? 1 : 0) : (kids[p.id] || []).reduce((n, c) => n + takenOf(c, kids), 0);
+// (09/11/2026) les bobines rangees : un emplacement en vrac en tient plusieurs, « 3 pris » ne dit pas combien
+const spoolsOf = (p, kids) => p.leaf ? p.spools.length : (kids[p.id] || []).reduce((n, c) => n + spoolsOf(c, kids), 0);
+const bobTxt = (p, kids, t) => { const b = spoolsOf(p, kids); return b !== t ? ` · ${b} bobine${b > 1 ? "s" : ""}` : ""; };
 const spoolsOf = (p, kids) => p.leaf ? p.spools.length : (kids[p.id] || []).reduce((n, c) => n + spoolsOf(c, kids), 0);
 // le nom court d'un emplacement dans sa zone : « Colonne 1-3 » -> « 3 »
 export const shortName = (p, by) => { const par = by?.[p.parent_id]; return par && p.name.startsWith(par.name + "-") ? p.name.slice(par.name.length + 1) : p.name; };
@@ -323,7 +326,7 @@ export function StorageSettingsCard({ card, cardTitle }) {
                   {p.stock && <span style={{ fontSize: 10.5, fontWeight: 900, marginLeft: 6, padding: "1px 7px", borderRadius: 20, color: "#B45309",
                     background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}</span>
                 <span style={small}>{p.leaf ? `commun · ${p.spools.length} bobine${p.spools.length > 1 ? "s" : ""}`
-                  : `${n} emplacement${n > 1 ? "s" : ""}${zones ? ` · ${zones} zone${zones > 1 ? "s" : ""}` : ""} · ${t} pris`}</span>
+                  : `${n} emplacement${n > 1 ? "s" : ""}${zones ? ` · ${zones} zone${zones > 1 ? "s" : ""}` : ""} · ${t} pris${bobTxt(p, kids, t)}`}</span>
               </span>
             </button>
             <button type="button" onClick={() => write("post", `/storage/places/${p.id}/move`, { d: -1 })} aria-label="Monter" style={{ ...seg, padding: "2px 7px" }}>↑</button>
@@ -492,7 +495,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     const cells = ch.filter(c => c.leaf), subs = ch.filter(c => !c.leaf);
     return <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)", minWidth: 0,
       background: "color-mix(in srgb, #8B5CF6 4%, var(--surface2))" }}>
-      <button type="button" onClick={e => menu(e, p)} data-tip={`${p.name} · ${takenOf(p, kids)} pris sur ${leafCountOf(p, kids)}`} style={{ display: "flex", flexDirection: "column",
+      <button type="button" onClick={e => menu(e, p)} data-tip={`${p.name} · ${takenOf(p, kids)} pris sur ${leafCountOf(p, kids)}${bobTxt(p, kids, takenOf(p, kids))}`} style={{ display: "flex", flexDirection: "column",
         alignItems: "center", gap: 0, background: "none", border: "none", padding: "1px 0", cursor: "pointer", color: "var(--text)", minWidth: 0 }}>
         {/* integree, en reduit (08/11/2026) : « Colonne 1 » devient « C1 » (le nom entier au survol) */}
         <span style={{ fontSize: embed ? 10 : 11, fontWeight: 900, maxWidth: "100%", lineHeight: 1.15, textAlign: "center", overflowWrap: embed ? "normal" : "anywhere",
@@ -545,8 +548,8 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
             <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{root.name}{root.stock && <span style={{ fontSize: 11, fontWeight: 900, marginLeft: 8, padding: "1px 8px",
               borderRadius: 20, color: "#B45309", background: "color-mix(in srgb, #F59E0B 16%, transparent)" }}>📦 stock</span>}</div>
             <div style={small}>{root.leaf ? `Emplacement commun · ${root.spools.length} bobine${root.spools.length > 1 ? "s" : ""}`
-              : readOnly ? `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris`
-              : `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris · touche une zone ou une case pour la retoucher${st.mode !== "single" ? " ou y ranger une bobine" : ""}`}</div>
+              : readOnly ? `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris${bobTxt(root, kids, t)}`
+              : `${n} emplacement${n > 1 ? "s" : ""} · ${t} pris${bobTxt(root, kids, t)} · touche une zone ou une case pour la retoucher${st.mode !== "single" ? " ou y ranger une bobine" : ""}`}</div>
           </div>
           {!readOnly && <button type="button" onClick={e => menu(e, root)} aria-label="Actions du rangement" style={{ ...seg, padding: "6px 11px" }}>⋯</button>}
         </div>}
