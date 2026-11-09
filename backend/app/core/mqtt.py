@@ -45,6 +45,9 @@ def _persist_last_dried(spool_ids: list):
 
 
 
+_STALE: dict = {}            # la couche de l'impression d'avant, ignoree au lancement de la suivante (09/11/2026)
+
+
 def get_state() -> PrinterState:
     return state
 
@@ -358,12 +361,25 @@ class MQTTManager:
             state.remaining_minutes = int(p["mc_remaining_time"]); changed = True
 
         block_3d = p.get("3D", {})
+        # (09/11/2026) au lancement, l'imprimante republie quelque temps la derniere couche de l'impression d'avant (156,
+        # la fin de la precedente, avec deja le total de la nouvelle) : la vue 3D coloriait trois objets « deja faits ».
+        # Cette valeur-la compte pour 0 (la progression aussi peut etre encore l'ancienne) ; la premiere autre couche
+        # annoncee met fin a la garde
+        if str(p.get("job_id") or state.job_id or "") != (state.job_id or "") and _STALE.get("job") != str(p.get("job_id")):
+            _STALE.update(job=str(p.get("job_id")), layer=state.layer or None)
+        def _layer(v):
+            v = int(v)
+            if _STALE.get("layer") is not None:
+                if v == _STALE["layer"]:
+                    return 0
+                _STALE["layer"] = None
+            return v
         if "layer_num" in block_3d:
-            state.layer = int(block_3d["layer_num"]); changed = True
+            state.layer = _layer(block_3d["layer_num"]); changed = True
         if "total_layer_num" in block_3d:
             state.total_layers = int(block_3d["total_layer_num"]); changed = True
         if "layer_num" in p:
-            state.layer = int(p["layer_num"]); changed = True
+            state.layer = _layer(p["layer_num"]); changed = True
         if "total_layer_num" in p:
             state.total_layers = int(p["total_layer_num"]); changed = True
 
