@@ -3179,8 +3179,13 @@ function buildDisplayItems(prints, sortF) {
 const flattenItems = (items, sortF) => items.flatMap(it => it.type === "print" ? [it.p]
   : sortItems(it.prints.map(p => ({ type: "print", p })), sortF).map(x => x.p));
 
+// (09/11/2026) la premiere page de la liste, gardee le temps de la session : revenir sur Impressions la remontre tout
+// de suite, puis la relit discretement (rien de perdu : la liste a jour la remplace des qu'elle arrive)
+const LIST_CACHE = { key: null, data: null };
+
 export default function Prints() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const firstLoad = useRef(true);
   const [prints, setPrints]   = useState([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
@@ -3430,9 +3435,9 @@ export default function Prints() {
   const load = useCallback(async () => {
     const gen = ++loadGen.current;
     reloadingRef.current = true;
-    setLoading(true);
     setError(null);
     setOffset(0);
+    let ckey = null;
     try {
       const params = new URLSearchParams({ limit: LIMIT, offset: 0, light: 1 });   // allegee : la fiche relit le reste
       if (searchQ)     params.set("search", searchQ);
@@ -3448,8 +3453,16 @@ export default function Prints() {
       if (catF)        params.set("cat", catF);
       if (etqF)        params.set("etq", etqF);
       if (sortF)       params.set("sort", sortF);
+      ckey = `${currentFriend()?.id || ""}|${params}`;
+      const cached = firstLoad.current && LIST_CACHE.key === ckey ? LIST_CACHE.data : null;
+      firstLoad.current = false;
+      if (cached) {            // remontree tout de suite, sans « Chargement… »
+        setPrints(cached.prints ?? []); setTotal(cached.total ?? 0); setHasMore(cached.has_more ?? false); setOffset(cached.next_offset ?? LIMIT);
+        setLoading(false);
+      } else setLoading(true);
       const { data } = await client.get("/prints?" + params);
       if (gen !== loadGen.current) return;   // une demande plus recente est partie
+      LIST_CACHE.key = ckey; LIST_CACHE.data = data;
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
       setHasMore(data.has_more ?? false);
