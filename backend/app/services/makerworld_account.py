@@ -1444,6 +1444,24 @@ DEBUG_TRIES = {
         "/design-user-service/my/follow/mutual",
         "/design-recommend-service/my/following?offset=0&limit=3",
         "/design-recommend-service/my/follow?offset=0&limit=3"]),
+    # (09/11/2026) l'historique de navigation que montre Bambu Handy : chemin pas encore connu, on essaie
+    "essais_navigation": lambda did: ("essais historique de navigation", [
+        "/design-service/my/favorites?offset=0&limit=50",
+        "/design-service/my/footprint?offset=0&limit=3",
+        "/design-service/my/design/footprint?offset=0&limit=3",
+        "/design-user-service/my/footprint?offset=0&limit=3",
+        "/design-service/my/browse/history?offset=0&limit=3",
+        "/design-service/my/design/browse?offset=0&limit=3",
+        "/design-service/my/design/history?offset=0&limit=3",
+        "/design-service/my/history?offset=0&limit=3",
+        "/design-service/my/view/history?offset=0&limit=3",
+        "/design-service/my/design/viewed?offset=0&limit=3",
+        "/design-recommend-service/my/history?offset=0&limit=3",
+        "/design-recommend-service/my/footprint?offset=0&limit=3"]),
+    # l'historique des impressions du cloud, en entier sur quelques lignes (sa forme, pour s'en servir)
+    "essais_taches": lambda did: ("essais taches cloud", [
+        "/user-service/my/tasks?offset=0&limit=3",
+        "/user-service/my/task/printedplates?offset=0&limit=3"]),
     "essais_similaires": lambda did: ("essais similaires", [
         f"/search-service/design/{did}/relate?offset=0&limit=3&scene=1",
         f"/design-service/design/{did}/remixed?offset=0&limit=3"]),
