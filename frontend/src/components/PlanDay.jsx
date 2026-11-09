@@ -773,7 +773,10 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
       <div style={lab}>⏱ Durées des impressions</div>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>{dur?.n
         ? <>Tes impressions durent en moyenne <b style={{ color: dur.pct > 0 ? "#EA580C" : dur.pct < 0 ? "#16A34A" : "var(--text)" }}>
-          {dur.pct > 0 ? `${dur.pct} % de plus` : dur.pct < 0 ? `${-dur.pct} % de moins` : "le temps prévu"}</b>{dur.pct ? " que prévu" : ""} (sur tes {dur.n} dernières réussies).</>
+          {dur.pct > 0 ? `${dur.pct} % de plus` : dur.pct < 0 ? `${-dur.pct} % de moins` : "le temps prévu"}</b>{dur.pct ? " que prévu" : ""} (sur tes {dur.n} dernières réussies{dur.from && dur.to ? `, du ${new Date(dur.from).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au ${new Date(dur.to).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}` : ""}).
+          {/* (09/11/2026) l'heure du calcul : la valeur bouge, lentement (une mediane sur 50) */}
+          {dur.at && <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 2 }}>
+            Calculé à {new Date(dur.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}, refait toutes les 30 min · une médiane : elle bouge peu d'une impression à l'autre</span>}</>
         : "Pas encore assez d'impressions réussies pour mesurer l'écart."}</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {[["off", "Telles quelles"], ["auto", `Corrigées${dur?.n ? ` (${dur.pct > 0 ? "+" : ""}${dur.pct} %)` : ""}`], ["manual", "À la main"]].map(([k, l]) =>

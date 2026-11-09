@@ -1534,8 +1534,9 @@ _DUR = {"at": None, "v": None}
 
 
 async def duration_stats() -> dict:
-    """L'ecart entre la duree prevue et la duree reelle (06/11/2026), sur les 40 dernieres impressions reussies d'au
-    moins 20 min : la mediane du rapport (reelle, pauses deduites / prevue). Gardee une demi-heure."""
+    """L'ecart entre la duree prevue et la duree reelle (06/11/2026), sur les 50 dernieres impressions reussies d'au
+    moins 20 min (40 jusqu'au 09/11/2026) : la mediane du rapport (reelle, pauses deduites / prevue). Gardee une
+    demi-heure ; rend aussi la periode couverte (from, to) et l'heure du calcul (at), pour montrer que ca bouge."""
     now = datetime.utcnow()
     if _DUR["at"] and (now - _DUR["at"]).total_seconds() < 1800:
         return _DUR["v"]
@@ -1545,15 +1546,20 @@ async def duration_stats() -> dict:
         from ..db.session import AsyncSessionLocal
         from ..models.print_history import Print
         async with AsyncSessionLocal() as db:
-            rows = (await db.execute(select(Print.estimated_seconds, Print.duration_seconds, Print.paused_seconds)
+            rows = (await db.execute(select(Print.estimated_seconds, Print.duration_seconds, Print.paused_seconds, Print.print_date)
                                      .where(Print.status == "SUCCESS", Print.estimated_seconds > 1200, Print.duration_seconds > 1200)
-                                     .order_by(Print.print_date.desc()).limit(40))).all()
-        rs = sorted(r for r in ((float(dur) - float(pz or 0)) / float(est) for est, dur, pz in rows) if 0.5 < r < 2.5)
+                                     .order_by(Print.print_date.desc()).limit(50))).all()
+        kept = [(r, dt) for r, dt in (((float(dur) - float(pz or 0)) / float(est), dt) for est, dur, pz, dt in rows) if 0.5 < r < 2.5]
+        rs = sorted(r for r, _ in kept)
         if len(rs) >= 5:
             m = rs[len(rs) // 2] if len(rs) % 2 else (rs[len(rs) // 2 - 1] + rs[len(rs) // 2]) / 2
-            v = {"ratio": round(m, 3), "n": len(rs), "pct": round((m - 1) * 100)}
+            ds = [dt for _, dt in kept if dt]
+            iso = lambda t: t.isoformat(timespec="minutes") + ("Z" if t.tzinfo is None else "")
+            v = {"ratio": round(m, 3), "n": len(rs), "pct": round((m - 1) * 100),
+                 "from": iso(min(ds)) if ds else None, "to": iso(max(ds)) if ds else None}
     except Exception:
         logger.exception("[PLANNING] durees")
+    v["at"] = now.isoformat(timespec="minutes") + "Z"
     _DUR.update(at=now, v=v)
     return v
 
