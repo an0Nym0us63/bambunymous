@@ -1200,13 +1200,13 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
     return out
 
 
-def _merge_advice(placed: list) -> list:
+def _merge_advice(placed: list, ftype: dict | None = None) -> list:
     """Les regroupements possibles (06/11/2026) : des plateaux d'un meme modele et profil qui tiennent ensemble sur le
     plateau d'impression, d'apres leur taille ; « Appliquer » les regroupe au planning, a faire ensuite dans Bambu Studio."""
     try:
         from .plate_merge import proposals
         out = []
-        for p in proposals(placed, _slots())[:15]:
+        for p in proposals(placed, _slots(), ftype=ftype or {})[:15]:
             out.append({"kind": "merge", "icon": "🧩", "conf": p["conf"],
                         "text": f"{p['title']} : "
                                 + (f"{len(p['plates'])} exemplaires du plateau {p['plates'][0]}" if len(set(p['plates'])) == 1
@@ -1957,7 +1957,7 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
         # demarrage) qui figeaient toutes les pages ; le fil laisse la main a la file toutes les quelques millisecondes
         adv = await asyncio.to_thread(advice, r["jobs"], d, now, dls, fix, gain)
         t2 = time.perf_counter()
-        madv = await asyncio.to_thread(_merge_advice, r["jobs"])
+        madv = await asyncio.to_thread(_merge_advice, r["jobs"], d.get("_ftype") or {})
         tm.update(advice=round((t2 - t1) * 1000), merge=round((time.perf_counter() - t2) * 1000))
         _ADVICE.update(at=datetime.now().isoformat(timespec="seconds"), items=adv + madv)
     else:
@@ -2148,7 +2148,8 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
     if merge_ok and not day:
         from .plate_merge import proposals
         r0 = await plan()
-        merged_new = [p["keys"] for p in proposals(r0["jobs"], _slots()) if p["conf"] == "haute"]
+        _d0 = (await _context(None))[0]                   # la matiere de chaque bobine (_ftype) : pas deux matieres ensemble
+        merged_new = [p["keys"] for p in proposals(r0["jobs"], _slots(), ftype=_d0.get("_ftype") or {}) if p["conf"] == "haute"]
         if merged_new and not preview:
             for ks in merged_new:
                 try:

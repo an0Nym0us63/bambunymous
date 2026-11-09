@@ -136,10 +136,26 @@ def fits(info: dict, plates: list, by_obj: bool = False):
     return ("haute" if used <= 0.6 else "moyenne"), ("objet par objet" if by_obj else "couche par couche")
 
 
-def proposals(jobs: list, slots: int, cap: int = 12) -> list:
+def _families(j: dict, ftype: dict) -> frozenset:
+    """Les familles de matiere d'un plateau (PLA, PETG, ABS, TPU…), d'apres les bobines choisies (09/11/2026) : la matiere
+    du profil (« PLA » pour toutes les variantes d'un echantillon) ne dit pas ce que tu imprimes vraiment."""
+    import re
+    out = set()
+    for f in j.get("fils") or []:
+        mt = (ftype.get(f.get("filament_id")) or (None,))[0] or f.get("type") or ""
+        fam = re.split(r"[\s\-+_]", str(mt).strip().upper())[0]
+        if fam:
+            out.add(fam)
+    return frozenset(out)
+
+
+def proposals(jobs: list, slots: int, cap: int = 12, ftype: dict | None = None) -> list:
     """Les regroupements possibles dans la file : par modele et profil, les plateaux libres (ni figes, ni au jour fige),
     du plus gros au plus petit, ajoutes tant qu'ils tiennent et que leurs filaments tiennent dans l'AMS.
+    (09/11/2026) Jamais deux matieres differentes ensemble : PLA et PETG ne s'impriment ni a la meme temperature de buse
+    ni a la meme temperature de plateau (des echantillons d'un meme profil, en PLA et en PETG, etaient proposes ensemble).
     [{keys, plates, design_id, title, conf, mode, saved_s, seconds}]"""
+    ftype = ftype or {}
     by = {}
     for j in jobs:
         if j.get("pinned") or j.get("locked") or not j.get("retained", True) or j.get("merged") or not j.get("iid"):
@@ -161,6 +177,8 @@ def proposals(jobs: list, slots: int, cap: int = 12) -> list:
                     break
                 fids = {f.get("filament_id") for x in grp + [j] for f in x["fils"] if f.get("filament_id")}
                 if len(fids) > slots or (j.get("bed_want") and grp[0].get("bed_want") and j["bed_want"] != grp[0]["bed_want"]):
+                    continue
+                if _families(j, ftype) != _families(grp[0], ftype):    # une autre matiere : pas sur le meme plateau
                     continue
                 # d'autres couleurs que celles de chaque plateau : objet par objet, sinon chaque couche changerait de filament
                 fo = [{f.get("filament_id") for f in x["fils"] if f.get("filament_id")} for x in grp + [j]]
