@@ -194,6 +194,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [jobSel, setJobSel] = useState(null);
   const [modelSel, setModelSel] = useState(null);     // la fiche d'un modele de la file (06/11/2026)
   const [pop, setPop] = useState(null);
+  const [dayMenu, setDayMenu] = useState(null);       // defiger une journee (09/11/2026) : le jour touche dans son en-tete
   // au telephone (06/11/2026) : le jour en grille horaire par defaut, la semaine en liste ; chacun garde son choix
   const [dayModeD, setDayModeD] = useState("grid");
   const [dayModeW, setDayModeW] = useState(() => { try { return localStorage.getItem("bn_cal_wmode") || "list"; } catch { return "list"; } });
@@ -257,6 +258,11 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const nPlanned = Object.values(plan).flat().length;
   const sel = days?.[pick];
   const selPlan = plan[pick] || [];
+  // (09/11/2026) defiger toute une journee : les heures (ils gardent leur jour), ou heures et jours (retour a la file)
+  const frozen = d => { const l = plan[d] || []; return { locked: l.filter(j => j.locked), pinned: l.filter(j => j.pinned && !j.locked) }; };
+  const unfreezeDay = (d, days) => { const f = frozen(d), ks = [...f.locked, ...(days ? f.pinned : [])].map(j => j.key);
+    return ks.length ? send("/makerworld/plan/lock", { keys: ks, lock: false, unpin: days }, "post").then(ok => { if (ok) egg("planning_defige_jour"); }) : null; };
+  const onHead = d => { pickDay(d); const f = frozen(d); if (edit && (f.locked.length || f.pinned.length)) setDayMenu(d); };
   const shift = (day, n) => { const d = new Date(`${day}T12:00`); d.setDate(d.getDate() + n); return iso(d); };
   const go = n => {
     if (view === "month") return setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
@@ -436,6 +442,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
         {edit && selPlan.length > 1 && <button type="button" onClick={() => optimize(pick)} data-tip="Enchaîner les mêmes couleurs, la plus longue en fin de journée"
           style={{ ...pill, padding: "4px 10px", color: "#6366F1" }}>✨ Optimiser la journée</button>}
         {edit && <ColorDay colors={pd?.colors} onPick={fid => colorDay(pick, fid)}/>}
+        {edit && selPlan.some(j => j.locked || j.pinned) && <button type="button" onClick={() => setDayMenu(pick)}
+          data-tip="Rendre leur liberté aux plateaux figés 🔒 ou posés 📌 ce jour-là" style={{ ...pill, padding: "4px 10px", color: "#4F46E5" }}>🔓 Défiger la journée</button>}
       </div>
       {selPlan.map((j, i) => <JobCard key={j.key} j={j} edit={edit} dragging={dragging} onDrag={setDragging}
         onDropBefore={moveBefore} onUp={i ? () => moveBefore(j.key, selPlan[i - 1].key) : null}
@@ -468,7 +476,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const viewMain = view === "month" ? calendar
     // la semaine sur ordinateur : les 24 h en entier, sans defilement interne (06/11/2026)
     : view === "week" ? (wide || dayMode === "grid" ? <TimeGrid dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={28}
-        pick={pick} onPick={pickDay} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} onDropAt={dropAt} height="full"/>
+        pick={pick} onPick={pickDay} onHead={onHead} onOpenPrint={openPrint} onOpenJob={openJob} edit={edit} onDropDay={moveDay} onDropAt={dropAt} height="full"/>
       : <WeekAgenda dates={week} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} pick={pick}
         onPick={k => { setPick(k); setView("day"); }} onOpenPrint={openPrint} onOpenJob={openJob}/>)
     : <TimeGrid dates={[pick]} days={days} jobs={showPlan ? pd?.jobs : []} settings={pd?.settings} now={pd?.now} live={live} hourPx={wide ? 46 : 40}
@@ -559,6 +567,22 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       onClose={() => setModelSel(null)} onPick={setJobSel} act={modelAct(modelSel)}/>}
     {jobSel && <JobSheet j={jobSel} now={pd?.now} edit={edit} onClose={() => setJobSel(null)} act={jobAct(jobSel)} jobs={pd?.jobs}/>}
     {optPrev && <OptimizePreview p={optPrev} onClose={() => setOptPrev(null)} onApply={() => { const p = optPrev; setOptPrev(null); applyOptimized(p); }}/>}
+    {dayMenu && (() => { const f = frozen(dayMenu), nl = f.locked.length, np = f.pinned.length;
+      const opt = (ic, label, hint, n, onClick) => <button type="button" disabled={!n} onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%",
+        padding: "10px 12px", marginBottom: 8, borderRadius: 12, cursor: n ? "pointer" : "default", font: "inherit", textAlign: "left", opacity: n ? 1 : 0.45,
+        border: "1px solid color-mix(in srgb, #4F46E5 35%, var(--border))", background: "color-mix(in srgb, #4F46E5 7%, var(--surface))", color: "var(--text)" }}>
+        <span style={{ fontSize: 18 }}>{ic}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>{label} <span style={{ color: "#4F46E5" }}>({n})</span></span>
+          <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{hint}</span></span></button>;
+      return <PlanPopup title={`Défiger le ${new Date(`${dayMenu}T12:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`}
+        icon="🔓" color="#4F46E5" onClose={() => setDayMenu(null)} z={5320}>
+        {opt("🕒", "Défiger les heures", "Les plateaux figés 🔒 à leur heure gardent leur jour ; leur heure se recalcule avec le reste.", nl,
+          () => { setDayMenu(null); unfreezeDay(dayMenu, false); })}
+        {opt("📅", "Défiger heures et jours", "Figés 🔒 et posés 📌 retournent à la file : le planning les replace librement, ce jour-là ou un autre.", nl + np,
+          () => { setDayMenu(null); unfreezeDay(dayMenu, true); })}
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>« Annuler » en haut du planning revient en arrière.</div>
+      </PlanPopup>; })()}
     {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode, keep, merge) => { setPop(null); optimizeFrom(from, mode, keep, merge).then(r => r && setOptPrev(r)); }}
       onClose={() => setPop(null)}/>}
     {pop === "legend" && <PlanPopup title="Ce que disent les signes" icon="?" color="#6366F1" onClose={() => setPop(null)}><Legend/></PlanPopup>}

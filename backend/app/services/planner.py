@@ -2526,11 +2526,12 @@ async def set_prio(target: str, level, targets: list | None = None) -> dict:
     return await arrange({"order": order}, merge=True)
 
 
-async def lock(key: str, on: bool = True, keys: list | None = None, at: str | None = None) -> dict:
+async def lock(key: str, on: bool = True, keys: list | None = None, at: str | None = None, unpin: bool = False) -> dict:
     """Figer un plateau (05/11/2026) : il garde son jour et son heure (ceux du planning a cet instant), pose sur ce
     jour ; rien ne le deplace plus. Defiger le rend au planning (il reste pose sur son jour). keys (06/11/2026) :
     plusieurs a la fois (tout un modele) ; ceux absents du planning sont passes. at (06/11/2026, glisse a une heure dans
-    la semaine) : fige a ce jour et cette heure-la plutot qu'a ceux du planning."""
+    la semaine) : fige a ce jour et cette heure-la plutot qu'a ceux du planning. unpin (09/11/2026, defiger une journee) :
+    defiges, ils quittent aussi leur jour et retournent a la file (les poses sans heure aussi)."""
     if at:
         try:
             t = datetime.strptime(str(at)[:16], "%Y-%m-%dT%H:%M")
@@ -2557,9 +2558,11 @@ async def lock(key: str, on: bool = True, keys: list | None = None, at: str | No
             d["pins"][k] = j["day"]
         else:
             d["locked"].pop(k, None)
+            if unpin:
+                d["pins"].pop(k, None)
     d["plan0"] = {}
     d["rev"] = int(d.get("rev") or 0) + 1
-    await _save(d, "Figer")
+    await _save(d, "Figer" if on else "Défiger heures et jours" if unpin else "Défiger")
     return await plan()
 
 

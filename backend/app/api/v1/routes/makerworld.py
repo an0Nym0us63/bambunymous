@@ -483,7 +483,8 @@ async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
     from ....services import planner as P
     try:
         keys = body.get("keys") if isinstance(body.get("keys"), list) else None
-        return await P.lock(str(body.get("key") or ""), body.get("lock", True) is not False, keys, str(body.get("at") or "") or None)
+        return await P.lock(str(body.get("key") or ""), body.get("lock", True) is not False, keys, str(body.get("at") or "") or None,
+                            bool(body.get("unpin")))
     except P.PlanError as e:
         raise HTTPException(400, str(e))
 

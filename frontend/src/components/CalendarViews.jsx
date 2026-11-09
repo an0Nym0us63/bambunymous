@@ -59,7 +59,7 @@ function Thumb({ e, size }) {
 }
 
 // la grille horaire d'un ou plusieurs jours
-export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, pick, onPick, onOpenPrint, onOpenJob, edit, onDropDay, onDropAt, height }) {
+export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, pick, onPick, onHead = null, onOpenPrint, onOpenJob, edit, onDropDay, onDropAt, height }) {
   const scroller = useRef(null);
   // glisser un plateau a une heure (06/11/2026) : ou il tomberait, le temps du glisser
   const [over, setOver] = useState(null);
@@ -85,7 +85,7 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
       {dates.map(d => {
         const done = (days?.[d]?.duration || 0), planned = evs[d].filter(e => e.kind === "plan").reduce((a, e) => a + (e.b - e.a) * 60, 0);
         const fin = evs[d].filter(e => e.kind === "plan" && e.j.completes).length, finals = evs[d].some(e => e.kind === "plan" && isFinal(e.j));
-        return <button key={d} type="button" onClick={() => onPick(d)}
+        return <button key={d} type="button" onClick={() => (onHead || onPick)(d)}
           style={{ padding: "6px 4px", border: "none", borderLeft: "1px solid var(--border)", cursor: "pointer", textAlign: "center", minWidth: 0,
             background: d === pick ? "color-mix(in srgb, #6366F1 12%, transparent)" : "transparent" }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: d === today ? "#6366F1" : "var(--text2)", textTransform: "capitalize" }}>{dayName(d)}</div>
