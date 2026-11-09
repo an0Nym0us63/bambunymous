@@ -467,6 +467,16 @@ async def mw_plan_place_day(body: dict = Body({}), _: str = Depends(require_mw))
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/replace")
+async def mw_plan_replace(body: dict = Body({}), _: str = Depends(require_mw)):
+    """« A sa place » ({key, ref}) : le plateau prend la place et le jour de ref, que l'optimiseur replace au mieux."""
+    from ....services import planner as P
+    try:
+        return await P.replace_with(str(body.get("key") or ""), str(body.get("ref") or ""))
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/lock")
 async def mw_plan_lock(body: dict = Body({}), _: str = Depends(require_mw)):
     """Figer ({key, lock: true}) ou defiger ({key, lock: false}) un plateau du planning."""

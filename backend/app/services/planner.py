@@ -2416,6 +2416,46 @@ async def place_day(key: str, day: str) -> dict:
     return await arrange({"order": pick[1], "pins": {key: day}}, "Sur un jour")
 
 
+async def replace_with(key: str, ref: str) -> dict:
+    """« A sa place » (09/11/2026) : le plateau `key` prend la place et le jour du plateau `ref` ; `ref` repart dans la file,
+    ou l'optimiseur lui cherche la meilleure place (le moins de filaments a charger, aucune date limite ratee, tot), sauf
+    juste derriere `key` (ce serait un simple « avant »). Plus court, ce qui suit avance ; plus long, ce qui suit se decale."""
+    d, now, jobs, _, loaded, live, busy = await _context(None)
+    jobs = _ordered(jobs, d["order"], d["pins"])
+    keys = [j["key"] for j in jobs]
+    if key not in keys or ref not in keys or key == ref:
+        raise PlanError("Plateau inconnu du planning")
+    if key in d["locked"]:
+        raise PlanError("Ce plateau est figé : défige-le d'abord pour le déplacer")
+    if ref in d["locked"]:
+        raise PlanError("Ce plateau-là est figé : défige-le d'abord pour prendre sa place")
+    base = place(jobs, d, now, busy, loaded, _slots())
+    day = next((j["day"] for j in base["jobs"] if j["key"] == ref), None)
+    if not day:
+        raise PlanError("Ce plateau n'a pas encore de place dans le planning")
+    rest = [k for k in keys if k not in (key, ref)]
+    at = keys.index(ref) - (1 if keys.index(key) < keys.index(ref) else 0)
+    order0 = rest[:at] + [key] + rest[at:]
+    d["pins"][key] = day
+    d["pins"].pop(ref, None)
+
+    def best_spot():
+        best = None
+        for i in range(0, min(len(order0), 40) + 1):
+            if i == at + 1:
+                continue                                   # juste derriere : ce ne serait pas « a sa place »
+            order = order0[:i] + [ref] + order0[i:]
+            r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
+            c = _cost(r, d, now, ref)
+            if best is None or c < best[0]:
+                best = (c, order)
+        return best
+
+    import asyncio
+    best = await asyncio.to_thread(best_spot)           # quelques dizaines de calculs du planning : hors de la boucle
+    return await arrange({"order": best[1], "pins": {key: day, ref: None}}, "À sa place")
+
+
 def _rid_ok(rid: str) -> bool:
     """Une ligne de « A faire » : modele, modele~profil, modele~profil~variante (06/11/2026)."""
     parts = str(rid or "").split("~")

@@ -95,7 +95,8 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
   const [zoom, setZoom] = useState(false);            // la vignette en grand (08/11/2026), chaque plateau d'un regroupement
   const pics = platePics(j);
   if (slot) return <SlotPicker j={j} jobs={jobs || []} now={now} onClose={() => setSlot(false)}
-    onPick={(day, after) => run("slot", () => act.slot(day, after))} onAuto={day => run("slot", () => act.dayBest(day))}/>;
+    onPick={(day, after) => run("slot", () => act.slot(day, after))} onAuto={day => run("slot", () => act.dayBest(day))}
+    onReplace={act.replace ? ref => run("slot", () => act.replace(ref)) : null}/>;
   return <PlanPopup title={j.title} icon="🧩" color={j.why ? "#DC2626" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E"} onClose={onClose} z={5300}>
     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
       <PlateThumb j={j} size={64} onClick={pics.length ? () => setZoom(true) : undefined}
@@ -529,7 +530,7 @@ export function ModelSheet({ g: g0, now, edit, onClose, onPick, act: act0, jobs,
 // Choisir la place d'un plateau dans une journee (06/11/2026) : le jour, ses plateaux dans l'ordre (figes, enchaines,
 // poses), et entre eux des « ici » : en premier, apres tel plateau, en dernier. Pas au milieu d'un objet « d'une traite »
 // strict (il resterait groupe) ; apres un fige, il part des que le fige est fini.
-function SlotPicker({ j, jobs, now, onClose, onPick, onAuto, own, title }) {
+function SlotPicker({ j, jobs, now, onClose, onPick, onAuto, onReplace = null, own, title }) {
   const [day, setDay] = useState(j.day || (now || "").slice(0, 10));
   const mine = new Set(own || [j.key]);
   const list = jobs.filter(x => !mine.has(x.key) && x.day === day && !unretained(x)).sort((a, b) => a.start.localeCompare(b.start));
@@ -565,13 +566,19 @@ function SlotPicker({ j, jobs, now, onClose, onPick, onAuto, own, title }) {
               {x.locked ? "🔒 " : x.pinned ? "📌 " : ""}{x.chain_g ? "🔗 " : ""}{x.title}</span>
             <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{hhmm(x.start)} → {hhmm(x.end)} · {plateTxt(x)}</span>
           </span>
+          {/* (09/11/2026) prendre sa place : lui repart dans la file, ou l'optimiseur le replace au mieux */}
+          {onReplace && !x.locked && <button type="button" onClick={() => onReplace(x.key)}
+            data-tip={`${plateTxt(j)} prend sa place (${hhmm(x.start)}) ; celui-ci est replacé au mieux ailleurs dans le planning`}
+            style={{ flexShrink: 0, padding: "5px 9px", borderRadius: 9, border: "1px solid color-mix(in srgb, #6366F1 45%, var(--border))", cursor: "pointer",
+              background: "color-mix(in srgb, #6366F1 10%, var(--surface))", color: "#6366F1", font: "inherit", fontSize: 11.5, fontWeight: 900, whiteSpace: "nowrap" }}>⇄ À sa place</button>}
         </div>
         {!strict(x, list[i + 1]) && here(x.key, i === list.length - 1 ? `En dernier, après celui de ${hhmm(x.start)} (fini à ${hhmm(x.end)})`
           : `Après celui de ${hhmm(x.start)} (fini à ${hhmm(x.end)})`)}
       </React.Fragment>)}
     </div>
     <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
-      Son jour est figé ; ce qui suit se décale. Après un plateau figé 🔒, il part dès qu'il est fini.</div>
+      Son jour est figé ; ce qui suit se décale. Après un plateau figé 🔒, il part dès qu'il est fini.
+      {onReplace && <> <b>⇄ À sa place</b> : il prend la place d'un plateau, qui est replacé au mieux ailleurs ; s'il est plus court, ce qui suit avance.</>}</div>
   </PlanPopup>;
 }
 

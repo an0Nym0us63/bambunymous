@@ -168,6 +168,8 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
       o.splice(Math.max(0, at), 0, j.key);
       return arrange({ order: o, pins: { [j.key]: day } });
     },
+    // (09/11/2026) a la place d'un autre plateau : lui repart dans la file, replace au mieux par l'optimiseur
+    replace: ref => send("/makerworld/plan/replace", { key: j.key, ref }, "post").then(ok => { if (ok) egg("planning_glisse"); }),
     sheet: () => setSheet(sheetRef(j)),
     dayview: () => onDayView(j.day),
     // sa priorite parmi les plateaux de son modele (06/11/2026)
