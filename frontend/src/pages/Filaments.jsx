@@ -1393,7 +1393,7 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
                       const reason = u.kind === "annule" ? "consommation annulée"
                         : who ? `✂ pièce annulée : ${who}${cons ? ` · ${cons[1]} g prévus → ${cons[2]} g` : ""}`
                         : /échec/.test(why) ? "échec : la part non imprimée revient"
-                        : /avant la première couche/.test(why) ? "annulée avant la première couche : tout revient"
+                        : /avant la première couche/.test(why) ? `annulée avant la première couche : le prélèvement du lancement revient${u.gone ? " (impression retirée depuis)" : ""}`
                         : u.gone && u.print_id ? `restitué à la main sur l'impression #${u.print_id}, retirée depuis`
                         : "restitué à la main";
                       return <>
@@ -1407,7 +1407,12 @@ export function SpoolBottomSheet({ spool: spoolProp, onClose, onArchive, onDelet
 </div>
                   </div>
                   <div style={{ textAlign:"right", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
-                    <div style={{ fontSize:14, fontWeight:900, color:"#16a34a" }}>+{(u.grams || 0).toFixed(1)} g</div>
+                    {/* (09/11/2026) annulee avant la premiere couche : prelevee au lancement puis rendue, elle n'a rien coute ; « +84,8 g »
+                        seul (le prelevement, plus bas ou retire, hors de vue) laissait croire a du filament ajoute */}
+                    {/avant la première couche/.test(u.file_name || "") && u.kind === "rendu"
+                      ? <><div data-tip="Prélevé au lancement, rendu à l'annulation : rien n'a été pris à la bobine" style={{ fontSize:14, fontWeight:900, color:"var(--muted)" }}>±0 g</div>
+                        <div style={{ fontSize:11, fontWeight:800, color:"#16a34a" }}>{(u.grams || 0).toFixed(1).replace(".", ",")} g rendus</div></>
+                      : <div style={{ fontSize:14, fontWeight:900, color:"#16a34a" }}>+{(u.grams || 0).toFixed(1)} g</div>}
                     {!u.reverted && isAdmin && <button onClick={() => undoLine("move", u.id, u.grams, false)} data-tip="Reprendre ces grammes à la bobine"
                       style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer", border:"1px solid var(--border)",
                         background:"var(--surface)", color:"var(--text2)" }}>↶ Annuler</button>}
