@@ -678,6 +678,49 @@ function StatHero({ color, icon, value, label, ring = null, ringLabel = "", chip
   );
 }
 
+// (09/11/2026) l'infobulle des graphiques : une carte au-dessus de l'element, au survol a la souris, au toucher sur
+// telephone (un autre toucher, ou ailleurs, la ferme). tip = { title, value, color, rows: [{ c, label, v }] }
+function useChartTip() {
+  const box = useRef(null);
+  const [t, setT] = useState(null);
+  const show = (e, key, tip, pin) => {
+    const b = box.current; if (!b) return;
+    const r = b.getBoundingClientRect(), el = e.currentTarget.getBoundingClientRect();
+    setT({ key, tip, pin, w: r.width, x: el.left + el.width / 2 - r.left, y: el.top - r.top });
+  };
+  useEffect(() => {
+    if (!t?.pin) return undefined;
+    const off = () => setT(null);
+    const id = setTimeout(() => document.addEventListener("click", off), 0);
+    return () => { clearTimeout(id); document.removeEventListener("click", off); };
+  }, [t?.pin, t?.key]);
+  const bind = (key, tip) => ({
+    onPointerEnter: e => { if (e.pointerType === "mouse") show(e, key, tip, false); },
+    onPointerLeave: e => { if (e.pointerType === "mouse") setT(c => c && !c.pin ? null : c); },
+    onClick: e => { e.stopPropagation(); if (t?.key === key && t.pin) setT(null); else show(e, key, tip, true); },
+  });
+  const el = t && <ChartTipCard {...t}/>;
+  return { box, bind, tip: el, on: t?.key ?? null };
+}
+
+function ChartTipCard({ tip, x, y, w }) {
+  const W = 220, left = Math.max(W / 2 + 4, Math.min(w - W / 2 - 4, x));
+  return <div style={{ position: "absolute", left, top: Math.max(0, y - 8), transform: "translate(-50%, -100%)", zIndex: 30, pointerEvents: "none",
+    width: "max-content", minWidth: 140, maxWidth: W, padding: "9px 11px", borderRadius: 12, background: "var(--surface)",
+    border: `1px solid color-mix(in srgb, ${tip.color || "#64748B"} 35%, var(--border))`,
+    boxShadow: "0 12px 28px -8px rgba(15,23,42,.35), 0 2px 6px rgba(15,23,42,.12)", color: "var(--text)", animation: "bnTipIn .12s ease-out" }}>
+    <style>{"@keyframes bnTipIn{from{opacity:0;transform:translate(-50%,-92%)}to{opacity:1;transform:translate(-50%,-100%)}}"}</style>
+    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".03em", textTransform: "uppercase", color: "var(--muted)" }}>{tip.title}</div>
+    {tip.value != null && <div style={{ fontSize: 16, fontWeight: 900, color: tip.color || "var(--text)", lineHeight: 1.25 }}>{tip.value}</div>}
+    {(tip.rows || []).length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 5, paddingTop: 5, borderTop: "1px dashed var(--border)" }}>
+      {tip.rows.map((r, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700 }}>
+        {r.c && <span style={{ width: 9, height: 9, borderRadius: 3, background: r.c, flexShrink: 0 }}/>}
+        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text2)" }}>{r.label}</span>
+        <span style={{ fontWeight: 900, whiteSpace: "nowrap" }}>{r.v}</span></div>)}
+    </div>}
+  </div>;
+}
+
 function Bar({ label, value, max, color = "#3b82f6", sublabel, dot, stacked, onClick }) {
   const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
   const [hover, setHover] = React.useState(false);
@@ -746,6 +789,7 @@ function fmtBucketLabel(k, bucket) {
 
 function TimeChart({ data, bucket = "month" }) {
   const [tab, setTab] = useState("count");
+  const ct = useChartTip();
   // Jour : on affiche plus de barres (un mois ~30) ; sinon 18 suffisent.
   const keys = Object.keys(data || {}).slice(bucket === "day" ? -45 : -18);
   if (!keys.length) return null;
@@ -785,6 +829,8 @@ function TimeChart({ data, bucket = "month" }) {
           </button>
         ))}
       </div>
+      <div ref={ct.box} style={{ position: "relative" }}>
+      {ct.tip}
       <div style={{ display: "flex", gap: 3, alignItems: "stretch", height: 130, overflowX: "auto" }}>
         {keys.map((k, i) => {
           const v = values[i];
@@ -800,8 +846,10 @@ function TimeChart({ data, bucket = "month" }) {
             : [];
           const segTip = segs.map(s => `${s.v} ${s.lbl}${s.v > 1 ? "s" : ""}`).join(", ");
           return (
-            <div key={k} title={`${fmtBucketLabel(k, bucket)} — ${unit(v)}${segTip ? ` (${segTip})` : ""}`}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center",
+            <div key={k} {...ct.bind(k, { title: fmtBucketLabel(k, bucket), value: unit(v), color: colors[tab],
+                rows: tab === "count" && cnt > 0 ? [{ c: colors.count, label: "réussies", v: cnt - segs.reduce((a, s) => a + s.v, 0) },
+                  ...segs.map(s => ({ c: s.c, label: s.lbl + (s.v > 1 ? "s" : ""), v: s.v }))] : [] })}
+              style={{ cursor: "pointer", opacity: ct.on == null || ct.on === k ? 1 : 0.55, display: "flex", flexDirection: "column", alignItems: "center",
                 // (09/11/2026) les barres se partagent toute la largeur (26 px fixes : un tiers de la carte sur grand ecran)
                 flex: "1 0 26px", maxWidth: 64, height: "100%" }}>
               {/* Zone barre : c'est ELLE qui doit avoir une hauteur fixe, sinon le
@@ -826,6 +874,7 @@ function TimeChart({ data, bucket = "month" }) {
             </div>
           );
         })}
+      </div>
       </div>
       {tab === "count" && (
         <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap",
@@ -852,8 +901,9 @@ const STATUS_SPLIT_COLORS = {
 };
 
 // ── Donut
-function Donut({ data, title, palette }) {
+function Donut({ data, title, palette, fmt }) {
   const total = (data || []).reduce((s, d) => s + d.value, 0);
+  const ct = useChartTip();
   if (!total) return null;
   const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#f97316", "#06b6d4", "#84cc16", "#ec4899", "#a78bfa"];
   const items = data.slice(0, 10);
@@ -870,28 +920,33 @@ function Donut({ data, title, palette }) {
     return {
       path: `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${pct > 0.5 ? 1 : 0},1 ${x2},${y2} Z`,
       color: (palette && d.hex) || COLORS[i % COLORS.length],
-      label: d.name, pct: Math.round(pct * 100),
+      label: d.name, pct: Math.round(pct * 100), value: d.value,
     };
   });
   // Une seule part = cercle complet : l'arc SVG dégénère (départ == arrivée)
   const single = items.length === 1;
+  const tipOf = s => ({ title: s.label, value: `${s.pct} %`, color: s.color, rows: [{ label: "valeur", v: fmt ? fmt(s.value) : Math.round(s.value * 10) / 10 }] });
 
   return (
     <div style={{ ...statCard(slices[0]?.color && !/^#f[0-9a-f]{5}$/i.test(slices[0].color) ? slices[0].color : "#8B5CF6"), padding: 14 }}>
       <p style={cardTitle}>{title}</p>
       <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <div ref={ct.box} style={{ position: "relative", lineHeight: 0 }}>
+        {ct.tip}
         <svg width={120} height={120} viewBox="0 0 120 120">
           {single
-            ? <circle cx={cx} cy={cy} r={r} fill={slices[0].color}/>
-            : slices.map((s, i) => <path key={i} d={s.path} fill={s.color} stroke="var(--surface2)" strokeWidth={2}/>)}
+            ? <circle cx={cx} cy={cy} r={r} fill={slices[0].color} {...ct.bind(0, tipOf(slices[0]))}/>
+            : slices.map((s, i) => <path key={i} d={s.path} fill={s.color} stroke="var(--surface2)" strokeWidth={2} {...ct.bind(i, tipOf(s))}
+                style={{ cursor: "pointer", opacity: ct.on == null || ct.on === i ? 1 : 0.45, transition: "opacity .15s" }}/>)}
           {/* un liseré : une part blanche reste visible */}
           <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(148,163,184,.35)" strokeWidth={1}/>
-          <circle cx={cx} cy={cy} r={26} fill="var(--surface2)"/>
+          <circle cx={cx} cy={cy} r={26} fill="var(--surface2)" pointerEvents="none"/>
         </svg>
+        </div>
         {/* la legende reste pres de l'anneau : sur une carte large, les pourcentages ne partent plus au bout */}
         <div style={{ flex: 1, minWidth: 140, maxWidth: 340, display: "flex", flexDirection: "column", gap: 5 }}>
           {slices.map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, opacity: ct.on == null || ct.on === i ? 1 : 0.5 }}>
               <div style={{ width: 11, height: 11, borderRadius: "50%", background: s.color, flexShrink: 0, boxShadow: "inset 0 0 0 1px rgba(148,163,184,.5)" }}/>
               <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)", flex: 1,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
@@ -929,6 +984,7 @@ function FilamentTimeline({ period }) {
   const [grain, setGrain] = useState(null);
   const [metric, setMetric] = useState("g");
   const scroller = useRef(null);
+  const ct = useChartTip();
   useEffect(() => {
     let alive = true;
     client.get("/prints/stats/filament-days", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
@@ -970,13 +1026,17 @@ function FilamentTimeline({ period }) {
         </div>
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 8 }}>
           {fmt(total)} en tout · {fmt(total / Math.max(1, keys.length))} par {ftUnit[g]} en moyenne</div>
+        <div ref={ct.box} style={{ position: "relative" }}>
+        {ct.tip}
         <div ref={scroller} style={{ display: "flex", gap: 3, alignItems: "stretch", height: 150, overflowX: "auto", paddingBottom: 4 }}>
           {keys.map(k => {
             const y = buckets[k], v = y ? (metric === "g" ? y.g : y.cost) : 0;
             const parts = y && v ? Object.entries(y.mat).sort((a, c) => (mats.indexOf(a[0]) + 99) % 99 - (mats.indexOf(c[0]) + 99) % 99) : [];
-            const tip = `${ftLabel(k, g)} — ${fmt(v)}${y ? " · " + Object.entries(y.mat).sort((a, c) => c[1] - a[1]).map(([m, gr]) => `${m} ${Math.round(gr)} g`).join(", ") : ""}`;
+            const tip = { title: ftLabel(k, g), value: v ? fmt(v) : "rien", color: "#F97316",
+              rows: y ? Object.entries(y.mat).sort((a, c) => c[1] - a[1]).map(([m, gr]) => ({ c: colOf(m), label: m,
+                v: `${gr >= 1000 ? (gr / 1000).toFixed(2).replace(".", ",") + " kg" : Math.round(gr) + " g"} · ${Math.round(gr / (y.g || 1) * 100)} %` })) : [] };
             return (
-              <div key={k} data-tip={tip} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "1 0 22px", maxWidth: 46, height: "100%" }}>
+              <div key={k} {...ct.bind(k, tip)} style={{ cursor: "pointer", opacity: ct.on == null || ct.on === k ? 1 : 0.55, display: "flex", flexDirection: "column", alignItems: "center", flex: "1 0 22px", maxWidth: 46, height: "100%" }}>
                 <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end", minHeight: 0 }}>
                   <div style={{ width: "100%", height: `${v ? Math.max(3, v / max * 100) : 0}%`, borderRadius: "5px 5px 0 0", overflow: "hidden",
                     display: "flex", flexDirection: "column-reverse", transition: "height 0.4s ease" }}>
@@ -987,6 +1047,7 @@ function FilamentTimeline({ period }) {
               </div>
             );
           })}
+        </div>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 8 }}>
           {mats.map(m => <span key={m} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -1002,16 +1063,20 @@ function FilamentTimeline({ period }) {
 function MiniBarChart({ data, title, color = "#3b82f6", labelKey = "name", suffix = "" }) {
   const max = Math.max(...data.map(d => d.value), 1);
   const total = data.reduce((a, d) => a + d.value, 0);
+  const ct = useChartTip();
   if (!total) return null;
   return (
     <div style={{ ...statCard(color), padding: "14px 14px" }}>
       <p style={cardTitle}>{title}</p>
+      <div ref={ct.box} style={{ position: "relative" }}>
+      {ct.tip}
       <div style={{ display: "flex", gap: 3, alignItems: "stretch", height: 96 }}>
         {data.map((d, i) => {
           const lab = labelKey === "hour" ? String(d.hour).padStart(2, "0") : d[labelKey];
           return (
-            <div key={i} title={`${lab}${suffix} — ${d.value}`}
-              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
+            <div key={i} {...ct.bind(i, { title: `${lab}${suffix}`, value: d.value, color,
+                rows: [{ label: "part du total", v: `${Math.round(d.value / total * 100)} %` }] })}
+              style={{ cursor: "pointer", opacity: ct.on == null || ct.on === i ? 1 : 0.55, flex: 1, display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
               <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end", minHeight: 0 }}>
                 <div style={{ width: "100%", height: `${Math.max(2, (d.value / max) * 100)}%`,
                   background: `linear-gradient(180deg, color-mix(in srgb, ${color} 60%, #ffffff), ${color})`, borderRadius: "4px 4px 0 0",
@@ -1022,6 +1087,7 @@ function MiniBarChart({ data, title, color = "#3b82f6", labelKey = "name", suffi
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );
@@ -1084,10 +1150,12 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b8
 // ── Fiabilite par matiere (28/10/2026) : une barre empilee ok (vert) / ko (rouge) par matiere,
 // « 92 % · 48 g gâchés » a droite. Les partielles et a-refaire font partie du total, ni vertes ni rouges.
 function ReliabilityByMaterial({ rows }) {
+  const ct = useChartTip();
   if (!rows?.length) return null;
   const max = Math.max(...rows.map(r => r.total), 1);
   return (
-    <div style={{ ...statCard("#22c55e"), padding: "14px 14px" }}>
+    <div ref={ct.box} style={{ ...statCard("#22c55e"), padding: "14px 14px", position: "relative" }}>
+      {ct.tip}
       <p style={cardTitle}>Par matière</p>
       {rows.map(r => (
         <div key={r.name} style={{ padding: "8px 6px", borderBottom: "1px dashed var(--border)" }}>
@@ -1100,7 +1168,9 @@ function ReliabilityByMaterial({ rows }) {
             </span>
           </div>
           <div style={{ height: 8, background: "var(--surface2)", borderRadius: 4, overflow: "hidden", display: "flex", width: `${Math.max(4, r.total / max * 100)}%` }}
-            title={`${r.ok} réussie${r.ok > 1 ? "s" : ""}, ${r.ko} échec${r.ko > 1 ? "s" : ""} sur ${r.total}`}>
+            {...ct.bind(r.name, { title: r.name, value: `${fr1(r.rate)} % réussies`, color: r.ko ? "#ef4444" : "#16a34a",
+              rows: [{ c: "#22c55e", label: "réussies", v: r.ok }, ...(r.total - r.ok - r.ko > 0 ? [{ c: "#f59e0b", label: "partielles", v: r.total - r.ok - r.ko }] : []),
+                { c: "#ef4444", label: "échecs", v: r.ko }, ...(r.wasted_g > 0 ? [{ label: "gâché", v: `${r.wasted_g} g` }] : [])] })}>
             <div style={{ width: `${r.ok / r.total * 100}%`, background: "linear-gradient(90deg, #22c55e, #4ade80)", transition: "width .5s ease" }}/>
             <div style={{ width: `${(r.total - r.ok - r.ko) / r.total * 100}%`, background: "#f59e0b", opacity: .7 }}/>
             <div style={{ width: `${r.ko / r.total * 100}%`, background: "linear-gradient(90deg, #ef4444, #f87171)", transition: "width .5s ease" }}/>
@@ -1653,8 +1723,8 @@ export default function Stats() {
       {(matData.length > 0 || colorData.length > 0) && (
         <Section title="Répartition de la consommation">
           <div className="kpi-grid" style={{ "--kpi-min": "280px", gap: 12 }}>
-            {matData.length > 0 && <Donut data={matData} title="Par matériau"/>}
-            {colorData.length > 0 && <Donut data={colorData} title="Par teinte" palette/>}
+            {matData.length > 0 && <Donut data={matData} title="Par matériau" fmt={fmtKg}/>}
+            {colorData.length > 0 && <Donut data={colorData} title="Par teinte" palette fmt={fmtKg}/>}
 
             {typeData.length > 0 && (
               <div style={{ ...statCard("#06b6d4"), padding: "14px 14px" }}>
