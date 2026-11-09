@@ -162,8 +162,10 @@ export function PlateThumb({ j, size = 52, onClick, tip }) {
       : src ? (j.thumb || !String(src).startsWith("/api/") ? <MwImg src={src} w={size * 2} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
       : <img src={apiThumb(src, size * 2)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}
         onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>) : <span style={{ fontSize: size / 3 }}>🧩</span>}
-    {j.plates_total > 1 && <span style={{ position: "absolute", left: 2, bottom: 2, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8,
-      background: "rgba(15,23,42,.78)", color: "#fff", fontSize: 10, fontWeight: 900, lineHeight: "16px", textAlign: "center" }}>{j.plate}</span>}
+    {/* (09/11/2026) le numero du plateau est ecrit a cote (« Plateau 1/5 ») : sur une petite vignette, il la cachait ; sur une
+        grande, il reste en tout petit dans le coin */}
+    {j.plates_total > 1 && size >= 56 && <span style={{ position: "absolute", right: 2, bottom: 2, minWidth: 12, height: 12, padding: "0 3px", borderRadius: 6,
+      background: "rgba(15,23,42,.5)", color: "#fff", fontSize: 8.5, fontWeight: 900, lineHeight: "12px", textAlign: "center" }}>{j.plate}</span>}
   </span>;
 }
 // les images d'un plateau, pour les voir en grand (08/11/2026) : chaque plateau d'un regroupement, puis le modele
