@@ -635,3 +635,83 @@ async def place_drying_spool(ams_id: int, tray_id: int, body: dict = Body({}),
 async def remove_drying_spool(ams_id: int, tray_id: int, _: str = Depends(get_current_user)):
     from ....services import drying_slots as _dslots
     return {"ok": await _dslots.remove(ams_id, tray_id)}
+
+
+# ---- l'etat en direct (09/11/2026) ----
+# Au lieu de relire /status toutes les 3 s, la page ouvre ce flux (Server-Sent Events) : l'etat entier a la connexion,
+# puis seulement les parties qui ont change, des que l'imprimante les envoie (au plus une fois par seconde ; ~1-2 Ko au
+# lieu de 28). Un releve partage entre toutes les pages ouvertes. Rien de neuf : un « ping » toutes les 15 s (la page sait
+# que le flux vit) et l'etat relu au moins toutes les 15 s (le stock, les sechages… ne passent pas par l'imprimante).
+# Le flux ne passe pas (relais chez un copain, proxy qui retient) : la page revient d'elle-meme a la relecture.
+import asyncio as _aio
+import json as _json
+import time as _time
+from fastapi.responses import StreamingResponse as _SR
+
+_LIVE = {"ev": None, "loop": None, "json": None, "parts": {}, "at": 0.0, "lock": None, "hooked": False}
+
+
+def _live_hook():
+    if _LIVE["hooked"]:
+        return
+    from ....core.mqtt import subscribe_state
+    _LIVE["loop"], _LIVE["ev"], _LIVE["lock"] = _aio.get_running_loop(), _aio.Event(), _aio.Lock()
+
+    def bump():                  # chaque page attend l'evenement qu'elle a pris : un nouveau a chaque changement
+        ev, _LIVE["ev"] = _LIVE["ev"], _aio.Event()
+        ev.set()
+
+    def changed(_s):             # appele par le fil MQTT
+        try:
+            _LIVE["loop"].call_soon_threadsafe(bump)
+        except RuntimeError:
+            pass
+    subscribe_state(changed)
+    _LIVE["hooked"] = True
+
+
+async def _live_snapshot() -> dict:
+    """L'etat comme /status le rend, par cle de premier niveau (chacune deja en JSON) ; refait au plus une fois par
+    seconde, quel que soit le nombre de pages ouvertes."""
+    async with _LIVE["lock"]:
+        if _time.monotonic() - _LIVE["at"] >= 0.9 or not _LIVE["parts"]:
+            out = (await printer_status("live")).model_dump(mode="json")
+            _LIVE["parts"] = {k: _json.dumps(v, ensure_ascii=False, separators=(",", ":")) for k, v in out.items()}
+            _LIVE["at"] = _time.monotonic()
+        return _LIVE["parts"]
+
+
+@router.get("/stream")
+async def printer_stream(request: Request, _: str = Depends(get_current_user)):
+    _live_hook()
+
+    async def gen():
+        sent: dict = {}
+        last_full = 0.0
+        while True:
+            if await request.is_disconnected():
+                break
+            ev = _LIVE["ev"]                                   # pris avant le releve : un changement pendant compte
+            parts = await _live_snapshot()
+            now = _time.monotonic()
+            if not sent or now - last_full > 120:          # l'etat entier : a la connexion, puis de temps en temps
+                msg = '{"full":{' + ",".join(f'{_json.dumps(k)}:{v}' for k, v in parts.items()) + "}}"
+                sent, last_full = dict(parts), now
+            else:
+                diff = {k: v for k, v in parts.items() if sent.get(k) != v}
+                gone = [k for k in sent if k not in parts]
+                msg = None
+                if diff or gone:
+                    msg = '{"patch":{' + ",".join([f'{_json.dumps(k)}:{v}' for k, v in diff.items()] + [f'{_json.dumps(k)}:null' for k in gone]) + "}}"
+                    sent = dict(parts)
+            yield f"data: {msg}\n\n" if msg else "data: {\"ping\":1}\n\n"
+            t_sent = _time.monotonic()
+            # attendre un changement (ou 15 s) ; au moins une seconde entre deux envois (les changements rapproches partent ensemble)
+            try:
+                await _aio.wait_for(ev.wait(), timeout=15)
+            except _aio.TimeoutError:
+                pass
+            await _aio.sleep(max(0.0, 1.0 - (_time.monotonic() - t_sent)))
+
+    return _SR(gen(), media_type="text/event-stream",
+               headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no", "Connection": "keep-alive"})

@@ -305,7 +305,7 @@ class PerfMiddleware:
 
     async def __call__(self, scope, receive, send):
         # l'image tiree de la camera attend la suivante (jusqu'a 4 s) : une attente voulue, pas une lenteur
-        if scope["type"] != "http" or not scope.get("path", "").startswith("/api/") or scope["path"].endswith("/camera/frame"):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/api/") or scope["path"].endswith(("/camera/frame", "/printer/stream")):
             return await self.app(scope, receive, send)
         t0 = time.perf_counter()
         done = {"v": False}

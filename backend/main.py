@@ -655,7 +655,7 @@ class _TextGZipResponder(_GZR):
     async def send_with_gzip(self, message):
         if message["type"] == "http.response.start":
             ctype = _H(raw=message["headers"]).get("content-type", "")
-            if not ctype.startswith(_GZ_TYPES):
+            if not ctype.startswith(_GZ_TYPES) or ctype.startswith("text/event-stream"):   # un flux : envoye tel quel, sans attendre
                 # comme une reponse deja encodee : passe telle quelle
                 self.initial_message = message
                 self.content_encoding_set = True
