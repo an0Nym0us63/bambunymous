@@ -206,7 +206,6 @@ const small = { fontSize: 11.5, fontWeight: 700, color: "var(--muted)" };
 const leafCountOf = (p, kids) => p.leaf ? 1 : (kids[p.id] || []).reduce((n, c) => n + leafCountOf(c, kids), 0);
 const takenOf = (p, kids) => p.leaf ? (p.spools.length ? 1 : 0) : (kids[p.id] || []).reduce((n, c) => n + takenOf(c, kids), 0);
 // (09/11/2026) les bobines rangees : un emplacement en vrac en tient plusieurs, « 3 pris » ne dit pas combien
-const spoolsOf = (p, kids) => p.leaf ? p.spools.length : (kids[p.id] || []).reduce((n, c) => n + spoolsOf(c, kids), 0);
 const bobTxt = (p, kids, t) => { const b = spoolsOf(p, kids); return b !== t ? ` · ${b} bobine${b > 1 ? "s" : ""}` : ""; };
 const spoolsOf = (p, kids) => p.leaf ? p.spools.length : (kids[p.id] || []).reduce((n, c) => n + spoolsOf(c, kids), 0);
 // le nom court d'un emplacement dans sa zone : « Colonne 1-3 » -> « 3 »
