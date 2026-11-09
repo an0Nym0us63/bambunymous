@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { egg } from "../eggs";
 import HiddenMark from "./HiddenMark";
 import Cachettes from "./Cachettes";
 import { useTrackDetail } from "../utils/track";
@@ -429,7 +430,7 @@ export default function MakerWorldView({ onSearch }) {
               {TABS.filter(([k]) => k !== "creator" || status.connected).map(([k, l]) => {
                 const [ic, c] = SUB[k], on = tab === k;
                 return (
-                  <button key={k} onClick={() => { setTab(k); setCq(""); if (k !== "favorites") setColl(null); }}
+                  <button key={k} onClick={() => { setTab(k); setCq(""); if (k !== "favorites") setColl(null); if (k === "history") egg("mw_vus_recemment"); }}
                     style={{ flex:"1 0 auto", minWidth:0, padding:"7px 6px", borderRadius:12, fontSize:"clamp(10.5px, 3.1vw, 12.5px)", fontWeight:800,
                       cursor:"pointer", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", border:"none",
                       display:"flex", alignItems:"center", justifyContent:"center", gap:4,
