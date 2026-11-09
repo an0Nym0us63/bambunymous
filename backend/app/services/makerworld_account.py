@@ -391,6 +391,13 @@ async def mine(ids: list) -> dict:
 _REFRESHING: set = set()
 
 
+def _hist_path(offset: int, limit: int):
+    """Une page de « Vus », gardee dans le cache (refaite a chaque lecture ; rien a sauvegarder)."""
+    from pathlib import Path
+    from ..core.config import settings
+    return Path(settings.DATA_DIR) / "cache" / f"mw_history_{offset}_{limit}.json"
+
+
 async def _page(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> dict:
     """UNE page d'une liste de modeles : le front affiche les premiers tout de
     suite et demande la suite au defilement."""
@@ -399,6 +406,13 @@ async def _page(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> 
     tok = await _tok()
     key = (path_fmt, offset, limit)
     hit = None if fresh else _cache_get(key)
+    if hit is None and not fresh and path_fmt == LISTS["history"] and key not in _LIST_CACHE:
+        # juste apres un redemarrage (le prechargement attend 3 min) : la derniere lue, gardee sur le disque, puis relue en fond
+        try:
+            _LIST_CACHE[key] = (time.time() - _LIST_TTL + 300, json.loads(_hist_path(offset, limit).read_text(encoding="utf-8")))
+            hit = _LIST_CACHE[key][1]
+        except Exception:
+            pass
     if hit is not None:
         # (09/11/2026) l'historique de navigation change a chaque modele vu : servi tout de suite, relu en fond s'il a
         # plus de 2 min (la page suivante l'aura a jour)
@@ -411,6 +425,13 @@ async def _page(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> 
     _must(code, d)
     items = [x for x in (_design_of(i) for i in _items(d)) if x]
     total = d.get("total") if isinstance(d, dict) and isinstance(d.get("total"), int) else None
+    if path_fmt == LISTS["history"]:
+        try:
+            hp = _hist_path(offset, limit)
+            hp.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(hp.write_text, json.dumps({"items": items, "total": total}, ensure_ascii=False), "utf-8")
+        except Exception:
+            pass
     return _cache_put(key, {"items": items, "total": total})
 
 
