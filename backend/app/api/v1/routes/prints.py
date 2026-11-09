@@ -451,6 +451,7 @@ async def list_prints(
     sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
+    light:    int = 0,                # 1 : allegee pour les tuiles de la page Impressions (09/11/2026, voir _light)
     request:  Request = None,
     _: str = Depends(get_current_user),
 ):
@@ -475,7 +476,7 @@ async def list_prints(
         src_v = (_SIDX.get("mt"), len(_SIDX.get("v") or {}))
     except Exception:
         src_v = None
-    key = (status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to, vue3d, sort, limit, offset, cat, etq,
+    key = (status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to, vue3d, sort, limit, offset, cat, etq, light,
            data_version("prints", "filament_usage", "print_tags", "groups", "print_snapshots", "bobines", "filaments",
                         "model_labels"),
            _GALLERY["disk"], src_v)
@@ -488,6 +489,8 @@ async def list_prints(
         return Response(memo[1], media_type="application/json")
     out = await _list_prints(status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to,
                              vue3d, sort, limit, offset, cat, etq)
+    if light:
+        out = {**out, "prints": [_light(p) for p in out["prints"]]}
     if len(_LIST_MEMO) > 30:
         _LIST_MEMO.clear()
     r = json_response(out)                     # gardee encodee : rien a refaire au prochain appel
@@ -497,6 +500,20 @@ async def list_prints(
 
 
 _LIST_MEMO: dict = {}
+
+# (09/11/2026) ce que les tuiles n'affichent pas : 1 Mo pour la premiere page (286 impressions, groupes deplies), dont
+# 73 % pour les captures, le lien signe du 3MF sur MakerWorld (perime au bout d'une heure) et le detail des filaments
+# (le poids d'avant, l'AMS, le slot). La recherche et les filtres travaillent toujours sur tout, cote serveur ; la fiche
+# relit l'impression en entier a son ouverture (« _light »).
+_FU_DROP = ("print_id", "ams_slot", "ams_id", "tray_id", "from_g", "spool_before_g")
+
+
+def _light(p: dict) -> dict:
+    q = {k: v for k, v in p.items() if k not in ("snapshots", "model_url")}
+    q["snapshots"] = [s for s in p.get("snapshots") or [] if s.get("trigger") == "manual"]   # une photo prise a la main compte
+    q["filament_usage"] = [{k: v for k, v in f.items() if k not in _FU_DROP} for f in p.get("filament_usage") or []]
+    q["_light"] = True
+    return q
 
 
 async def _list_prints(status, search, group_id, tag, material, fila_type, filament_id, color, date_from, date_to,

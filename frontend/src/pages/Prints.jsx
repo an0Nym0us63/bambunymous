@@ -1456,8 +1456,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const scrollRef = useRef(null);
   const firstId = useRef(pProp.id);
   useEffect(() => {
-    // une impression incomplete (30/10/2026 : celle d'une tuile de galerie n'a ni nom ni details) : relue en entier
-    if (pProp.total_cost_filament == null || pProp.file_name == null) client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
+    // une impression incomplete (30/10/2026 : celle d'une tuile de galerie n'a ni nom ni details ; 09/11 : celle de la
+    // liste, allegee) : relue en entier
+    if (pProp._light || pProp.total_cost_filament == null || pProp.file_name == null) client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
     else setP(pProp);
     if (firstId.current !== pProp.id) {
       // une autre impression dans la meme fiche (‹ › ou glisse) : etat propre, retour en haut
@@ -3433,7 +3434,7 @@ export default function Prints() {
     setError(null);
     setOffset(0);
     try {
-      const params = new URLSearchParams({ limit: LIMIT, offset: 0 });
+      const params = new URLSearchParams({ limit: LIMIT, offset: 0, light: 1 });   // allegee : la fiche relit le reste
       if (searchQ)     params.set("search", searchQ);
       if (statusF)     params.set("status", statusF);
       if (groupF)      params.set("group_id", groupF);
@@ -3484,7 +3485,7 @@ export default function Prints() {
       while (more && guard < 12 && (countDisplayItems(acc) - startCount) < CARDS_PER_LOAD) {
         guard++;
         const next = curOffset;
-        const params = new URLSearchParams({ limit: LIMIT, offset: next });
+        const params = new URLSearchParams({ limit: LIMIT, offset: next, light: 1 });
         if (searchQ)     params.set("search", searchQ);
         if (statusF)     params.set("status", statusF);
         if (groupF)      params.set("group_id", groupF);
