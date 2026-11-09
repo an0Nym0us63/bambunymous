@@ -34,9 +34,9 @@ const sameIds = (a, b) => a.length >= b.length && b.every((x, i) => a[i]?.design
 // seule. Si l'API ne repond plus, la fenetre le dit et rien d'autre n'est touche.
 // La recherche MakerWorld est publique : elle marche sans compte.
 // La recherche vit dans Découvrir (champ en tete) : un onglet de moins.
-// (09/11/2026) + Imprimés (tires de l'historique) et Vus (l'historique de navigation du compte, celui de Bambu Handy)
-const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["printed", "Imprimés"], ["history", "Vus"], ["following", "Suivis"],
-  ["discover", "Découvrir"], ["creator", "Créateur"]];
+// (09/11/2026) + Historique (les modeles imprimes, tires de l'historique) et Vus (l'historique de navigation du compte, celui de Bambu Handy)
+const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["following", "Suivis"], ["discover", "Découvrir"],
+  ["printed", "Historique"], ["history", "Vus"], ["creator", "Créateur"]];
 const PUBLIC_TABS = ["search", "discover"];      // sans compte (sauf « Pour vous »)
 // les listes simples de modeles, par pages : /makerworld/collection/<onglet> ; « printed » marche sans compte
 const LIST_TABS = ["likes", "printed", "history"];
