@@ -21,9 +21,10 @@ import { toast } from "../store/toast";
 // partage par toutes les vues, recharge apres chaque changement.
 
 export const STORAGE_MODES = [
-  ["single", "🗄", "Un seul rangement", "Tout ce qui sort de l'imprimante va au même endroit. C'est le mode d'origine ; donne-lui le nom que tu veux (Tiroir, Étagère, Placard…)."],
-  ["assigned", "📍", "Chaque bobine a sa place", "Une bobine est dans l'imprimante ou à SA place, rien d'autre : en sortant de l'AMS, elle y retourne d'office. Une case ne prend qu'une bobine, gardée pendant qu'elle est dans l'AMS."],
-  ["manual", "✋", "Je range où je veux", "Une bobine qui sort de l'AMS (ou qui arrive) passe « À ranger » et l'appli te rappelle de dire où tu l'as mise. Aucune case n'est à une bobine : partie dans l'imprimante, elle libère la sienne."],
+  // [cle, icone, nom, explication (dans le ?), en bref (sur la carte, 09/11/2026)]
+  ["single", "🗄", "Un seul rangement", "Tout ce qui sort de l'imprimante va au même endroit. C'est le mode d'origine ; donne-lui le nom que tu veux (Tiroir, Étagère, Placard…).", "Tout au même endroit"],
+  ["assigned", "📍", "Chaque bobine a sa place", "Une bobine est dans l'imprimante ou à SA place, rien d'autre : en sortant de l'AMS, elle y retourne d'office. Une case ne prend qu'une bobine, gardée pendant qu'elle est dans l'AMS.", "Elle retourne à sa case"],
+  ["manual", "✋", "Je range où je veux", "Une bobine qui sort de l'AMS (ou qui arrive) passe « À ranger » et l'appli te rappelle de dire où tu l'as mise. Aucune case n'est à une bobine : partie dans l'imprimante, elle libère la sienne.", "Tu dis où tu l'as mise"],
 ];
 
 let _data = null, _loading = null, _ver = 0;
@@ -275,29 +276,32 @@ export function StorageSettingsCard({ card, cardTitle }) {
         une place pour chaque bobine, ou un rangement libre où l'appli te demande où tu as mis la bobine. Un rangement (un tiroir,
         un placard, un carton) contient des emplacements, directement ou par zones (Colonne 1, Colonne 2, Dessus…) ; un emplacement
         est une case (une seule bobine, gardée pendant qu'elle est dans l'AMS), ou commun (autant de bobines qu'on veut).
+        {STORAGE_MODES.map(([k, ic, l, d]) => <React.Fragment key={k}><br/><br/><b>{ic} {l}</b> : {d}</React.Fragment>)}
+        <br/><br/><b>🧠 Échange intelligent</b> (en « Je range où je veux ») : tu remplaces une bobine par une autre dans le même emplacement
+        de l'AMS (dans la demi-heure) : celle qui sort prend la place que l'autre vient de quitter (rangée d'office, sans rappel). Jamais une
+        place de stock 📦 : une bobine qui sort d'un carton le quitte pour de bon, et celle qu'elle remplace attend que tu dises où elle est.
       </CardHelp>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8, marginBottom: 12 }}>
-        {STORAGE_MODES.map(([k, ic, l, d]) => {
+      {/* (09/11/2026) en bref sur les cartes ; l'explication est dans le ? */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 10 }}>
+        {STORAGE_MODES.map(([k, ic, l, d, short]) => {
           const on = st.mode === k;
-          return <button key={k} type="button" onClick={() => setMode(k)} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 14, cursor: "pointer",
+          return <button key={k} type="button" onClick={() => setMode(k)} data-tip={d} style={{ textAlign: "left", padding: "8px 11px", borderRadius: 12, cursor: "pointer",
             border: on ? "2px solid #8B5CF6" : "1px solid var(--border)", background: on ? "color-mix(in srgb, #8B5CF6 10%, var(--surface))" : "var(--surface)",
-            color: "var(--text)", display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 14, fontWeight: 900 }}>{ic} {l} {on && <span style={{ fontSize: 11, color: "#8B5CF6" }}>· actif</span>}</span>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>{d}</span>
+            color: "var(--text)", display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 900 }}>{ic} {l}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: on ? "#8B5CF6" : "var(--muted)" }}>{on ? "✓ actif · " : ""}{short}</span>
           </button>;
         })}
       </div>
 
       {/* (08/11/2026) en « je range ou je veux » seulement : en « sa place », chacune retourne a la sienne */}
-      {st.mode === "manual" && <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 14, marginBottom: 12, cursor: "pointer",
+      {st.mode === "manual" && <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 11px", borderRadius: 12, marginBottom: 12, cursor: "pointer",
         border: `1px solid ${st.smart ? "color-mix(in srgb, #8B5CF6 45%, var(--border))" : "var(--border)"}`, background: st.smart ? "color-mix(in srgb, #8B5CF6 8%, var(--surface))" : "var(--surface)" }}>
         <input type="checkbox" checked={!!st.smart} onChange={e => write("put", "/storage/settings", { smart: e.target.checked })} style={{ marginTop: 3 }}/>
         <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
           <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>🧠 Échange intelligent</span>
           <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.4 }}>
-            Tu remplaces une bobine par une autre dans le même emplacement de l'AMS (dans la demi-heure) : celle qui sort prend la place que l'autre vient de quitter
-            (rangée d'office, sans rappel). Jamais une place de <b>stock</b> 📦 : une bobine qui sort d'un carton
-            le quitte pour de bon, et celle qu'elle remplace attend que tu dises où elle est.</span>
+            Une bobine remplacée dans l'AMS prend la place de celle qui l'y remplace (détail dans le ?)</span>
         </span>
       </label>}
 
