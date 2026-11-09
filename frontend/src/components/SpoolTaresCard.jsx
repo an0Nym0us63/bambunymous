@@ -80,7 +80,10 @@ export default function SpoolTaresCard({ card, cardTitle }) {
       setRows(toRows(data.tares));
       reloadSpoolTares();
       const n = data.updated_filaments || 0;
-      setBilan(n ? `${n} filament${n > 1 ? "s" : ""} mis à jour avec le nouveau poids.` : "");
+      // (09/11/2026) le dire sans laisser croire que le stock a bouge : seul le poids du support enregistre sur les fiches
+      // change, le restant des bobines reste tel quel et ne s'en sert qu'a la prochaine pesee
+      setBilan(n ? `Nouveau poids du support enregistré sur ${n} fiche${n > 1 ? "s" : ""} filament. Le restant de tes bobines ne bouge pas : `
+        + "il servira à la prochaine pesée, pour retirer le bon support du poids mesuré." : "");
       setSaved(true); setTimeout(() => setSaved(false), 2500);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setSaving(false);
