@@ -164,6 +164,7 @@ class SpoolOut(BaseModel):
     id: int
     filament_id: int
     ordered: bool = False                 # commandee, pas encore recue
+    order_refill: Optional[bool] = None   # (09/11/2026) en commande : une recharge (sans bobine) d'apres la ligne de commande
     place_id: Optional[int] = None        # sa place de rangement (gardee pendant qu'elle est dans l'AMS)
     unstored_at: Optional[datetime] = None  # attend qu'on dise ou elle est rangee, depuis
     # Filament catalogue
@@ -1395,7 +1396,23 @@ async def list_spools(
     result = await db.execute(stmt)
     rows = result.scalars().all()
     sibs = await _siblings_map(db, [r.filament_id for r in rows])
-    return [_spool_out(r, sibs.get(r.filament_id)) for r in rows]
+    out = [_spool_out(r, sibs.get(r.filament_id)) for r in rows]
+    # en commande (09/11/2026) : recharge ou bobine, d'apres la ligne de la commande lue dans les mails qui l'a creee
+    if rows:
+        try:
+            import json as _json
+            from ....models.mail_order import MailOrder
+            refill = {}
+            for (items,) in (await db.execute(select(MailOrder.items_json))).all():
+                for it in _json.loads(items or "[]"):
+                    for sid in it.get("spools") or []:
+                        refill[int(sid)] = bool(it.get("refill"))
+            for o in out:
+                if o.id in refill:            # recue, elle garde l'info (son carton, vue « cartons » du stock)
+                    o.order_refill = refill[o.id]
+        except Exception:
+            pass
+    return out
 
 
 @router.post("/filaments/clear-swatches")

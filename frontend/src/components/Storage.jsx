@@ -161,7 +161,7 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
 // la vue des bobines (09/11/2026 : reglable par zone) : celle de la zone la plus proche qui en a une, sinon du rangement ;
 // « p » = pastille choisie expres (une zone en pastille dans un rangement sur la tranche)
 const edgeOf = (p, by) => { let q = p, seen = 0; while (q && seen++ < 20) { if (q.edge) return q.edge === "p" ? null : q.edge; q = q.parent_id != null ? by[q.parent_id] : null; } return null; };
-const EDGE_TXT = { h: "sur la tranche, à plat", v: "sur la tranche, debout", p: "pastille", s: "petites pastilles" };
+const EDGE_TXT = { h: "sur la tranche, à plat", v: "sur la tranche, debout", p: "pastille", s: "petites pastilles", c: "dans leur carton" };
 // les cases des rangements (08/11/2026) : le meme dessin dans la vue du stock et la fenetre d'un rangement ; le texte suit
 // la largeur de la case (le nom toujours, sur une ligne quand c'est etroit ; rien que la tranche dans une toute petite case)
 const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;
@@ -192,7 +192,7 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
 // qui en decoule (rien ne s'etire pour remplir la largeur)
 // les bobines d'un emplacement en vrac (09/11/2026) : sa disposition (en colonne, en ligne, en grille), d'office 6 par ligne
 const vracCols = (p, n) => Math.max(1, p.layout === "col" ? 1 : p.layout === "row" ? n : p.layout === "grid" ? (p.cols || 3) : (p.cols || Math.min(n, 6)));
-const CELL_W = e => e === "s" ? 22 : e === "v" ? 40 : e ? 84 : 50;
+const CELL_W = e => e === "c" ? 46 : e === "s" ? 22 : e === "v" ? 40 : e ? 84 : 50;
 // minmax(0, …) (09/11/2026) : sur un telephone, les cases retrecissent plutot que de deborder ; jamais plus larges que w
 const tightTpl = (tpl, w, n) => tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, minmax(0, ${w}px))` : tpl.replace(/minmax\(0, 1fr\)/g, `minmax(0, ${w}px)`);
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
@@ -210,6 +210,51 @@ const icoBox = (c, size = 30, r = 10) => ({ width: size, height: size, borderRad
   background: `color-mix(in srgb, ${c} 16%, var(--surface))`, border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))` });
 
 const spoolName = s => s.filament_translated_name || s.filament_name || s.name || `Bobine #${s.id}`;
+
+// une bobine en commande (09/11/2026) : son carton, vu de trois quarts dessus. Kraft, plat et large ; en facade l'etiquette
+// blanche en pilule (le type a gauche, des lignes de donnees, la pastille de sa couleur a droite) et un tampon rond.
+// son carton (09/11/2026), de face : debout, ouvert en haut, deux rabats ecartes ; la bobine sur la tranche depasse un
+// peu (le filament a sa couleur, stries verticales, entre deux flasques minces ; une recharge, sans bobine : le filament
+// seul). Kraft fibre, l'etiquette en pilule a la verticale (le type, la pastille de sa couleur). En commande, et dans le
+// stock en vue « cartons ».
+function SpoolBox({ s, h = 84 }) {
+  const cs = parseColorsList(s.filament_color ?? s.color, s.filament_colors_array ?? s.colors_array) || [];
+  const c0 = cs[0] || "#94A3B8", c1 = cs[1] || c0;
+  const type = (s.filament_fila_type || s.filament_material || s.material || "").slice(0, 14);
+  const refill = !!s.order_refill, id = `sbx${s.id}`;
+  return <svg width={h * 0.5} height={h} viewBox="0 0 50 100" style={{ display: "block" }} aria-hidden="true">
+    <defs>
+      <linearGradient id={`${id}f`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#B6925C"/><stop offset=".5" stopColor="#CBAA79"/><stop offset="1" stopColor="#B6925C"/></linearGradient>
+      <linearGradient id={`${id}c`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor={c0}/><stop offset=".5" stopColor={c1}/><stop offset="1" stopColor={c0}/></linearGradient>
+      <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="rgba(0,0,0,.22)"/><stop offset=".4" stopColor="rgba(255,255,255,.3)"/><stop offset="1" stopColor="rgba(0,0,0,.24)"/></linearGradient>
+      <pattern id={`${id}k`} width="7" height="5" patternUnits="userSpaceOnUse">
+        <path d="M0 1.2h3.4M4.2 3.6h2.6M1.4 4.6h1.6" stroke="rgba(110,75,35,.16)" strokeWidth=".45"/>
+        <path d="M5 .6h1.6M.6 2.6h1.8" stroke="rgba(255,240,215,.16)" strokeWidth=".4"/>
+      </pattern>
+    </defs>
+    <ellipse cx="25" cy="97.5" rx="21" ry="2.1" fill="rgba(15,23,42,.18)"/>
+    {refill
+      ? <path d="M12 40 V15 Q12 10 17 10 H33 Q38 10 38 15 V40 Z" fill={`url(#${id}c)`}/>
+      : <path d="M13 40 V15 Q13 10 17.5 10 H32.5 Q37 10 37 15 V40 Z" fill={`url(#${id}c)`}/>}
+    <path d={refill ? "M12 40 V15 Q12 10 17 10 H33 Q38 10 38 15 V40 Z" : "M13 40 V15 Q13 10 17.5 10 H32.5 Q37 10 37 15 V40 Z"} fill={`url(#${id}g)`}/>
+    {[...Array(refill ? 9 : 8)].map((_, i) => <line key={i} x1={(refill ? 14.3 : 15) + i * 2.9} x2={(refill ? 14.3 : 15) + i * 2.9} y1="11.5" y2="40" stroke="rgba(0,0,0,.13)" strokeWidth=".45"/>)}
+    {!refill && <>
+      <path d="M11 40 V13 Q11 7 13 7 V40 Z" fill="#E7E5DF" stroke="#BDBAB1" strokeWidth=".45"/>
+      <path d="M39 40 V13 Q39 7 37 7 V40 Z" fill="#D9D6CE" stroke="#BDBAB1" strokeWidth=".45"/>
+    </>}
+    <polygon points="5,28 1.5,13 6.5,11.5 8.5,28" fill="#C3A271" stroke="#A98657" strokeWidth=".55"/>
+    <polygon points="45,28 48.5,13 43.5,11.5 41.5,28" fill="#B9976A" stroke="#A98657" strokeWidth=".55"/>
+    <rect x="5" y="28" width="40" height="68" rx="1.4" fill={`url(#${id}f)`} stroke="#A98657" strokeWidth=".65"/>
+    <rect x="5" y="28" width="40" height="68" rx="1.4" fill={`url(#${id}k)`}/>
+    <rect x="5" y="28" width="40" height="2.3" fill="rgba(0,0,0,.12)"/>
+    <line x1="5.8" y1="31" x2="5.8" y2="95" stroke="rgba(255,240,215,.22)" strokeWidth=".6"/>
+    <circle cx="38.5" cy="37" r="3.4" fill="none" stroke="rgba(120,80,40,.35)" strokeWidth=".65"/>
+    <rect x="18.5" y="37" width="13" height="53" rx="6.5" fill="#FBFBF9" stroke="rgba(0,0,0,.08)" strokeWidth=".5"/>
+    <text transform="translate(27.1 75) rotate(-90)" fontSize="5.1" fontWeight="800" fill="#2C2C2A" fontFamily="system-ui, sans-serif">{type}</text>
+    <circle cx="25" cy="83.4" r="3.8" fill={`url(#${id}c)`} stroke="rgba(0,0,0,.15)" strokeWidth=".5"/>
+    <circle cx="25" cy="83.4" r="4.8" fill="none" stroke="#E2E1DC" strokeWidth=".65"/>
+  </svg>;
+}
 
 // la fiche d'identite d'une bobine au survol (09/11/2026) : une carte qui apparait au-dessus de la case (souris seulement ;
 // au toucher, la case ouvre sa fiche ou sa fenetre). idTip(s, extra) a poser sur l'element ; <SpoolIdHost/> une fois par vue.
@@ -498,7 +543,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         hint: p.id === root.id ? EDGE_TXT[p.edge] || "pastille" : p.edge ? EDGE_TXT[p.edge] : `comme au-dessus (${EDGE_TXT[edgeOf(by[p.parent_id], by) || "p"]})`, onClick: () => openMenu(null, {
         title: `Les bobines de « ${p.name} »`, subtitle: p.id === root.id ? "comment les montrer dans ses cases (une zone peut avoir la sienne)" : "comment les montrer dans les cases de cette zone", color: "#8B5CF6",
         items: [...(p.id === root.id ? [] : [[null, "↩", `Comme au-dessus (${EDGE_TXT[edgeOf(by[p.parent_id], by) || "p"]})`]]),
-          [p.id === root.id ? null : "p", "🟣", "Pastille"], ["s", "•", "Petites pastilles (un carton de 30 bobines)"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
+          [p.id === root.id ? null : "p", "🟣", "Pastille"], ["s", "•", "Petites pastilles (un carton de 30 bobines)"], ["c", "📦", "Dans leur carton (du stock)"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
           ({ icon: (p.edge || null) === k ? "✓" : ic, label: l, onClick: () => patch(p, { edge: k }) })),
       }) },
       // du stock : le rangement entier, ou une zone, une caisse en vrac (07/11/2026 : seulement le rangement avant)
@@ -540,7 +585,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
         <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 48} thick={embed ? 12 : 24}/>
-          : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
+          : edge === "c" ? <SpoolBox s={occ} h={embed ? 40 : 80}/> : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
         {/* (09/11/2026) ni nom ni marque : serre, l'info est dans la fenetre au toucher (et au survol) */}
       </> : <span className="bn-num-free">{num}</span>}
     </button>;
@@ -565,7 +610,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       return <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: `repeat(${vracCols(p, list.length)}, minmax(0, ${CELL_W(e)}px))` }}>
         {list.map(x => <span key={x.id} className="bn-cell bn-tight" {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined}
           onClick={ev => menu(ev, p)} style={{ cursor: readOnly ? "default" : "pointer", animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
-          <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={48} thick={24}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
+          <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={48} thick={24}/> : e === "c" ? <SpoolBox s={x} h={80}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
             : <span className="bn-pastille"><Swatch s={x} size={40}/></span>}</span></span>)}
       </div>; })() : <span style={{ ...small, fontSize: 10, textAlign: "center" }}>vide</span>}
   </div>;
@@ -598,9 +643,17 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
     </div>;
   };
   // les zones cote a cote, chacune a sa hauteur (07/11/2026 : elles s'etiraient a la plus haute) ; 5 tiennent sur un telephone
+  // (09/11/2026) condense : une zone en pleine largeur passe sur sa propre rangee, a la largeur des autres (dans la grille,
+  // elle elargissait la premiere colonne a sa mesure)
   const Zones = ({ parent, list }) => { const a = arrange(list, parent, false, `repeat(${Math.min(list.length, 4)}, minmax(0, 1fr))`);
-    return <div style={{ display: "grid", gap: 4, gridTemplateColumns: tightZones(a.tpl), alignItems: "start", justifyContent: embed ? undefined : "start" }}>
-      {a.items.map(z => <div key={z.id} style={{ minWidth: 0, ...spanOf(z) }}>{z.leaf ? <Vrac p={z}/> : <Zone p={z} many={list.length > 1 && !wide(z)}/>}</div>)}</div>; };
+    const one = z => z.leaf ? <Vrac p={z}/> : <Zone p={z} many={list.length > 1 && !wide(z)}/>;
+    if (embed) return <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl, alignItems: "start" }}>
+      {a.items.map(z => <div key={z.id} style={{ minWidth: 0, ...spanOf(z) }}>{one(z)}</div>)}</div>;
+    const row = a.items.filter(z => z.span !== -1), full = a.items.filter(z => z.span === -1);
+    return <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, maxWidth: "100%", minWidth: 0 }}>
+      {row.length > 0 && <div style={{ display: "grid", gap: 4, gridTemplateColumns: tightZones(a.tpl), alignItems: "start", justifyContent: "start" }}>
+        {row.map(z => <div key={z.id} style={{ minWidth: 0, ...spanOf(z) }}>{one(z)}</div>)}</div>}
+      {full.map(z => <div key={z.id} style={{ minWidth: 0 }}>{one(z)}</div>)}</div>; };
   const ch = kids[root.id] || [];
   // les cases sans zone d'un cote ; les zones et les emplacements en vrac (communs) de l'autre, cote a cote
   const direct = ch.filter(c => c.leaf && c.single), zones = ch.filter(c => !c.leaf || !c.single);
@@ -1118,7 +1171,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
         <span className="bn-num">{num}</span>
         <span className="bn-band">
           {edge === "v" ? <SpoolEdge s={full || occ} vertical len={48} thick={24} dim={out}/>
-            : edge === "s" ? <Swatch s={full || occ} size={18} dim={out}/> : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
+            : edge === "c" ? <SpoolBox s={full || occ} h={80}/> : edge === "s" ? <Swatch s={full || occ} size={18} dim={out}/> : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
             : <span className="bn-pastille"><Swatch s={full || occ} size={40} dim={out}/></span>}
         </span>
         {/* (09/11/2026) condense comme la fenetre du rangement : le nom au survol, la fiche au toucher */}
@@ -1145,7 +1198,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
   const Mini = ({ s, off = false, place = null }) => { const e = edgeOf(place || p0Of(s), by);
     return <button type="button" className={`bn-cell bn-tight${filtering && !off ? " bn-match" : ""}`} onClick={() => !off && onOpen(s)}
       {...idTip(s, (place || p0Of(s)).path)} style={off ? { opacity: 0.3, cursor: "default" } : undefined}>
-      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={48} thick={24}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
+      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={48} thick={24}/> : e === "c" ? <SpoolBox s={s} h={80}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
         : <span className="bn-pastille"><Swatch s={s} size={40}/></span>}</span></button>; };
   const Common = ({ p, nested }) => {
     const here = storedHere(p);
@@ -1176,8 +1229,11 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
         {a.items.map(c => <Cell key={c.id} p={c}/>)}</div>)(arrange(cells, p, many, "repeat(auto-fill, minmax(76px, 1fr))"))}
       {/* les emplacements en vrac cote a cote (09/11/2026 : ils s'empilaient en colonne) */}
       {commons.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "flex-start" }}>{commons.map(c => <Common key={c.id} p={c} nested/>)}</div>}
-      {subs.length > 0 && (a => <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl.replace(/minmax\(0, 1fr\)/g, "minmax(0, max-content)"), justifyContent: "start", alignItems: "start" }}>
-        {a.items.map(c => <div key={c.id} style={{ minWidth: 0, ...spanOf(c) }}><Group p={c} many={subs.length > 1 && !wide(c)}/></div>)}</div>)(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
+      {subs.length > 0 && (a => { const row = a.items.filter(c => c.span !== -1), full = a.items.filter(c => c.span === -1);
+        return <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, maxWidth: "100%", minWidth: 0 }}>
+          {row.length > 0 && <div style={{ display: "grid", gap: 4, gridTemplateColumns: a.tpl.replace(/minmax\(0, 1fr\)/g, "minmax(0, max-content)"), justifyContent: "start", alignItems: "start" }}>
+            {row.map(c => <div key={c.id} style={{ minWidth: 0, ...spanOf(c) }}><Group p={c} many={subs.length > 1 && !wide(c)}/></div>)}</div>}
+          {full.map(c => <div key={c.id} style={{ minWidth: 0 }}><Group p={c} many={false}/></div>)}</div>; })(arrange(subs, p, false, `repeat(${Math.min(subs.length, 4)}, minmax(0, 1fr))`))}
     </div>;
   };
 
@@ -1210,7 +1266,15 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
         </div>
         {elsewhere.length > 0 && <Section k="else" icon={<HelpCircle size={16} strokeWidth={2.2}/>} title="Ailleurs" n={elsewhere.length} tone="#64748B"><div style={grid}>{elsewhere.map(s => renderSpool(s))}</div></Section>}
       </>}
-    {ordered.length > 0 && <Section k="ordered" icon={<Truck size={16} strokeWidth={2.2}/>} title="En commande" n={ordered.length} tone="#0EA5E9"><div style={tiles}>{ordered.map(s => <Tile key={s.id} s={s} vertical/>)}</div></Section>}
+    {ordered.length > 0 && <Section k="ordered" icon={<Truck size={16} strokeWidth={2.2}/>} title="En commande" n={ordered.length} tone="#0EA5E9">
+      {/* (09/11/2026) ses cartons, comme ils arrivent : kraft, l'etiquette en pilule et la pastille de sa couleur */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{ordered.map(s => <button key={s.id} type="button" onClick={() => onOpen(s)} {...idTip(s, "en commande")}
+        className={filtering ? "bn-match" : undefined} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: 2, border: "none",
+          background: "none", cursor: "pointer", borderRadius: 10, color: "var(--text)" }}>
+        <SpoolBox s={s}/>
+        {s.order_refill && <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--muted)", marginTop: -2 }}>recharge</span>}
+        <span style={{ fontSize: 11.5, fontWeight: 800, maxWidth: 76, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(s)}</span>
+      </button>)}</div></Section>}
     {/* a ranger, en dernier (07/11/2026) : la liste peut etre longue, les rangements d'abord */}
     {waiting.length > 0 && <Section k="tostore" icon={<Inbox size={16} strokeWidth={2.2}/>} title="À ranger" n={waiting.length} tone="#F59E0B"
       aside={admin && <button type="button" onClick={() => setToStore(true)} style={{ ...seg, ...segOn }}>Ranger</button>}>
