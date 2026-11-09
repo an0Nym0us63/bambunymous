@@ -247,7 +247,7 @@ export default function Achievements({ embedded = false }) {
           // projecteur sur la scene, en plus du tapis
           background:`radial-gradient(45% 70% at 50% 0%, rgba(255,215,0,0.22), transparent 70%), ${feltBg("#F5B700", "#8B5CF6")}` }}>
           <div style={sectionTitle}>🏆 Podium entre copains</div>
-          <Podium people={people} score={p => p.score}/>
+          <Podium places={4} people={people} score={p => p.score}/>
           {others.filter(p => p.status !== "ok").map(p => (
             <div key={p.id} style={{ fontSize:11.5, color:"var(--muted)" }}>
               {p.name} : {p.status === "outdated" ? "son BambuNymous n'a pas encore les succès" : "injoignable pour le moment"}</div>
@@ -412,7 +412,7 @@ export default function Achievements({ embedded = false }) {
                   <div style={{ display:"flex", flexDirection:"column", gap:10, padding:"12px", borderRadius:12,
                     ...feltCard(CAT_COLOR[c.id] || "#8B5CF6", "#F5B700"),
                     background:`radial-gradient(45% 80% at 50% 0%, rgba(255,215,0,0.18), transparent 70%), ${feltBg(CAT_COLOR[c.id] || "#8B5CF6", "#F5B700")}` }}>
-                    <Podium people={people} score={p => p.cats?.[c.id]?.score || 0} small/>
+                    <Podium places={4} people={people} score={p => p.cats?.[c.id]?.score || 0} small/>
                     <Compare people={people} cat={c.id}/>
                   </div>
                 )}
@@ -647,7 +647,7 @@ function Tile({ it, onOpen, others, shared, rivals }) {
   );
 }
 
-// Podium : les trois premiers (2e, 1er, 3e), moi mis en avant.
+// Podium : les premiers (2e, 1er, 3e, puis 4e en violet), moi mis en avant.
 function Podium({ people, score, small = false, places = 3 }) {
   const top = [...people].sort((a, b) => score(b) - score(a)).slice(0, places);
   const order = top.length >= 3 ? [top[1], top[0], top[2], ...top.slice(3)] : top.length === 2 ? [top[1], top[0]] : top;
