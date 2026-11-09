@@ -116,8 +116,8 @@ export function Layer3D({ s, d, now, w, h }) {
             P2.moveTo(ox + a1 * k, oy + b1 * k); P2.lineTo(ox + a2 * k, oy + b2 * k);
           }
           g.setLineDash([]); g.strokeStyle = muted; g.lineWidth = rim ? 1.4 : 1;
-          g.globalAlpha = rim ? 0.3 : 0.05; g.stroke(bk);
-          g.globalAlpha = rim ? 0.6 : 0.22; g.stroke(fr);
+          g.globalAlpha = rim ? 0.16 : 0.03; g.stroke(bk);
+          g.globalAlpha = rim ? 0.36 : 0.12; g.stroke(fr);
           continue;
         }
         g.beginPath();
