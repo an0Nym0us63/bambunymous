@@ -1269,17 +1269,17 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
     {/* (09/11/2026) condense comme les rangements : chaque unite a sa largeur, les bobines debout, serrees, le slot dans le coin */}
     {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
       {(() => { const Unit = ({ u }) => { const list = printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true }));
-        return <div style={{ display: "inline-flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)",
+        return <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)", minWidth: 0,
           background: "color-mix(in srgb, #0EA5E9 4%, var(--surface2))" }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: "var(--text2)", textAlign: "center" }}>{u}</div>
-          <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.max(1, list.length)}, ${CELL_W("v")}px)` }}>
+          <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.max(1, list.length)}, minmax(0, ${CELL_W("v")}px))` }}>
             {list.map(s => <button key={s.id} type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s)}>
               {slotTag(s) && <span className="bn-num">{slotTag(s)}</span>}
-              <span className="bn-band"><SpoolEdge s={s} vertical len={48} thick={24}/></span></button>)}
+              <span className="bn-band"><SpoolEdge s={s} vertical len="min(48px, 140cqw)" thick="min(24px, 70cqw)"/></span></button>)}
           </div></div>; };
-        return <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", maxWidth: "100%", overflowX: "auto" }}>
-          {uCols.length > 0 && <div style={{ display: "grid", gap: 8, alignItems: "start", gridTemplateColumns: `repeat(${uCols.length}, max-content)` }}>
-            {uCols.flatMap((col, ci) => col.map((a, ri) => a && <div key={a.u} style={{ gridColumn: ci + 1, gridRow: ri + 1 }}><Unit u={a.u}/></div>))}</div>}
+        return <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", maxWidth: "100%", minWidth: 0 }}>
+          {uCols.length > 0 && <div style={{ display: "grid", gap: 6, alignItems: "start", maxWidth: "100%", gridTemplateColumns: `repeat(${uCols.length}, minmax(0, max-content))` }}>
+            {uCols.flatMap((col, ci) => col.map((a, ri) => a && <div key={a.u} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0 }}><Unit u={a.u}/></div>))}</div>}
           {restU.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{restU.map(u => <Unit key={u} u={u}/>)}</div>}
         </div>; })()}
     </Section>}
