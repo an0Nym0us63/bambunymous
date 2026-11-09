@@ -417,8 +417,8 @@ export function LoadSpot({ sp }) {
 // le retour de celle qui sort (08/11/2026) : avec l'echange intelligent (« je range ou je veux »), dans la case que libere
 // celle qu'on charge (le meme lien, a rebours) ; en « chaque bobine a sa place », a SA place (un lien a part, du slot a sa
 // case, marquee « ↩1 », si elle est dans ce rangement) ; « a ranger » : pas de retour dessine
-const SW_DUR = 1700;                              // un trajet de pastille sur son lien (ms)
-function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) {
+const SW_DUR = 2600;                              // un trajet de pastille sur son lien (ms ; 10/11/2026 : 1,7 s, trop vif)
+function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf, sel = [], onPick }) {
   const homeOf = p => p.os?.how === "home" && p.os.out && root != null && rootOf(p.os.out) === root ? p.os.out : null;
   const wrap = React.useRef(null);
   const [links, setLinks] = useState([]);
@@ -426,13 +426,15 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
   // de deux trajets complets des pastilles (retour compris), sinon il partait avant la fin de l'aller-retour
   const groups = ps.length > 3 ? Math.ceil(ps.length / 2) : 1, [grp, setGrp] = useState(0), [hold, setHold] = useState(0);
   React.useEffect(() => {
-    if (groups < 2) return undefined;
+    if (groups < 2 || sel.length) return undefined;
     const t = setInterval(() => { if (Date.now() > hold) setGrp(g => (g + 1) % groups); }, 2 * SW_DUR + 900);
     return () => clearInterval(t);
-  }, [groups, hold]);
+  }, [groups, hold, sel.length]);
   React.useEffect(() => { if (grpReq != null) { const k = ps.findIndex(p => p.n === grpReq.n); if (k >= 0) { setGrp(Math.floor(k / 2)); setHold(Date.now() + 9000); } } }, [grpReq]); // eslint-disable-line react-hooks/exhaustive-deps
-  const inGrp = n => groups < 2 || Math.floor(ps.findIndex(p => p.n === n) / 2) === grp;
-  React.useEffect(() => { onShow?.(ps.filter(p => inGrp(p.n)).map(p => p.n)); }, [grp, ps.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (10/11/2026) des chemins touches : eux seuls, sans defiler
+  const mine = sel.filter(n => ps.some(p => p.n === n));
+  const inGrp = n => mine.length ? mine.includes(n) : groups < 2 || Math.floor(ps.findIndex(p => p.n === n) / 2) === grp;
+  React.useEffect(() => { onShow?.(ps.filter(p => inGrp(p.n)).map(p => p.n)); }, [grp, ps.length, mine.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useLayoutEffect(() => {
     const el = wrap.current;
     if (!el) return undefined;
@@ -465,6 +467,11 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
     return () => { ts.forEach(clearTimeout); clearInterval(iv); ro?.disconnect(); };
   }, [root, ps.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const hex = c => { const l = c ? parseColorsList(c.color, c.colors_array) : null; return (l && l[0]) || "#94a3b8"; };
+  const cols = c => { const l = c ? parseColorsList(c.color, c.colors_array) : null; return l && l.length ? l : ["#94a3b8"]; };
+  // (10/11/2026) une pastille qui voyage : sa couleur, ou toutes celles d'une bobine multicolore
+  const dot = (id, c, extra) => { const l = cols(c);
+    return <>{l.length > 1 && <defs><linearGradient id={id} x1="0" y1="0" x2="1" y2="1">{l.map((x, i) => <stop key={i} offset={i / (l.length - 1)} stopColor={x}/>)}</linearGradient></defs>}
+      <circle className="bn-sw-ghost" r="5.5" fill={l.length > 1 ? `url(#${id})` : l[0]} stroke="#fff" strokeWidth="1.5" opacity="0" {...extra}/></>; };
   // (10/11/2026) les pastilles qui voyagent sur les liens, placees a chaque image sur leur trace (getPointAtLength) :
   // l'animation SVG suivait l'horloge de la page (elle surgissait au milieu du trajet), offset-path figeait les pastilles
   // hors de leur rail sur iPhone entre deux tours. Chacune part du debut a son apparition, accelere puis ralentit, en
@@ -513,14 +520,18 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
       {/* les allers-retours : la bobine a prendre part vers son slot, celle qui sort en revient */}
       <svg ref={svgRef} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 4 }}>
         <defs><linearGradient id="bnSwGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#F59E0B"/><stop offset="1" stopColor="#6366F1"/></linearGradient></defs>
-        {links.filter(l => inGrp(l.n)).map(l => <g key={l.n} style={{ animation: "bnSwIn .4s ease-out" }}>
-          <path id={`bnSw${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link" d={l.d}/>
-          {l.back && <path id={`bnSwB${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link back" d={l.back}/>}
+        {links.filter(l => inGrp(l.n)).map(l => { const pid = `bnSw${title}${l.n}`.replace(/\W/g, ""), bid = `bnSwB${title}${l.n}`.replace(/\W/g, "");
+          return <g key={l.n} style={{ animation: "bnSwIn .4s ease-out" }}>
+          <path id={pid} className="bn-sw-link" d={l.d}/>
+          {l.back && <path id={bid} className="bn-sw-link back" d={l.back}/>}
+          {/* (10/11/2026) toucher un chemin : lui seul (plusieurs se cumulent ; « Tout remettre » au-dessus) */}
+          {onPick && [l.d, l.back].filter(Boolean).map((d, i) => <path key={i} d={d} fill="none" stroke="transparent" strokeWidth="16"
+            style={{ pointerEvents: "stroke", cursor: "pointer" }} onClick={e => { e.stopPropagation(); onPick(l.n); }}/>)}
           {/* (10/11/2026) les pastilles qui voyagent, placees image par image sur leur trace (voir plus haut) */}
-          <circle className="bn-sw-ghost" r="5" fill={hex(l.a)} stroke="#fff" strokeWidth="1.5" opacity="0" data-path={`bnSw${title}${l.n}`.replace(/\W/g, "")}/>
-          {l.b && l.swap && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5" opacity="0" data-path={`bnSw${title}${l.n}`.replace(/\W/g, "")} data-rev="1"/>}
-          {l.back && l.b && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5" opacity="0" data-path={`bnSwB${title}${l.n}`.replace(/\W/g, "")} data-delay="700"/>}
-        </g>)}
+          {dot(`${pid}a`, l.a, { "data-path": pid })}
+          {l.b && l.swap && dot(`${pid}b`, l.b, { "data-path": pid, "data-rev": "1" })}
+          {l.back && l.b && dot(`${pid}r`, l.b, { "data-path": bid, "data-delay": "900" })}
+        </g>; })}
       </svg>
 
     </div>
@@ -531,6 +542,8 @@ export function SwapSheet({ j, onClose }) {
   const [loc, setLoc] = useState(null);                // la bobine a localiser
   const [req, setReq] = useState(null);                // une ligne du resume touchee : sa section, son groupe
   const [shown, setShown] = useState({});              // section -> les echanges dont les liens sont montres
+  const [sel, setSel] = useState([]);                  // (10/11/2026) les chemins touches : eux seuls
+  const pick = n => setSel(l => l.includes(n) ? l.filter(x => x !== n) : [...l, n]);
   const st = useStorage();
   // (08/11/2026) par rangement source : une section chacun (le rangement face a l'imprimante, ses liens) ; plusieurs
   // rangements : les sections defilent de gauche a droite, des onglets au-dessus pour y aller
@@ -602,10 +615,16 @@ export function SwapSheet({ j, onClose }) {
         </div>}
         <div ref={rail} className="bn-sw-rail" onScroll={onScroll} style={{ height: sections.length > 1 && railH ? railH : undefined }}>
           {sections.map(x => <SwapSection key={x.key} title={x.title} root={x.root} ps={x.ps} rootOf={id => rootOfSpool(st, id)} loose={x.root == null ? x.ps : []} tgtOf={tgtOf}
+            sel={sel} onPick={n > 1 ? pick : null}
             grpReq={req && x.ps.some(p => p.n === req.n) ? req : null} onShow={ns => setShown(m => ({ ...m, [x.key]: ns }))}/>)}
         </div>
+        {sel.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>{sel.length === 1 ? "Un seul chemin montré" : `${sel.length} chemins montrés`} · touche un chemin ou une tuile pour en ajouter ou en retirer</span>
+          <button type="button" onClick={() => setSel([])} style={{ padding: "4px 11px", borderRadius: 20, fontSize: 12, fontWeight: 800, fontFamily: "inherit", cursor: "pointer",
+            color: "#fff", border: "none", background: "linear-gradient(135deg, #0EA5E9, #6366F1)" }}>↺ Tout remettre</button></div>}
         {/* (08/11/2026) le detail, en tuiles sous les vues : chaque echange, la source (son nom entier, son rangement et sa
-            case) ⇄ la cible (son nom, son slot, ou elle va ensuite) ; toucher une tuile montre sa section et son lien */}
+            case) ⇄ la cible (son nom, son slot, ou elle va ensuite) ; toucher une tuile montre sa section et son lien
+            (10/11/2026 : et l'isole, comme toucher son chemin) */}
         <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 330px), 1fr))" }}>
           {pairs.map(p => {
             const two = loc => { const x = String(loc || ""), m = x.match(/^(.+?) slot (\d+)$/), h = x.match(/^AMS (HT-\w+)$/);
@@ -621,8 +640,8 @@ export function SwapSheet({ j, onClose }) {
                   {w2 && <b style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w2}</b>}</span>}
                 {extra}
               </span>; };
-            const on = !sections[cur] || !shown[sections[cur].key] || shown[sections[cur].key].includes(p.n);
-            return <div key={p.n} role="button" tabIndex={0} onClick={() => { const k = sections.findIndex(x => x.ps.includes(p)); if (k >= 0) go(k); setReq({ n: p.n, t: Date.now() }); }}
+            const on = sel.length ? sel.includes(p.n) : !sections[cur] || !shown[sections[cur].key] || shown[sections[cur].key].includes(p.n);
+            return <div key={p.n} role="button" tabIndex={0} onClick={() => { const k = sections.findIndex(x => x.ps.includes(p)); if (k >= 0) go(k); if (n > 1) pick(p.n); else setReq({ n: p.n, t: Date.now() }); }}
               style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 9px", borderRadius: 13, cursor: "pointer", minWidth: 0,
                 border: `1px solid ${on ? "color-mix(in srgb, #F59E0B 40%, var(--border))" : "var(--border)"}`, background: "var(--surface2)",
                 opacity: on ? 1 : 0.5, transition: "opacity .3s, border-color .3s" }}>
