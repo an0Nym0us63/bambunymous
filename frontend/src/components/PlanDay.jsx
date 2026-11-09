@@ -1075,3 +1075,21 @@ const tin = { padding: "7px 10px", borderRadius: 11, border: "1px solid color-mi
   boxShadow: "0 1px 2px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.4)", minHeight: 36 };
 const lab = { fontSize: 12.5, fontWeight: 900, color: "var(--text2)", marginBottom: 6 };
 const hint = { fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginTop: 5 };
+
+// les filaments du plateau (08/11/2026), meme sans rien a charger : leur pastille, et le slot de l'AMS ou chacun est
+// en ce moment (« ● Marron foncé · B1 ») ; celui a charger n'a pas encore de slot
+export function UsedFils({ j }) {
+  const ams = usePrinter(s => s.status?.ams_list);
+  const fils = (j.fils || []).filter(f => f.filament_id);
+  if (!fils.length) return null;
+  const slotOf = fid => { for (const a of ams || []) for (const t of a.trays || []) if (t.spool_info?.filament_id === fid) return slotLabel(a.id, t.id); return null; };
+  return <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 2 }}>
+    {fils.map((f, i) => { const sl = slotOf(f.filament_id);
+      return <span key={i} data-tip={`${f.name || "filament"}${f.g ? ` · ${f.g} g` : ""}${sl ? ` · dans ${sl}` : " · à charger"}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: "2px 8px 2px 5px", borderRadius: 20, fontSize: 11, fontWeight: 800,
+          color: "var(--text2)", background: "var(--surface2)", border: "1px solid var(--border)", maxWidth: "100%", minWidth: 0 }}>
+        <FilDot id={f.filament_id} size={11}/>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{f.name}</span>
+        {sl && <span style={{ color: "#0284C7", fontWeight: 900, marginLeft: 3, flexShrink: 0 }}>· {sl}</span>}</span>; })}
+  </div>;
+}
