@@ -5,7 +5,12 @@ import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Che
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
-import { TILES, TILE_NEEDS, useTilesData, tileWaiting, TileWaiting } from "./HomeTiles";
+import { TILES, TILE_NEEDS, NO_STATUS, useTilesData, tileWaiting, TileWaiting } from "./HomeTiles";
+
+// le corps d'une tuile, redessine seulement quand ce dont il depend change (deps, comparees une a une) : une tuile qui
+// ne lit pas l'etat de l'imprimante ne refait plus tout son rendu a chaque releve (09/11/2026)
+const TileMemo = React.memo(({ render }) => render(),
+  (a, b) => a.deps.length === b.deps.length && a.deps.every((x, i) => Object.is(x, b.deps[i])));
 import { showConfirm } from "../utils/dialog";
 import { useIsAdmin } from "../store/auth";
 import ErrorBoundary from "./ErrorBoundary";
@@ -868,11 +873,12 @@ export default function HomeGrid({ status, blocks, top = null }) {
         {!TILES[item.id] ? (def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
             badge={def.frame.badge?.(status, item, o)}>{def.render(data, status, o, item)}</Frame> : def.render(data, status, o, item))
           : <WhenNear id={item.id} near={near.has(item.id)} onNear={markNear} fallback={<TileWaiting id={item.id} label={def.label} mini={item.h === 0.5}/>}>
-            {tileWaiting(item.id, data, status) ? <TileWaiting id={item.id} label={def.label} mini={item.h === 0.5}/>
+            <TileMemo deps={[data, NO_STATUS.has(item.id) ? status == null : status, JSON.stringify(o), item.w, item.h, item.id, def]} render={() =>
+            tileWaiting(item.id, data, status) ? <TileWaiting id={item.id} label={def.label} mini={item.h === 0.5}/>
               : item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
               : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
                 badge={def.frame.badge?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
-              : def.render(data, status, o, item)}
+              : def.render(data, status, o, item)}/>
           </WhenNear>}
       </Cell>
     );

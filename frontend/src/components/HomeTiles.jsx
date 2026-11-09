@@ -5067,6 +5067,11 @@ export { FamilyBoardZoom };
 const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });   // h : 0,5 (une ligne), 1, 2, 3 ou 4
 const B = (key, label, def, extra = {}) => ({ key, label, def, ...extra });
 const C = (key, label, def, choices, extra = {}) => ({ key, label, def, choices, ...extra });
+// (09/11/2026) les tuiles qui ne lisent pas l'etat de l'imprimante : elles ne se redessinent plus a chaque releve
+// (toutes les 3 s pendant une impression), seulement quand leurs donnees, leur taille ou leurs options changent.
+// Une tuile qui lit « st » ou « status » n'a rien a faire ici (d'office, une tuile suit chaque releve).
+export const NO_STATUS = new Set(["week", "planning", "next", "stock", "friends", "mw", "rate", "wheel", "ach", "month", "sales", "feed",
+  "gallery", "shortcuts", "family", "podium", "alerts", "orders", "streak", "goal"]);
 export const TILES = {
   today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} p={d.prints} o={o} sz={sz(it)} st={st} lp={d.live}/>,
     options: [B("ring", "Anneau de réussite", true, { hint: "La part des impressions réussies du jour." }), B("yesterday", "Écart avec hier", true),
