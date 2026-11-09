@@ -113,17 +113,37 @@ export function Layer3D({ s, d, now, w, h }) {
     // le haut de chaque objet (09/11/2026) : son dernier contour, en fantome plus marque, dit ou est le dessus
     const topOf = {};
     for (const L of s.layers) for (const q of L.paths) { const o = q.o ?? "_"; if (!(topOf[o] >= L.n)) topOf[o] = L.n; }
-    for (const L of s.layers) {
+    // (09/11/2026) l'ordre de dessin dit qui est devant : l'imprime d'abord, la couche en cours, puis le fantome PAR-DESSUS.
+    // Pleine et dessinee en dernier, la couche en cours cachait le mur avant du fantome qui monte devant elle : l'oeil la
+    // prenait pour la plus proche, et on croyait voir par en dessous
+    const contours = ghost => { for (const L of s.layers) {
       const done = L.n <= cur, top = done && L.n > cur - (s.step || 1);
       for (const q of L.paths) {
+        const gone = q.o != null && sk[q.o] && L.n >= sk[q.o].layer;
+        if ((!done && !gone) !== ghost) continue;
         const p = unpack(q.p);
         if (p.length < 4) continue;
-        const gone = q.o != null && sk[q.o] && L.n >= sk[q.o].layer;
+        if (ghost) {
+          // le fantome : les bords tournes vers nous (devant) plus marques que ceux de derriere ; c'est ce qui dit a l'oeil
+          // dans quel sens il regarde (des contours tous pareils se lisent aussi bien vus de dessous)
+          const rim = topOf[q.o ?? "_"] === L.n;
+          let A = 0;
+          for (let i = 0; i + 3 < p.length; i += 2) A += p[i] * p[i + 3] - p[i + 2] * p[i + 1];
+          const sg = A >= 0 ? 1 : -1, fr = new Path2D(), bk = new Path2D();
+          for (let i = 0; i + 3 < p.length; i += 2) {
+            const nx = (p[i + 3] - p[i + 1]) * sg, ny = -(p[i + 2] - p[i]) * sg, P2 = nx * sa + ny * ca < 0 ? fr : bk;
+            const [a1, b1] = proj(p[i], p[i + 1], L.z), [a2, b2] = proj(p[i + 2], p[i + 3], L.z);
+            P2.moveTo(ox + a1 * k, oy + b1 * k); P2.lineTo(ox + a2 * k, oy + b2 * k);
+          }
+          g.setLineDash([]); g.strokeStyle = muted; g.lineWidth = rim ? 1.4 : 1;
+          g.globalAlpha = rim ? 0.3 : 0.05; g.stroke(bk);
+          g.globalAlpha = rim ? 0.6 : 0.22; g.stroke(fr);
+          continue;
+        }
         g.beginPath();
         let [X, Y] = proj(p[0], p[1], L.z); g.moveTo(ox + X * k, oy + Y * k);
         for (let i = 2; i < p.length; i += 2) { [X, Y] = proj(p[i], p[i + 1], L.z); g.lineTo(ox + X * k, oy + Y * k); }
         if (gone) { g.setLineDash([3, 3]); g.strokeStyle = muted; g.globalAlpha = 0.35; g.lineWidth = 1; }
-        else if (!done) { const rim = topOf[q.o ?? "_"] === L.n; g.setLineDash([]); g.strokeStyle = muted; g.globalAlpha = rim ? 0.45 : 0.1; g.lineWidth = rim ? 1.4 : 1; }
         else if (lightCol(col(q.t))) {
           // un filament clair (06/11/2026) : un contour gris dessous, sinon le blanc disparait sur le fond clair
           g.setLineDash([]); g.strokeStyle = "#64748b"; g.globalAlpha = 0.6; g.lineWidth = (top ? 2.2 : 1.1) + 1.3; g.stroke();
@@ -132,7 +152,8 @@ export function Layer3D({ s, d, now, w, h }) {
         else { g.setLineDash([]); g.strokeStyle = col(q.t); g.globalAlpha = top ? 1 : 0.8; g.lineWidth = top ? 2.2 : 1.1; }
         g.stroke();
       }
-    }
+    } };
+    contours(false);
     // la couche en cours remplie (05/11/2026) : tous ses traces, ceux de la vue 2D deja lus, poses a sa hauteur ;
     // la hauteur, entre les deux couches du contour qui l'encadrent
     if (d?.ok && d.paths?.length && d.layer === cur && s.layers.length) {
@@ -166,6 +187,7 @@ export function Layer3D({ s, d, now, w, h }) {
         g.stroke();
       }
     }
+    contours(true);
     g.setLineDash([]); g.globalAlpha = 1;
   }, [s, d, now, w, h, az]);
   // au doigt (05/11/2026) : tourner ne doit ni faire defiler, ni changer d'ecran de l'accueil (data-noswipe), ni ouvrir la
