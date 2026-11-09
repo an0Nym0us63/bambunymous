@@ -252,7 +252,7 @@ export function PlanZoom({ p: p0 }) {
       ks.splice(Math.max(0, at), 0, j.key);
       return send("/makerworld/plan/arrange", { order: ks, pins: { [j.key]: day } }, "put");
     },
-    replace: ref => send("/makerworld/plan/replace", { key: j.key, ref }).then(d => d && egg("planning_glisse")),
+    replace: ref => send("/makerworld/plan/replace", { key: j.key, ref }).then(d => d && egg("planning_a_sa_place")),
     sheet: () => setSheet(sheetRef(j)),
     dayview: () => nav("/prints?tab=calendar"),
     due: v => send(`/makerworld/plan/deadline/${j.design_id}`, { due: v }, "put").then(d => { if (d && v) { egg("planning_echeance"); toast("🎯 Date limite posée", "ok", 3000); } }),
