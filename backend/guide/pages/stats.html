@@ -97,7 +97,7 @@
       <dt>Par matière</dt><dd>Une barre par famille (PLA, PETG…), la plus imprimée en premier : vert pour les réussies, rouge pour les échecs, orange pour les partielles et à refaire. À droite, le taux de réussite et les grammes gâchés par les échecs (« 92 % · 48 g gâchés »).</dd>
       <dt>Filaments qui ratent le plus</dt><dd>Les huit filaments au pire taux d'échec parmi ceux utilisés dans au moins <b>3 impressions</b> de la période et ayant au moins un échec : pastille de couleur, nom, « marque · type · grammes gâchés », puis « 40 % d'échec » et « 2 sur 5 ». Touche une ligne pour ouvrir la fiche du filament. Rien n'apparaît si aucun filament ne rate.</dd>
     </dl>
-    <p><b>Évolution dans le temps</b> est un histogramme. Les boutons au-dessus choisissent la mesure : <span class="ui">Impressions</span> (nombre), <span class="ui">Coût</span>, <span class="ui">Filament</span> (kg) ou <span class="ui">Durée</span>. Le découpage s'adapte à la période :</p>
+    <p><b>Évolution dans le temps</b> est un histogramme. Les boutons au-dessus choisissent la mesure : <span class="ui">Impressions</span> (nombre), <span class="ui">Durée</span> ou <span class="ui">Coût</span> (le filament a son histogramme dans l'onglet Filaments). Les barres se partagent toute la largeur de la carte. Le découpage s'adapte à la période :</p>
     <ul>
       <li>jusqu'à 45 jours : une barre par jour (« 12/10 ») ;</li>
       <li>jusqu'à 120 jours : une barre par semaine (« S42 ») ;</li>
@@ -157,6 +157,8 @@
     <p>Les anneaux montrent au plus dix parts. Pour le détail d'une bobine, voir le chapitre <a href="#filaments">Filaments</a>.</p>
   </section>
   <section>
+    <h3>Consommation dans le temps</h3>
+    <p>Un histogramme du filament consommé sur la période (impressions réussies, échouées ou partielles) : <span class="ui">Jour</span>, <span class="ui">Semaine</span>, <span class="ui">Mois</span> ou <span class="ui">Année</span> pour le découpage (d'office selon la longueur de la période), <span class="ui">Poids</span> ou <span class="ui">Coût</span> pour la mesure. Chaque barre est empilée par matière (les cinq plus utilisées, les autres en gris), avec la légende dessous ; au survol, le détail par matière. Au-dessus, le total et la moyenne par jour, semaine, mois ou an. Les périodes sans impression ont une barre vide ; la plus récente est à droite, la barre défile quand il y en a beaucoup.</p>
     <h3>Précision du suivi <span class="ui">🌐 toutes périodes</span></h3>
     <p>Chaque bobine arrivée au bout avec le suivi couche par couche donne son écart (voir <a href="#filaments-derive">L'écart du suivi d'une bobine</a>). <b>Précision</b> : 100 % moins l'écart moyen rapporté au poids d'une bobine pleine. <b>Écart typique</b> : l'écart moyen sans son signe, avec la médiane et le plus grand. <b>Tendance</b> : l'écart moyen avec son signe (« on surestime » si les bobines finissent avant notre zéro, « on sous-estime » si elles impriment au-delà). <b>Bobines mesurées</b> : combien au-dessus, en dessous, et écartées.</p>
     <p>Une carte compare ensuite les groupes, au choix <span class="ui">Marque</span>, <span class="ui">Type</span> (PLA, PETG…), <span class="ui">Sous-type</span> (« PLA Matte »…) ou <span class="ui">Mesure</span> (relais de l'AMS, suite choisie, archivée finie) : pour chacun, le nombre de bobines, sa précision, sa tendance en barre de part et d'autre de zéro et son écart typique (le trait pâle, « ± 9 g »). Les mesures écartées n'y comptent pas.</p>

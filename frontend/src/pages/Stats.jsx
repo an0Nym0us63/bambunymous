@@ -770,7 +770,8 @@ function TimeChart({ data, bucket = "month" }) {
   return (
     <div style={{ ...statCard(colors[tab]), padding: "14px 14px 10px" }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {[["count", "Impressions"], ["cost", "Coût"], ["weight", "Filament"], ["duration", "Durée"]]
+        {/* (09/11/2026) le filament a son histogramme dans l'onglet Filaments */}
+        {[["count", "Impressions"], ["duration", "Durée"], ["cost", "Coût"]]
           // Le graphe laisserait deviner les montants malgre le masquage des
           // valeurs : on retire carrement la serie pour un compte en lecture seule.
           .filter(([id]) => !(id === "cost" && isMoneyHidden()))
@@ -801,7 +802,8 @@ function TimeChart({ data, bucket = "month" }) {
           return (
             <div key={k} title={`${fmtBucketLabel(k, bucket)} — ${unit(v)}${segTip ? ` (${segTip})` : ""}`}
               style={{ display: "flex", flexDirection: "column", alignItems: "center",
-                flex: "0 0 auto", width: 26, height: "100%" }}>
+                // (09/11/2026) les barres se partagent toute la largeur (26 px fixes : un tiers de la carte sur grand ecran)
+                flex: "1 0 26px", maxWidth: 64, height: "100%" }}>
               {/* Zone barre : c'est ELLE qui doit avoir une hauteur fixe, sinon le
                   pourcentage de la barre se calcule sur une hauteur nulle et tout
                   s'ecrase a 2px -- le bug des barres plates. */}
@@ -903,6 +905,100 @@ function Donut({ data, title, palette }) {
 }
 
 // ── Classement prints / groupes
+// (09/11/2026) le filament consomme dans le temps : par jour, semaine, mois ou annee, chaque barre empilee par matiere
+const FT_COLORS = ["#8B5CF6", "#3B82F6", "#F59E0B", "#10B981", "#EC4899"];
+const FT_GRAINS = [["day", "Jour"], ["week", "Semaine"], ["month", "Mois"], ["year", "Année"]];
+const ftMonday = d => { const x = new Date(d + "T12:00:00"); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const ftIso = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+const ftKey = (d, grain) => grain === "day" ? d : grain === "week" ? ftIso(ftMonday(d)) : grain === "month" ? d.slice(0, 7) : d.slice(0, 4);
+const ftNext = (k, grain) => {
+  if (grain === "year") return String(+k + 1);
+  if (grain === "month") { const [y, m] = k.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; }
+  const x = new Date(k + "T12:00:00"); x.setDate(x.getDate() + (grain === "week" ? 7 : 1)); return ftIso(x);
+};
+const ftLabel = (k, grain) => {
+  if (grain === "year") return k;
+  if (grain === "month") return new Date(k + "-15T12:00:00").toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+  const x = new Date(k + "T12:00:00");
+  return grain === "week" ? `sem. ${x.getDate()}/${x.getMonth() + 1}` : `${x.getDate()}/${x.getMonth() + 1}`;
+};
+const ftUnit = { day: "jour", week: "semaine", month: "mois", year: "an" };
+
+function FilamentTimeline({ period }) {
+  const [days, setDays] = useState(null);
+  const [grain, setGrain] = useState(null);
+  const [metric, setMetric] = useState("g");
+  const scroller = useRef(null);
+  useEffect(() => {
+    let alive = true;
+    client.get("/prints/stats/filament-days", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
+      .then(({ data }) => alive && setDays(data.days || [])).catch(() => alive && setDays([]));
+    return () => { alive = false; };
+  }, [period.from, period.to]);
+  // le grain d'office : le jour sur une periode courte, sinon le mois (puis l'annee au-dela de trois ans)
+  const span = days?.length ? (new Date(days[days.length - 1].d) - new Date(days[0].d)) / 86400000 : 0;
+  const g = grain || (span <= 45 ? "day" : span <= 200 ? "week" : span <= 1100 ? "month" : "year");
+  const { keys, buckets, mats, max, total } = useMemo(() => {
+    const b = {}, tot = {};
+    for (const x of days || []) {
+      const k = ftKey(x.d, g), y = b[k] || (b[k] = { g: 0, cost: 0, mat: {} });
+      y.g += x.g; y.cost += x.cost;
+      for (const [m, v] of Object.entries(x.mat || {})) { y.mat[m] = (y.mat[m] || 0) + v; tot[m] = (tot[m] || 0) + v; }
+    }
+    const ks = Object.keys(b).sort(), all = [];
+    // les periodes sans rien comptent aussi (une barre vide), sauf a l'annee
+    for (let k = ks[0]; k && k <= ks[ks.length - 1] && all.length < 2000; k = ftNext(k, g)) all.push(k);
+    const top = Object.entries(tot).sort((a, c) => c[1] - a[1]).slice(0, 5).map(([m]) => m);
+    const val = k => metric === "g" ? (b[k]?.g || 0) : (b[k]?.cost || 0);
+    return { keys: all, buckets: b, mats: top, max: Math.max(1, ...all.map(val)), total: all.reduce((a, k) => a + val(k), 0) };
+  }, [days, g, metric]);
+  useEffect(() => { const el = scroller.current; if (el) el.scrollLeft = el.scrollWidth; }, [keys.length, g]);
+  if (!days || !days.length) return null;
+  const fmt = v => metric === "g" ? (v >= 1000 ? `${(v / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(v)} g`) : fmtEur(v);
+  const pill = on => ({ padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer",
+    border: on ? "none" : "1px solid var(--border)", background: on ? "linear-gradient(135deg, #F97316, color-mix(in srgb, #F97316 60%, #ffffff))" : "var(--surface)",
+    color: on ? "white" : "var(--muted)" });
+  const colOf = m => { const i = mats.indexOf(m); return i < 0 ? "#94A3B8" : FT_COLORS[i]; };
+  return (
+    <Section title="Consommation dans le temps" icon="📊">
+      <div style={{ ...statCard("#F97316"), padding: "14px 14px 10px" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          {FT_GRAINS.map(([k, l]) => <button key={k} type="button" onClick={() => setGrain(k)} style={pill(g === k)}>{l}</button>)}
+          <span style={{ flex: 1 }}/>
+          {!isMoneyHidden() && [["g", "Poids"], ["cost", "Coût"]].map(([k, l]) =>
+            <button key={k} type="button" onClick={() => setMetric(k)} style={pill(metric === k)}>{l}</button>)}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 8 }}>
+          {fmt(total)} en tout · {fmt(total / Math.max(1, keys.length))} par {ftUnit[g]} en moyenne</div>
+        <div ref={scroller} style={{ display: "flex", gap: 3, alignItems: "stretch", height: 150, overflowX: "auto", paddingBottom: 4 }}>
+          {keys.map(k => {
+            const y = buckets[k], v = y ? (metric === "g" ? y.g : y.cost) : 0;
+            const parts = y && v ? Object.entries(y.mat).sort((a, c) => (mats.indexOf(a[0]) + 99) % 99 - (mats.indexOf(c[0]) + 99) % 99) : [];
+            const tip = `${ftLabel(k, g)} — ${fmt(v)}${y ? " · " + Object.entries(y.mat).sort((a, c) => c[1] - a[1]).map(([m, gr]) => `${m} ${Math.round(gr)} g`).join(", ") : ""}`;
+            return (
+              <div key={k} data-tip={tip} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "1 0 22px", maxWidth: 46, height: "100%" }}>
+                <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end", minHeight: 0 }}>
+                  <div style={{ width: "100%", height: `${v ? Math.max(3, v / max * 100) : 0}%`, borderRadius: "5px 5px 0 0", overflow: "hidden",
+                    display: "flex", flexDirection: "column-reverse", transition: "height 0.4s ease" }}>
+                    {parts.map(([m, gr]) => <div key={m} style={{ flex: `${gr} 0 0`, background: colOf(m) }}/>)}
+                  </div>
+                </div>
+                <span style={{ fontSize: 8.5, fontWeight: 700, color: "var(--muted)", marginTop: 4, whiteSpace: "nowrap" }}>{ftLabel(k, g)}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 8 }}>
+          {mats.map(m => <span key={m} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: colOf(m) }}/>{m}</span>)}
+          {Object.keys(Object.assign({}, ...Object.values(buckets).map(y => y.mat))).length > mats.length &&
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: "#94A3B8" }}/>Autres</span>}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function MiniBarChart({ data, title, color = "#3b82f6", labelKey = "name", suffix = "" }) {
   const max = Math.max(...data.map(d => d.value), 1);
   const total = data.reduce((a, d) => a + d.value, 0);
@@ -1597,6 +1693,7 @@ export default function Stats() {
         </Section>
       )}
 
+      <FilamentTimeline period={period}/>
       <DriftStats/>
       </>)}
 

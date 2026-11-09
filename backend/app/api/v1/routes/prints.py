@@ -1424,6 +1424,42 @@ async def label_stats(date_from: Optional[str] = None, date_to: Optional[str] = 
             "tags": out("tags", 60)}
 
 
+@router.get("/stats/filament-days")
+async def prints_stats_filament_days(date_from: Optional[str] = None, date_to: Optional[str] = None,
+                                     _: str = Depends(get_current_user)):
+    """(09/11/2026) Le filament consomme jour par jour (et par matiere), pour l'histogramme de l'onglet Filaments : le
+    front le regroupe par jour, semaine, mois ou annee. Meme base que le resume : les resultats reels d'impression."""
+    from ....models.filament import Spool as _Spool, Filament as _Fil
+    from datetime import timedelta
+    cond = [FilamentUsage.grams_used > 0, Print.status.in_(["SUCCESS", "FAILED", "PARTIAL", "TO_REDO"])]
+    for v, ge in ((date_from, True), (date_to, False)):
+        if not v:
+            continue
+        try:
+            t = datetime.strptime(str(v)[:10], "%Y-%m-%d")
+        except ValueError:
+            continue
+        cond.append(Print.print_date >= t if ge else Print.print_date < t + timedelta(days=1))
+    DAY = func.date(Print.print_date)
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(DAY.label("d"), func.coalesce(_Fil.fila_type, _Fil.material).label("m"),
+                   func.sum(FilamentUsage.grams_used).label("g"), func.sum(func.coalesce(FilamentUsage.cost, 0)).label("c"))
+            .join(Print, FilamentUsage.print_id == Print.id)
+            .join(_Spool, FilamentUsage.spool_id == _Spool.id)
+            .join(_Fil, _Spool.filament_id == _Fil.id)
+            .where(*cond).group_by(DAY, "m"))).all()
+    out = {}
+    for d, m, g, c in rows:
+        if not d:
+            continue
+        x = out.setdefault(str(d)[:10], {"d": str(d)[:10], "g": 0.0, "cost": 0.0, "mat": {}})
+        x["g"] += float(g or 0); x["cost"] += float(c or 0)
+        k = (m or "?").strip() or "?"
+        x["mat"][k] = round(x["mat"].get(k, 0) + float(g or 0), 1)
+    return {"days": [{**x, "g": round(x["g"], 1), "cost": round(x["cost"], 2)} for _, x in sorted(out.items())]}
+
+
 @router.get("/stats/summary")
 async def prints_stats(
     days: int = 0,   # retro-compat : fenetre glissante en jours (0 = tout)
