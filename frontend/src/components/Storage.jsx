@@ -220,13 +220,19 @@ const spoolName = s => s.filament_translated_name || s.filament_name || s.name |
 function SpoolBox({ s, h = 84 }) {
   const cs = parseColorsList(s.filament_color ?? s.color, s.filament_colors_array ?? s.colors_array) || [];
   const c0 = cs[0] || "#94A3B8", c1 = cs[1] || c0;
-  const type = (s.filament_fila_type || s.filament_material || s.material || "").slice(0, 14);
   const refill = !!s.order_refill, id = `sbx${s.id}`;
+  // l'effet de sa finition sur l'etiquette (09/11/2026) : soie et metal brillent, mat reste plat, paillettes et galaxie
+  // scintillent
+  const fin = String(finishOf(s) || "").toLowerCase();
+  const shine = /silk|soie|metal|chrome|satin/.test(fin) ? .55 : /matte|mat/.test(fin) ? .08 : .25;
+  const sparkle = /sparkle|paillet|galax|glitter/.test(fin);
   return <svg width={h * 0.5} height={h} viewBox="0 0 50 100" style={{ display: "block" }} aria-hidden="true">
     <defs>
       <linearGradient id={`${id}f`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#B6925C"/><stop offset=".5" stopColor="#CBAA79"/><stop offset="1" stopColor="#B6925C"/></linearGradient>
       <linearGradient id={`${id}c`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor={c0}/><stop offset=".5" stopColor={c1}/><stop offset="1" stopColor={c0}/></linearGradient>
       <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="rgba(0,0,0,.22)"/><stop offset=".4" stopColor="rgba(255,255,255,.3)"/><stop offset="1" stopColor="rgba(0,0,0,.24)"/></linearGradient>
+      <linearGradient id={`${id}l`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c0}/><stop offset="1" stopColor={c1}/></linearGradient>
+      <linearGradient id={`${id}h`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="rgba(255,255,255,0)"/><stop offset=".42" stopColor={`rgba(255,255,255,${shine})`}/><stop offset=".5" stopColor="rgba(255,255,255,0)"/><stop offset=".78" stopColor={`rgba(255,255,255,${shine * .6})`}/><stop offset="1" stopColor="rgba(255,255,255,0)"/></linearGradient>
       <pattern id={`${id}k`} width="7" height="5" patternUnits="userSpaceOnUse">
         <path d="M0 1.2h3.4M4.2 3.6h2.6M1.4 4.6h1.6" stroke="rgba(110,75,35,.16)" strokeWidth=".45"/>
         <path d="M5 .6h1.6M.6 2.6h1.8" stroke="rgba(255,240,215,.16)" strokeWidth=".4"/>
@@ -249,10 +255,12 @@ function SpoolBox({ s, h = 84 }) {
     <rect x="5" y="28" width="40" height="2.3" fill="rgba(0,0,0,.12)"/>
     <line x1="5.8" y1="31" x2="5.8" y2="95" stroke="rgba(255,240,215,.22)" strokeWidth=".6"/>
     <circle cx="38.5" cy="37" r="3.4" fill="none" stroke="rgba(120,80,40,.35)" strokeWidth=".65"/>
-    <rect x="18.5" y="37" width="13" height="53" rx="6.5" fill="#FBFBF9" stroke="rgba(0,0,0,.08)" strokeWidth=".5"/>
-    <text transform="translate(27.1 75) rotate(-90)" fontSize="5.1" fontWeight="800" fill="#2C2C2A" fontFamily="system-ui, sans-serif">{type}</text>
-    <circle cx="25" cy="83.4" r="3.8" fill={`url(#${id}c)`} stroke="rgba(0,0,0,.15)" strokeWidth=".5"/>
-    <circle cx="25" cy="83.4" r="4.8" fill="none" stroke="#E2E1DC" strokeWidth=".65"/>
+    {/* l'etiquette (09/11/2026) : un contour blanc, et dedans toute la couleur du filament avec l'effet de sa finition */}
+    <rect x="17.5" y="37" width="15" height="53" rx="7.5" fill="#FBFBF9" stroke="rgba(0,0,0,.12)" strokeWidth=".5"/>
+    <rect x="19.3" y="38.8" width="11.4" height="49.4" rx="5.7" fill={`url(#${id}l)`}/>
+    <rect x="19.3" y="38.8" width="11.4" height="49.4" rx="5.7" fill={`url(#${id}h)`}/>
+    {sparkle && [[22, 45], [27, 52], [23.5, 61], [28, 70], [22.5, 78], [26.5, 84]].map(([x, y], i) =>
+      <circle key={i} cx={x} cy={y} r=".7" fill="rgba(255,255,255,.85)"/>)}
   </svg>;
 }
 
