@@ -417,14 +417,17 @@ export function LoadSpot({ sp }) {
 // le retour de celle qui sort (08/11/2026) : avec l'echange intelligent (« je range ou je veux »), dans la case que libere
 // celle qu'on charge (le meme lien, a rebours) ; en « chaque bobine a sa place », a SA place (un lien a part, du slot a sa
 // case, marquee « ↩1 », si elle est dans ce rangement) ; « a ranger » : pas de retour dessine
+const SW_DUR = 1700;                              // un trajet de pastille sur son lien (ms)
 function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) {
   const homeOf = p => p.os?.how === "home" && p.os.out && root != null && rootOf(p.os.out) === root ? p.os.out : null;
   const wrap = React.useRef(null);
   const [links, setLinks] = useState([]);
-  const groups = Math.ceil(ps.length / 2), [grp, setGrp] = useState(0), [hold, setHold] = useState(0);
+  // (10/11/2026) par paquets de deux seulement quand ca devient illisible (4 echanges et plus) ; chaque paquet reste le temps
+  // de deux trajets complets des pastilles (retour compris), sinon il partait avant la fin de l'aller-retour
+  const groups = ps.length > 3 ? Math.ceil(ps.length / 2) : 1, [grp, setGrp] = useState(0), [hold, setHold] = useState(0);
   React.useEffect(() => {
     if (groups < 2) return undefined;
-    const t = setInterval(() => { if (Date.now() > hold) setGrp(g => (g + 1) % groups); }, 3200);
+    const t = setInterval(() => { if (Date.now() > hold) setGrp(g => (g + 1) % groups); }, 2 * SW_DUR + 900);
     return () => clearInterval(t);
   }, [groups, hold]);
   React.useEffect(() => { if (grpReq != null) { const k = ps.findIndex(p => p.n === grpReq.n); if (k >= 0) { setGrp(Math.floor(k / 2)); setHold(Date.now() + 9000); } } }, [grpReq]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -462,6 +465,34 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
     return () => { ts.forEach(clearTimeout); clearInterval(iv); ro?.disconnect(); };
   }, [root, ps.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const hex = c => { const l = c ? parseColorsList(c.color, c.colors_array) : null; return (l && l[0]) || "#94a3b8"; };
+  // (10/11/2026) les pastilles qui voyagent sur les liens, placees a chaque image sur leur trace (getPointAtLength) :
+  // l'animation SVG suivait l'horloge de la page (elle surgissait au milieu du trajet), offset-path figeait les pastilles
+  // hors de leur rail sur iPhone entre deux tours. Chacune part du debut a son apparition, accelere puis ralentit, en
+  // fondu aux deux bouts ; le trace qui bouge, elle le suit
+  const svgRef = React.useRef(null);
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const DUR = SW_DUR;
+    let raf = 0;
+    const tick = now => {
+      const svg = svgRef.current;
+      if (svg) for (const c of svg.querySelectorAll("circle[data-path]")) {
+        const p = svg.querySelector(`#${c.dataset.path}`);
+        if (!p) continue;
+        if (!c.dataset.born) c.dataset.born = String(now);
+        const x0 = (now - Number(c.dataset.born) - Number(c.dataset.delay || 0)) / DUR;
+        if (x0 < 0) { c.setAttribute("opacity", "0"); continue; }
+        const x = x0 % 1, e = x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+        const pt = p.getPointAtLength((c.dataset.rev ? 1 - e : e) * p.getTotalLength());
+        c.setAttribute("cx", pt.x.toFixed(1));
+        c.setAttribute("cy", pt.y.toFixed(1));
+        c.setAttribute("opacity", String(x < 0.1 ? x / 0.1 : x > 0.9 ? (1 - x) / 0.1 : 1));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
   const head = (ic, txt) => <div style={{ fontSize: 10.5, fontWeight: 900, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ic} {txt}</div>;
   return <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
     <div ref={wrap} className="bn-sw">
@@ -480,20 +511,18 @@ function SwapSection({ title, root, ps, loose, tgtOf, grpReq, onShow, rootOf }) 
           {ps.filter(p => p.free).map(p => p.freeAt ? `${p.n} : l'emplacement libre ${p.freeAt.label}` : p.noFree ? `${p.n} : le planning comptait une place libre, aucune n'est vide en ce moment` : `${p.n} : un emplacement libre`).join(" · ")}</div>}
       </div>
       {/* les allers-retours : la bobine a prendre part vers son slot, celle qui sort en revient */}
-      <svg aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 4 }}>
+      <svg ref={svgRef} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 4 }}>
         <defs><linearGradient id="bnSwGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#F59E0B"/><stop offset="1" stopColor="#6366F1"/></linearGradient></defs>
         {links.filter(l => inGrp(l.n)).map(l => <g key={l.n} style={{ animation: "bnSwIn .4s ease-out" }}>
           <path id={`bnSw${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link" d={l.d}/>
           {l.back && <path id={`bnSwB${title}${l.n}`.replace(/\W/g, "")} className="bn-sw-link back" d={l.back}/>}
+          {/* (10/11/2026) les pastilles qui voyagent, placees image par image sur leur trace (voir plus haut) */}
+          <circle className="bn-sw-ghost" r="5" fill={hex(l.a)} stroke="#fff" strokeWidth="1.5" opacity="0" data-path={`bnSw${title}${l.n}`.replace(/\W/g, "")}/>
+          {l.b && l.swap && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5" opacity="0" data-path={`bnSw${title}${l.n}`.replace(/\W/g, "")} data-rev="1"/>}
+          {l.back && l.b && <circle className="bn-sw-ghost" r="5" fill={hex(l.b)} stroke="#fff" strokeWidth="1.5" opacity="0" data-path={`bnSwB${title}${l.n}`.replace(/\W/g, "")} data-delay="700"/>}
         </g>)}
       </svg>
-      {/* (10/11/2026) les pastilles qui voyagent sur les liens : en CSS, chacune part du debut a son apparition (l'animation
-          SVG suivait l'horloge de la page : elle surgissait au milieu du trajet), plus vive, en fondu aux deux bouts */}
-      {links.filter(l => inGrp(l.n)).map(l => <React.Fragment key={l.n}>
-        <span className="bn-sw-dot" style={{ offsetPath: `path("${l.d}")`, background: hex(l.a) }}/>
-        {l.b && l.swap && <span className="bn-sw-dot" style={{ offsetPath: `path("${l.d}")`, background: hex(l.b), animationDirection: "reverse" }}/>}
-        {l.back && l.b && <span className="bn-sw-dot" style={{ offsetPath: `path("${l.back}")`, background: hex(l.b), animationDelay: ".8s" }}/>}
-      </React.Fragment>)}
+
     </div>
   </div>;
 }
@@ -555,10 +584,7 @@ export function SwapSheet({ j, onClose }) {
         .bn-sw-rail{display:flex;align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;gap:16px;scrollbar-width:none;transition:height .3s ease}
         .bn-sw-rail::-webkit-scrollbar{display:none}
         .bn-sw-rail>*{flex:0 0 100%;scroll-snap-align:start}
-        .bn-sw-dot{position:absolute;left:0;top:0;width:10px;height:10px;border-radius:50%;border:1.5px solid #fff;box-sizing:border-box;z-index:5;
-          pointer-events:none;offset-rotate:0deg;box-shadow:0 1px 4px rgba(15,23,42,.35);animation:bnSwRun 1.6s cubic-bezier(.45,.05,.55,.95) infinite both}
-        @keyframes bnSwRun{0%{offset-distance:0%;opacity:0}12%{opacity:1}88%{opacity:1}100%{offset-distance:100%;opacity:0}}
-        @media (prefers-reduced-motion:reduce){.bn-sw-link,.bn-sw-ar{animation:none}.bn-sw-ghost,.bn-sw-dot{display:none}}`}</style>
+        @media (prefers-reduced-motion:reduce){.bn-sw-link,.bn-sw-ar{animation:none}.bn-sw-ghost{display:none}}`}</style>
       <div style={{ padding: "52px 12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="bn-sw-ar" style={{ width: 38, height: 38, borderRadius: 12, display: "grid", placeItems: "center", flexShrink: 0, color: "#fff",
