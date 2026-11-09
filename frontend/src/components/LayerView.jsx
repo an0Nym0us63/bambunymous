@@ -77,7 +77,9 @@ export function Layer3D({ s, d, now, w, h }) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
     const [bx0, by0, bx1, by1] = s.box, cx = (bx0 + bx1) * 5, cy = (by0 + by1) * 5;     // dixiemes de mm
-    const ca = Math.cos(az), sa = Math.sin(az), el = 0.6, se = Math.sin(el), ce = Math.cos(el);
+    // el (09/11/2026) : 0,6 rad faisait des ellipses trop plates, le contour seul se lisait comme vu de dessous ; plus haut,
+    // c'est bien un trois quarts dessus
+    const ca = Math.cos(az), sa = Math.sin(az), el = 0.95, se = Math.sin(el), ce = Math.cos(el);
     const proj = (x, y, z) => { const dx = x - cx, dy = y - cy, rx = dx * ca - dy * sa, ry = dx * sa + dy * ca; return [rx, -ry * se - z * 10 * ce]; };
     // l'echelle : les coins de la boite, en bas et en haut
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -90,6 +92,9 @@ export function Layer3D({ s, d, now, w, h }) {
     const sk = d?.skipped || {};
     g.lineCap = "round"; g.lineJoin = "round";
     const cur = now ?? s.last;
+    // le haut de chaque objet (09/11/2026) : son dernier contour, en fantome plus marque, dit ou est le dessus
+    const topOf = {};
+    for (const L of s.layers) for (const q of L.paths) { const o = q.o ?? "_"; if (!(topOf[o] >= L.n)) topOf[o] = L.n; }
     for (const L of s.layers) {
       const done = L.n <= cur, top = done && L.n > cur - (s.step || 1);
       for (const q of L.paths) {
@@ -100,7 +105,7 @@ export function Layer3D({ s, d, now, w, h }) {
         let [X, Y] = proj(p[0], p[1], L.z); g.moveTo(ox + X * k, oy + Y * k);
         for (let i = 2; i < p.length; i += 2) { [X, Y] = proj(p[i], p[i + 1], L.z); g.lineTo(ox + X * k, oy + Y * k); }
         if (gone) { g.setLineDash([3, 3]); g.strokeStyle = muted; g.globalAlpha = 0.35; g.lineWidth = 1; }
-        else if (!done) { g.setLineDash([]); g.strokeStyle = muted; g.globalAlpha = 0.1; g.lineWidth = 1; }
+        else if (!done) { const rim = topOf[q.o ?? "_"] === L.n; g.setLineDash([]); g.strokeStyle = muted; g.globalAlpha = rim ? 0.45 : 0.1; g.lineWidth = rim ? 1.4 : 1; }
         else if (lightCol(col(q.t))) {
           // un filament clair (06/11/2026) : un contour gris dessous, sinon le blanc disparait sur le fond clair
           g.setLineDash([]); g.strokeStyle = "#64748b"; g.globalAlpha = 0.6; g.lineWidth = (top ? 2.2 : 1.1) + 1.3; g.stroke();
