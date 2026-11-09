@@ -66,7 +66,9 @@ export function useLayerMode() {
 // vue de trois quarts : on tourne autour au doigt ou a la souris (glisser)
 export function Layer3D({ s, d, now, w, h }) {
   const ref = useRef(null);
-  const [az, setAz] = useState(-0.75);
+  // (09/11/2026) de face et un peu plus haut, comme l'apercu du trancheur : tourne de 45°, l'impression ne ressemblait
+  // pas a ce qu'on voit ailleurs
+  const [az, setAz] = useState(0);
   const drag = useRef(null);
   useEffect(() => {
     const cv = ref.current;
@@ -77,7 +79,7 @@ export function Layer3D({ s, d, now, w, h }) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
     const [bx0, by0, bx1, by1] = s.box, cx = (bx0 + bx1) * 5, cy = (by0 + by1) * 5;     // dixiemes de mm
-    const ca = Math.cos(az), sa = Math.sin(az), el = 0.6, se = Math.sin(el), ce = Math.cos(el);
+    const ca = Math.cos(az), sa = Math.sin(az), el = 0.8, se = Math.sin(el), ce = Math.cos(el);
     const proj = (x, y, z) => { const dx = x - cx, dy = y - cy, rx = dx * ca - dy * sa, ry = dx * sa + dy * ca; return [rx, -ry * se - z * 10 * ce]; };
     // le plateau sous les objets (09/11/2026) : des contours seuls se lisaient comme vus de dessous ; un sol quadrille
     // en perspective dit qu'on regarde d'en haut. Un peu plus grand que les objets
