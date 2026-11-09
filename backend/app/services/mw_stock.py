@@ -87,20 +87,29 @@ def level(de):
     return "différent"
 
 
+# (09/11/2026) gardes en memoire : appelees des centaines de milliers de fois a chaque comparaison avec le stock
+# (2 x 327 ms au demarrage), toujours sur les memes quelques dizaines de noms de matiere
+@lru_cache(maxsize=4096)
 def _norm(t):
     return re.sub(r"[\s_]+", " ", str(t or "").upper()).strip()
 
 
+@lru_cache(maxsize=4096)
 def _flat(t):
     return re.sub(r"[^A-Z0-9+]", "", str(t or "").upper())
 
 
 def material_fit(mw_type, fil):
     """2 = meme matiere, 1 = meme famille (PLA-CF pour PLA…), 0 = autre."""
+    return _material_fit(mw_type, fil.material, fil.fila_type)
+
+
+@lru_cache(maxsize=8192)
+def _material_fit(mw_type, material, fila_type):
     t = re.sub(r"-AMS$", "", _norm(mw_type))          # TPU-AMS : du TPU pour l'AMS
     if not t:
         return 0
-    names = {_norm(fil.material), _norm(fil.fila_type)} - {""}
+    names = {_norm(material), _norm(fila_type)} - {""}
     # Un support ne se remplace que par un support, et inversement.
     if is_support(t) != any(is_support(n) for n in names):
         return 0
@@ -111,6 +120,7 @@ def material_fit(mw_type, fil):
     return 1 if fam and fam in fams else 0
 
 
+@lru_cache(maxsize=4096)
 def is_support(t: str) -> bool:
     t = _norm(t)
     return t.endswith("-S") or "SUPPORT" in t or t in ("PVA", "BVOH", "HIPS")
