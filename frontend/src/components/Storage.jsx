@@ -192,7 +192,7 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
 // qui en decoule (rien ne s'etire pour remplir la largeur)
 // les bobines d'un emplacement en vrac (09/11/2026) : sa disposition (en colonne, en ligne, en grille), d'office 6 par ligne
 const vracCols = (p, n) => Math.max(1, p.layout === "col" ? 1 : p.layout === "row" ? n : p.layout === "grid" ? (p.cols || 3) : (p.cols || Math.min(n, 6)));
-const CELL_W = e => e === "c" ? 46 : e === "s" ? 22 : e === "v" ? 40 : e ? 84 : 50;
+const CELL_W = e => e === "c" ? 40 : e === "s" ? 22 : e === "v" ? 40 : e ? 84 : 50;
 // minmax(0, …) (09/11/2026) : sur un telephone, les cases retrecissent plutot que de deborder ; jamais plus larges que w
 const tightTpl = (tpl, w, n) => tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, minmax(0, ${w}px))` : tpl.replace(/minmax\(0, 1fr\)/g, `minmax(0, ${w}px)`);
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
@@ -585,7 +585,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
         <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 48} thick={embed ? 12 : 24}/>
-          : edge === "c" ? <SpoolBox s={occ} h={embed ? 40 : 80}/> : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
+          : edge === "c" ? <SpoolBox s={occ} h={embed ? 36 : 58}/> : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
         {/* (09/11/2026) ni nom ni marque : serre, l'info est dans la fenetre au toucher (et au survol) */}
       </> : <span className="bn-num-free">{num}</span>}
     </button>;
@@ -610,7 +610,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       return <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: `repeat(${vracCols(p, list.length)}, minmax(0, ${CELL_W(e)}px))` }}>
         {list.map(x => <span key={x.id} className="bn-cell bn-tight" {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined}
           onClick={ev => menu(ev, p)} style={{ cursor: readOnly ? "default" : "pointer", animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
-          <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={48} thick={24}/> : e === "c" ? <SpoolBox s={x} h={80}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
+          <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={48} thick={24}/> : e === "c" ? <SpoolBox s={x} h={58}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
             : <span className="bn-pastille"><Swatch s={x} size={40}/></span>}</span></span>)}
       </div>; })() : <span style={{ ...small, fontSize: 10, textAlign: "center" }}>vide</span>}
   </div>;
@@ -1171,7 +1171,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
         <span className="bn-num">{num}</span>
         <span className="bn-band">
           {edge === "v" ? <SpoolEdge s={full || occ} vertical len={48} thick={24} dim={out}/>
-            : edge === "c" ? <SpoolBox s={full || occ} h={80}/> : edge === "s" ? <Swatch s={full || occ} size={18} dim={out}/> : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
+            : edge === "c" ? <SpoolBox s={full || occ} h={58}/> : edge === "s" ? <Swatch s={full || occ} size={18} dim={out}/> : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
             : <span className="bn-pastille"><Swatch s={full || occ} size={40} dim={out}/></span>}
         </span>
         {/* (09/11/2026) condense comme la fenetre du rangement : le nom au survol, la fiche au toucher */}
@@ -1198,7 +1198,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
   const Mini = ({ s, off = false, place = null }) => { const e = edgeOf(place || p0Of(s), by);
     return <button type="button" className={`bn-cell bn-tight${filtering && !off ? " bn-match" : ""}`} onClick={() => !off && onOpen(s)}
       {...idTip(s, (place || p0Of(s)).path)} style={off ? { opacity: 0.3, cursor: "default" } : undefined}>
-      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={48} thick={24}/> : e === "c" ? <SpoolBox s={s} h={80}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
+      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={48} thick={24}/> : e === "c" ? <SpoolBox s={s} h={58}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
         : <span className="bn-pastille"><Swatch s={s} size={40}/></span>}</span></button>; };
   const Common = ({ p, nested }) => {
     const here = storedHere(p);
@@ -1271,7 +1271,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{ordered.map(s => <button key={s.id} type="button" onClick={() => onOpen(s)} {...idTip(s, "en commande")}
         className={filtering ? "bn-match" : undefined} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: 2, border: "none",
           background: "none", cursor: "pointer", borderRadius: 10, color: "var(--text)" }}>
-        <SpoolBox s={s}/>
+        <SpoolBox s={s} h={62}/>
         {s.order_refill && <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--muted)", marginTop: -2 }}>recharge</span>}
         <span style={{ fontSize: 11.5, fontWeight: 800, maxWidth: 76, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(s)}</span>
       </button>)}</div></Section>}
