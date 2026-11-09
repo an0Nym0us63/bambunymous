@@ -161,7 +161,7 @@ export function SpoolEdge({ s, vertical = false, len = "100%", thick = 18, dim =
 // la vue des bobines (09/11/2026 : reglable par zone) : celle de la zone la plus proche qui en a une, sinon du rangement ;
 // « p » = pastille choisie expres (une zone en pastille dans un rangement sur la tranche)
 const edgeOf = (p, by) => { let q = p, seen = 0; while (q && seen++ < 20) { if (q.edge) return q.edge === "p" ? null : q.edge; q = q.parent_id != null ? by[q.parent_id] : null; } return null; };
-const EDGE_TXT = { h: "sur la tranche, à plat", v: "sur la tranche, debout", p: "pastille" };
+const EDGE_TXT = { h: "sur la tranche, à plat", v: "sur la tranche, debout", p: "pastille", s: "petites pastilles" };
 // les cases des rangements (08/11/2026) : le meme dessin dans la vue du stock et la fenetre d'un rangement ; le texte suit
 // la largeur de la case (le nom toujours, sur une ligne quand c'est etroit ; rien que la tranche dans une toute petite case)
 const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;
@@ -188,7 +188,9 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       @container (max-width:34px){.bn-ct-name{display:none}.bn-cell{padding:3px}.bn-num{font-size:8.5px}}`;
 // condense (09/11/2026) : la largeur fixe d'une case selon la vue de ses bobines (debout, couchee, pastille), et la grille
 // qui en decoule (rien ne s'etire pour remplir la largeur)
-const CELL_W = e => e === "v" ? 32 : e ? 84 : 40;
+// les bobines d'un emplacement en vrac (09/11/2026) : sa disposition (en colonne, en ligne, en grille), d'office 6 par ligne
+const vracCols = (p, n) => Math.max(1, p.layout === "col" ? 1 : p.layout === "row" ? n : p.layout === "grid" ? (p.cols || 3) : (p.cols || Math.min(n, 6)));
+const CELL_W = e => e === "s" ? 22 : e === "v" ? 32 : e ? 84 : 40;
 const tightTpl = (tpl, w, n) => tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, ${w}px)` : tpl.replace(/minmax\(0, 1fr\)/g, `${w}px`);
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
 const spanOf = p => p.span === -1 ? { gridColumn: "1 / -1" } : p.span > 1 ? { gridColumn: `span ${p.span}` } : {};
@@ -489,11 +491,11 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         onClick: () => fillCell(p) },
       p.leaf && { icon: p.single ? "📚" : "🔲", label: p.single ? "En faire un emplacement commun" : "En faire une case (une seule bobine)",
         hint: p.single ? "Autant de bobines qu'on veut" : "Réservée à une bobine tant qu'elle ne va pas ailleurs", onClick: () => patch(p, { single: !p.single }) },
-      !p.leaf && { icon: "🧵", label: "Vue des bobines",
+      (!p.leaf || !p.single) && { icon: "🧵", label: "Vue des bobines",
         hint: p.id === root.id ? EDGE_TXT[p.edge] || "pastille" : p.edge ? EDGE_TXT[p.edge] : `comme au-dessus (${EDGE_TXT[edgeOf(by[p.parent_id], by) || "p"]})`, onClick: () => openMenu(null, {
         title: `Les bobines de « ${p.name} »`, subtitle: p.id === root.id ? "comment les montrer dans ses cases (une zone peut avoir la sienne)" : "comment les montrer dans les cases de cette zone", color: "#8B5CF6",
         items: [...(p.id === root.id ? [] : [[null, "↩", `Comme au-dessus (${EDGE_TXT[edgeOf(by[p.parent_id], by) || "p"]})`]]),
-          [p.id === root.id ? null : "p", "🟣", "Pastille"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
+          [p.id === root.id ? null : "p", "🟣", "Pastille"], ["s", "•", "Petites pastilles (un carton de 30 bobines)"], ["h", "▬", "Sur la tranche, à plat (horizontale)"], ["v", "▮", "Sur la tranche, debout (verticale)"]].map(([k, ic, l]) =>
           ({ icon: (p.edge || null) === k ? "✓" : ic, label: l, onClick: () => patch(p, { edge: k }) })),
       }) },
       // du stock : le rangement entier, ou une zone, une caisse en vrac (07/11/2026 : seulement le rangement avant)
@@ -503,7 +505,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         onClick: () => patch(p, { stock: !p.stock }) },
       p.id !== root.id && { icon: "↑", label: "Avant", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: -1 }) },
       p.id !== root.id && { icon: "↓", label: "Après", onClick: () => write("post", `/storage/places/${p.id}/move`, { d: 1 }) },
-      !p.leaf && { icon: "▦", label: "Disposition", hint: layTxt(p), onClick: () => openMenu(null, {
+      (!p.leaf || !p.single) && { icon: "▦", label: "Disposition", hint: layTxt(p), onClick: () => openMenu(null, {
         title: `Disposition de « ${p.name} »`, subtitle: "son contenu : en colonne, en ligne, en grille", color: "#8B5CF6",
         items: [
           { icon: (p.layout || "auto") === "auto" && !p.cols ? "✓" : "✨", label: "Automatique", onClick: () => patch(p, { layout: "auto", cols: null }) },
@@ -535,7 +537,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
         <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 38} thick={embed ? 12 : 18}/>
-          : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
+          : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
         {/* (09/11/2026) ni nom ni marque : serre, l'info est dans la fenetre au toucher (et au survol) */}
       </> : <span className="bn-num-free">{num}</span>}
     </button>;
@@ -550,12 +552,19 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.name}</span>
       <span style={{ ...small, fontSize: 10 }}>{p.stock ? "📦 stock · " : ""}vrac · {p.spools.length}</span>
     </button>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
+    {/* (09/11/2026) ses bobines comme des cases condensees, a sa vue et a sa disposition ; en integre, des pastilles */}
+    {embed ? <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", minHeight: 24, alignItems: "center" }}>
       {p.spools.slice(0, 24).map(x => <span key={x.id} {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined} style={{ display: "inline-flex", borderRadius: "50%",
         animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}><Swatch s={x} size={fo(x.id) ? 22 : 16}/></span>)}
       {p.spools.length > 24 && <span style={{ ...small, fontSize: 10 }}>+{p.spools.length - 24}</span>}
       {!p.spools.length && <span style={{ ...small, fontSize: 10 }}>vide</span>}
-    </div>
+    </div> : p.spools.length ? (() => { const e = edgeOf(p, by), list = p.rev ? [...p.spools].reverse() : p.spools;
+      return <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: `repeat(${vracCols(p, list.length)}, ${CELL_W(e)}px)` }}>
+        {list.map(x => <span key={x.id} className="bn-cell bn-tight" {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined}
+          onClick={ev => menu(ev, p)} style={{ cursor: readOnly ? "default" : "pointer", animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
+          <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={38} thick={18}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
+            : <span className="bn-pastille"><Swatch s={x} size={40}/></span>}</span></span>)}
+      </div>; })() : <span style={{ ...small, fontSize: 10, textAlign: "center" }}>vide</span>}
   </div>;
   // (09/11/2026) condense : des cases a largeur fixe selon la vue (debout, couchee, pastille), les zones a leur largeur ;
   // rien ne s'etire pour remplir la fenetre. En integre (les echanges), la grille d'avant
@@ -1106,7 +1115,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
         <span className="bn-num">{num}</span>
         <span className="bn-band">
           {edge === "v" ? <SpoolEdge s={full || occ} vertical len={38} thick={18} dim={out}/>
-            : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
+            : edge === "s" ? <Swatch s={full || occ} size={18} dim={out}/> : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
             : <span className="bn-pastille"><Swatch s={full || occ} size={40} dim={out}/></span>}
         </span>
         {/* (09/11/2026) condense comme la fenetre du rangement : le nom au survol, la fiche au toucher */}
@@ -1131,7 +1140,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
   // une bobine en vrac, condensee (09/11/2026) comme une case : sa bobine seule, le nom au survol, la fiche au toucher
   const Mini = ({ s }) => { const e = edgeOf(p0Of(s), by);
     return <button type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s, p0Of(s).path)}>
-      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={38} thick={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
+      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={38} thick={18}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
         : <span className="bn-pastille"><Swatch s={s} size={40}/></span>}</span></button>; };
   const Common = ({ p, nested }) => {
     const here = storedHere(p);
@@ -1139,7 +1148,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
     return <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: nested ? 5 : 0, borderRadius: 10,
       border: nested ? "1px dashed color-mix(in srgb, #8B5CF6 40%, var(--border))" : "none", background: nested ? "color-mix(in srgb, #8B5CF6 3%, var(--surface2))" : "transparent" }}>
       {nested && <div style={{ fontSize: 11.5, fontWeight: 900, color: "var(--text2)", whiteSpace: "nowrap" }}>{p.name} <span style={small}>vrac · {here.length}</span></div>}
-      {here.length ? <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.min(here.length, 6)}, ${CELL_W(edgeOf(p, by))}px)` }}>{here.map(s => <Mini key={s.id} s={s}/>)}</div>
+      {here.length ? <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${vracCols(p, here.length)}, ${CELL_W(edgeOf(p, by))}px)` }}>{(p.rev ? [...here].reverse() : here).map(s => <Mini key={s.id} s={s}/>)}</div>
         : <div style={{ padding: 10, borderRadius: 12, border: "1.5px dashed var(--border)", textAlign: "center", ...small }}>vide</div>}
       {away.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", ...small }}>🖨 dans l'imprimante :
         {away.map(x => <span key={x.id} data-tip={`${x.name} · ${x.location}`} style={{ display: "inline-flex" }}><Swatch s={x} size={20} dim/></span>)}</div>}
