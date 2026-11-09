@@ -179,7 +179,9 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
       .bn-ct-sub{font-size:9px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       @container (max-width:84px){.bn-ct-sub{display:none}.bn-ct-name{font-size:10px;-webkit-line-clamp:1}}
       .bn-pastille{display:inline-flex}.bn-pastille svg{width:96cqw;height:auto}
-      .bn-tight{padding:2px;border-radius:8px;gap:0}.bn-tight .bn-num{position:absolute;top:1px;left:2px;margin:0;z-index:1;padding:0 3px;border-radius:5px;font-size:8.5px;line-height:12px;
+      .bn-tight{padding:2px;border-radius:8px;gap:0;background:transparent;border-color:transparent;box-shadow:none}
+      .bn-tight:not(.bn-free):hover{transform:translateY(-1px) scale(1.04);background:radial-gradient(closest-side,color-mix(in srgb,#8B5CF6 22%,transparent),transparent);box-shadow:none}
+      .bn-cell.bn-free.bn-tightf{border-width:1px;border-color:color-mix(in srgb,var(--border) 70%,transparent)}.bn-tight .bn-num{position:absolute;top:1px;left:2px;margin:0;z-index:1;padding:0 3px;border-radius:5px;font-size:8.5px;line-height:12px;
         background:color-mix(in srgb,var(--surface) 82%,transparent)}
       .bn-tight .bn-band{min-height:0}
       .bn-match{border:2px solid #F59E0B;box-shadow:0 0 0 2px color-mix(in srgb,#F59E0B 30%,transparent),0 0 14px -2px rgba(245,158,11,.75);animation:bnMatch 1.6s ease-in-out 2}
