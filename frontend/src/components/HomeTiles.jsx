@@ -3745,16 +3745,17 @@ function Podium({ p, a, o, sz }) {
       mini={sz.h === 0.5} summary={top}
       zoom={<PodiumZoom people={people} a={a} meI={meI}/>}>
       {({ W, H }) => {
-        // trop bas pour des marches (tuile d'une ligne) : les trois en rangee, avatar cercle de sa medaille, nom, score
-        if (o.style === "podium" && H < 96) { const av = Math.max(20, Math.min(30, H - 6));
+        // trop bas pour des marches (tuile d'une ligne) : en rangee, avatar cercle de sa medaille, nom, score ; quatre places
+        // comme la famille (09/11/2026) quand la largeur le permet
+        if (o.style === "podium" && H < 96) { const av = Math.max(20, Math.min(30, H - 6)), C4 = [...POD, "#8B5CF6"], HI4 = [...POD_HI, "#C4B5FD"];
           return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-evenly", gap: 6, minWidth: 0 }}>
-            {people.slice(0, 3).map((x, r) => <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-              <PodAvatar x={x} size={av} ring={POD[r]}/>
+            {people.slice(0, W < 300 ? 3 : 4).map((x, r) => <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <PodAvatar x={x} size={av} ring={C4[r]}/>
               <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r + 1}. {podName(x)}</span>
-                <span data-pk="" style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${POD[r]} 75%, #000000)`, POD_HI[r]) }}>{fmtN(x.score)}</span>
+                <span data-pk="" style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${C4[r]} 75%, #000000)`, HI4[r]) }}>{fmtN(x.score)}</span>
               </div></div>)}</div>; }
-        if (o.style === "podium") return <PodiumSteps people={people} H={H}/>;
+        if (o.style === "podium") return <PodiumSteps people={people} H={H} places={4}/>;
         if (o.scroll) return <Scroller gap={4}>{people.map((x, r) => row(x, r, 40))}</Scroller>;
         const n = Math.min(people.length, fitRows(H, 30, 4) || 1), h = Math.max(26, Math.min(48, Math.floor((H - 4 * (n - 1)) / n)));
         // le compte est toujours montre (s'il ne tient pas, la derniere ligne est la sienne)
@@ -3771,7 +3772,7 @@ function PodiumZoom({ people, a, meI }) {
   const tiers = (a?.tiers || []).filter(t => !String(t.id).startsWith("card_"));
   const me = people[meI];
   return <>
-    <div style={{ height: 300, display: "flex" }}><PodiumSteps people={people} H={300} big/></div>
+    <div style={{ height: 300, display: "flex" }}><PodiumSteps people={people} H={300} big places={4}/></div>
     <H2>Le classement</H2>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{people.map((x, r) => { const g = podGrade(x), pct = x.score_max ? Math.round(100 * x.score / x.score_max) : 0;
       const gap = me && !x.me ? (x.score || 0) - (me.score || 0) : null;
