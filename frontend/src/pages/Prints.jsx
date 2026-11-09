@@ -1735,6 +1735,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         </div>)}
     </div>);
   const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateSet.has(String(p.design_id));
+  // (09/11/2026) MakerWorld et les categories : sur ordinateur dans la colonne de gauche, sous les chiffres (elle restait
+  // vide) ; sur telephone, en bas de la fiche
+  const side = <>
+    {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]} rateElsewhere/>}
+    {!p.design_id && p.source_3mf && <OwnSourceCard designId={`p${p.id}`} prints={[p]}/>}
+  </>;
+  const labels = <ModelLabels printId={p.id ?? pProp.id} onPick={onClose}/>;
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* la galerie de la fiche (08/11/2026) : photos, 3D (vues et animations), technique */}
@@ -1758,9 +1765,6 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {/* les filaments ont deja leur titre repliable (et « Restituer ») */}
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
-      {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]} rateElsewhere/>}
-      {!p.design_id && p.source_3mf && <OwnSourceCard designId={`p${p.id}`} prints={[p]}/>}
-      <ModelLabels printId={p.id ?? pProp.id} onPick={onClose}/>
       {p.status_note && <div style={{ position: "relative", padding: "12px 14px 12px 18px", borderRadius: 16, overflow: "hidden",
         background: "linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border: "1px solid var(--border)" }}>
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderRadius: 4, background: "linear-gradient(#A855F7, #EC4899)" }}/>
@@ -1792,10 +1796,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
             </div>
             {wide ? (
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)", gap: 18, padding: 18 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}{side}{labels}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 34 }}>{sections}</div>
               </div>
-            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}</div></>}
+            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}{side}{labels}</div></>}
           </div>
           {/* les actions, toujours a portee du pouce */}
           {isAdmin && <div style={{ flexShrink: 0, display: "flex", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
@@ -2306,23 +2310,29 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {listOpen && (grid ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>{prints.map(card)}</div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{prints.map(row)}</div>)}
     </div>);
-  const sections = (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <MediaGallery kind="group" id={groupId} title={name || ""} refreshKey={prints.map(x => `${x.id}:${x.updated_at || ""}`).join(",")} onChanged={() => { loadPrints(); onUpdated?.(); }}/>
-      {printsBlock}
-      {/* (08/11/2026) les categories et etiquettes : une fois par modele du groupe (le classement se range par modele) */}
-      {(() => { const seen = new Set(), ms = [];
-        for (const x of prints) { const k = /^\d+$/.test(String(x.design_id || "").trim()) ? `mw:${String(x.design_id).trim()}` : "g"; if (!seen.has(k)) { seen.add(k); ms.push(x); } }
-        return ms.map(x => <div key={x.id}>
-          {ms.length > 1 && <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", margin: "0 0 4px 4px" }}>{x.translated_name || x.file_name}</div>}
-          <ModelLabels printId={x.id} onPick={onClose}/></div>); })()}
-      {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
+  // (09/11/2026) MakerWorld et les categories : sur ordinateur dans la colonne de gauche, sous les chiffres ; sur
+  // telephone, en bas de la fiche
+  const side = <>
       {cards.map(({ d, prof, list }) => <MakerWorldCard key={`${d}:${prof || ""}`} designId={d} profile={prof} rateElsewhere group prints={list}
         others={prints.filter(x => !list.includes(x))} onLinked={loadPrints}
         note={cards.length > 1 || list.length < prints.length
           ? `${list.length} print${list.length > 1 ? "s" : ""} sur ${prints.length} de ce ${cards.filter(c => c.d === d).length > 1 ? "profil" : "modèle"}` : null}/>)}
       {/* ses impressions sans modele MakerWorld, avec un 3MF d'origine importe (31/10/2026) */}
       {(own => own.length > 0 && <OwnSourceCard designId={`p${own[0].id}`} group prints={own}/>)(prints.filter(x => !String(x.design_id || "").trim() && x.source_3mf))}
+  </>;
+  const labels = <>
+      {/* (08/11/2026) les categories et etiquettes : une fois par modele du groupe (le classement se range par modele) */}
+      {(() => { const seen = new Set(), ms = [];
+        for (const x of prints) { const k = /^\d+$/.test(String(x.design_id || "").trim()) ? `mw:${String(x.design_id).trim()}` : "g"; if (!seen.has(k)) { seen.add(k); ms.push(x); } }
+        return ms.map(x => <div key={x.id}>
+          {ms.length > 1 && <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", margin: "0 0 4px 4px" }}>{x.translated_name || x.file_name}</div>}
+          <ModelLabels printId={x.id} onPick={onClose}/></div>); })()}
+  </>;
+  const sections = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <MediaGallery kind="group" id={groupId} title={name || ""} refreshKey={prints.map(x => `${x.id}:${x.updated_at || ""}`).join(",")} onChanged={() => { loadPrints(); onUpdated?.(); }}/>
+      {printsBlock}
+      {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
     </div>);
   return (
     <>
@@ -2343,10 +2353,10 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
             </div>
             {wide ? (
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)", gap: 18, padding: 18 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}{side}{labels}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 34 }}>{sections}</div>
               </div>
-            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}</div></>}
+            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}{side}{labels}</div></>}
           </div>
           {isAdmin && <div style={{ flexShrink: 0, display: "flex", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
             borderTop: "1px solid var(--border)", background: "color-mix(in srgb, var(--sheet-bg) 94%, transparent)", backdropFilter: "blur(8px)" }}>
