@@ -190,7 +190,7 @@ const CELL_CSS = `.bn-cell{position:relative;container-type:inline-size;display:
 // qui en decoule (rien ne s'etire pour remplir la largeur)
 // les bobines d'un emplacement en vrac (09/11/2026) : sa disposition (en colonne, en ligne, en grille), d'office 6 par ligne
 const vracCols = (p, n) => Math.max(1, p.layout === "col" ? 1 : p.layout === "row" ? n : p.layout === "grid" ? (p.cols || 3) : (p.cols || Math.min(n, 6)));
-const CELL_W = e => e === "s" ? 22 : e === "v" ? 32 : e ? 84 : 40;
+const CELL_W = e => e === "s" ? 22 : e === "v" ? 40 : e ? 84 : 50;
 const tightTpl = (tpl, w, n) => tpl.includes("auto-fill") ? `repeat(${Math.max(1, Math.min(n, 6))}, ${w}px)` : tpl.replace(/minmax\(0, 1fr\)/g, `${w}px`);
 // la largeur d'une zone parmi ses soeurs (08/11/2026) : span colonnes, -1 toute la largeur ; elargie, ses cases vont en grille
 const spanOf = p => p.span === -1 ? { gridColumn: "1 / -1" } : p.span > 1 ? { gridColumn: `span ${p.span}` } : {};
@@ -536,7 +536,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       {occ && marks?.[occ.id] != null && <span className={`bn-mark${String(marks[occ.id]).startsWith("↩") ? " home" : ""}`}>{marks[occ.id]}</span>}
       {occ ? <>
         <span className="bn-num">{num}{!p.single && p.spools.length > 1 ? ` · ${p.spools.length}` : ""}</span>
-        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 38} thick={embed ? 12 : 18}/>
+        <span className="bn-band">{edge === "v" ? <SpoolEdge s={occ} vertical len={embed ? 26 : 48} thick={embed ? 12 : 24}/>
           : edge === "s" ? <Swatch s={occ} size={18}/> : edge ? <SpoolEdge s={occ} len="100%" thick={embed ? 15 : EDGE_H}/> : <span className="bn-pastille"><Swatch s={occ} size={embed ? 16 : 40}/></span>}</span>
         {/* (09/11/2026) ni nom ni marque : serre, l'info est dans la fenetre au toucher (et au survol) */}
       </> : <span className="bn-num-free">{num}</span>}
@@ -562,7 +562,7 @@ function PlaceEditor({ id, onClose, readOnly = false, focus = null, focusPlace =
       return <div style={{ display: "grid", gap: 2, justifyContent: "center", gridTemplateColumns: `repeat(${vracCols(p, list.length)}, ${CELL_W(e)}px)` }}>
         {list.map(x => <span key={x.id} className="bn-cell bn-tight" {...idTip(x, p.path)} data-swap-src={marks?.[x.id] != null ? marks[x.id] : undefined}
           onClick={ev => menu(ev, p)} style={{ cursor: readOnly ? "default" : "pointer", animation: fo(x.id) ? "bnHit 1s ease-in-out .7s infinite" : undefined }}>
-          <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={38} thick={18}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
+          <span className="bn-band">{e === "v" ? <SpoolEdge s={x} vertical len={48} thick={24}/> : e === "s" ? <Swatch s={x} size={18}/> : e ? <SpoolEdge s={x} len="100%" thick={EDGE_H}/>
             : <span className="bn-pastille"><Swatch s={x} size={40}/></span>}</span></span>)}
       </div>; })() : <span style={{ ...small, fontSize: 10, textAlign: "center" }}>vide</span>}
   </div>;
@@ -1114,7 +1114,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
       {free ? <span className="bn-num-free">{num}</span> : <>
         <span className="bn-num">{num}</span>
         <span className="bn-band">
-          {edge === "v" ? <SpoolEdge s={full || occ} vertical len={38} thick={18} dim={out}/>
+          {edge === "v" ? <SpoolEdge s={full || occ} vertical len={48} thick={24} dim={out}/>
             : edge === "s" ? <Swatch s={full || occ} size={18} dim={out}/> : edge ? <SpoolEdge s={full || occ} len="100%" thick={EDGE_H} dim={out}/>
             : <span className="bn-pastille"><Swatch s={full || occ} size={40} dim={out}/></span>}
         </span>
@@ -1140,7 +1140,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
   // une bobine en vrac, condensee (09/11/2026) comme une case : sa bobine seule, le nom au survol, la fiche au toucher
   const Mini = ({ s }) => { const e = edgeOf(p0Of(s), by);
     return <button type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s, p0Of(s).path)}>
-      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={38} thick={18}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
+      <span className="bn-band">{e === "v" ? <SpoolEdge s={s} vertical len={48} thick={24}/> : e === "s" ? <Swatch s={s} size={18}/> : e ? <SpoolEdge s={s} len="100%" thick={EDGE_H}/>
         : <span className="bn-pastille"><Swatch s={s} size={40}/></span>}</span></button>; };
   const Common = ({ p, nested }) => {
     const here = storedHere(p);
@@ -1187,7 +1187,7 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
           <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.max(1, list.length)}, ${CELL_W("v")}px)` }}>
             {list.map(s => <button key={s.id} type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s)}>
               {slotTag(s) && <span className="bn-num">{slotTag(s)}</span>}
-              <span className="bn-band"><SpoolEdge s={s} vertical len={38} thick={18}/></span></button>)}
+              <span className="bn-band"><SpoolEdge s={s} vertical len={48} thick={24}/></span></button>)}
           </div></div>; })}
       </div>
     </Section>}
