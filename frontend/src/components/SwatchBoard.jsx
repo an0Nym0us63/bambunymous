@@ -445,7 +445,7 @@ function LabelSheet({ init = "", labels = SECTIONS, onPick, onClose }) {
   </FSheet>;
 }
 
-function BoardSettings({ board, types, onSave, onDelete, onClose }) {
+function BoardSettings({ board, types, onSave, onDelete, onClose, onPropose, onAdd }) {
   const [b, setB] = useState(board);
   const secs = b.sections?.length ? b.sections : defaultSections(types.map(x => x.t));
   const setSecs = v => setB(x => ({ ...x, sections: v }));
@@ -465,6 +465,16 @@ function BoardSettings({ board, types, onSave, onDelete, onClose }) {
       <button type="button" onClick={() => onSave(b)} style={{ flex: 1, height: 40, borderRadius: 12, border: "none", background: "#14B8A6", color: "#fff", fontWeight: 900, cursor: "pointer" }}>Enregistrer</button></>}>
     <div style={{ padding: "18px 16px 8px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ fontSize: 16, fontWeight: 900, color: "var(--text)" }}>⚙ La planche</div>
+      {/* (10/11/2026) les gestes rares, ranges ici plutot que sur la page : la proposition de rangement (avec les
+          reglages en cours, enregistres d'abord), une nouvelle planche */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => onPropose(b)} data-tip="Enregistre ces réglages, puis propose un rangement complet (par sous-type, trié par teinte) : rien ne change tant que tu ne le gardes pas"
+          style={{ height: 34, padding: "0 12px", borderRadius: 12, border: "1px solid color-mix(in srgb, #7C3AED 45%, var(--border))", background: "color-mix(in srgb, #7C3AED 10%, var(--surface2))", color: "#7C3AED", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>✨ Proposer une organisation</button>
+        <button type="button" onClick={onAdd} data-tip="Une autre planche (une autre SKÅDIS, un autre mur…)"
+          style={{ height: 34, padding: "0 12px", borderRadius: 12, border: "1px solid color-mix(in srgb, #14B8A6 45%, var(--border))", background: "color-mix(in srgb, #14B8A6 10%, var(--surface2))", color: "#0F766E", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>＋ Ajouter une planche</button>
+        <button type="button" onClick={onDelete} data-tip="Retirer cette planche (créée par erreur…) : ses échantillons repartent dans « à placer »"
+          style={{ height: 34, padding: "0 12px", borderRadius: 12, border: "1px solid #FCA5A5", background: "transparent", color: "#DC2626", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>🗑 Supprimer cette planche</button>
+      </div>
       <input value={b.name} onChange={e => set("name", e.target.value)} maxLength={40} placeholder="Nom"
         style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 11px", fontSize: 14, color: "var(--text)", outline: "none" }}/>
       <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>Le modèle</div>
@@ -560,6 +570,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   const placed = useMemo(() => { const m = new Map();
     for (const b of boards || []) for (const [k, c] of Object.entries(b.cells)) if (c.t === "s") m.set(c.fid, { b, k }); return m; }, [boards]);
   const board = (boards || []).find(b => b.id === cur) || boards?.[0];
+  const cur0 = board;
   const unplaced = filaments.filter(f => f.swatch && !placed.has(f.id));
   const waiting = filaments.filter(f => !f.swatch && dispo(f) && !ign.has(f.id) && !placed.has(f.id)).length;   // sans echantillon ni place fantome
 
@@ -650,7 +661,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   const types = useMemo(() => { const m = {}; filaments.forEach(f => { const t = typeOf(f); m[t] = (m[t] || 0) + 1; });
     return Object.entries(m).map(([t, n]) => ({ t, n })).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t)); }, [filaments]);
   const addBoard = () => { const nb = newBoard((boards?.length || 0) + 1); save([...(boards || []), nb]); setCur(nb.id); setCfg(nb); };
-  const auto = async () => {
+  const auto = async (board = cur0) => {
     const others = new Set([...placed.entries()].filter(([, p]) => p.b.id !== board.id).map(([fid]) => fid));
     // (10/11/2026) aussi les echantillons encore a faire : sans echantillon mais avec une bobine active, et pas ignores
     // dans les points d'attention ; leur place est gardee, en fantome
@@ -708,14 +719,13 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
         borderRadius: 16, cursor: "pointer", fontSize: 12.5, fontWeight: 800, border: `1px solid ${board?.id === b.id ? "#14B8A6" : "var(--border)"}`,
         background: board?.id === b.id ? "color-mix(in srgb, #14B8A6 14%, var(--surface2))" : "var(--surface2)", color: "var(--text)" }}>
         <span style={{ width: 12, height: 12, borderRadius: 3, background: b.color, border: "1px solid var(--border)" }}/>{b.name}</button>)}
-      {edit && pill("＋ Planche", addBoard, "Ajouter une planche (une autre SKÅDIS, un autre mur…)", "#14B8A6")}
+      {edit && !boards.length && pill("＋ Planche", addBoard, "Ajouter une planche (une autre SKÅDIS, un autre mur…)", "#14B8A6")}
     </div>
     {!board && <div style={{ padding: 18, borderRadius: 14, border: "1px dashed var(--border)", color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
       Pas encore de planche. {edit ? "« ＋ Planche » en crée une : choisis son modèle, ses lignes, ses cases et sa couleur, puis pose tes échantillons et tes intercalaires." : ""}</div>}
     {board && <>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {edit && pill("⚙ Réglages", () => setCfg(board), "Modèle, lignes, cases, rails et couleur")}
-        {edit && pill("✨ Ranger automatiquement", auto, "Par sous-type, trié par teinte, une marge au bout de chaque section", "#7C3AED")}
+        {edit && pill("⚙ Réglages", () => setCfg(board), "Modèle, lignes, cases, sections ; proposer une organisation, ajouter ou supprimer une planche")}
         {pill("🏷 Imprimer les intercalaires", printDividers, "Les étiquettes des intercalaires de cette planche, au format 20 × 10 mm")}
         <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
           {Object.values(board.cells).filter(c => c.t === "s").length} échantillons · {board.rows * board.cols - Object.keys(board.cells).length} cases libres</span>
@@ -753,7 +763,9 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
       onPick={f => { const p = pick; setPick(null); setCells(p.bid, cs => { cs[p.k] = { t: "s", fid: f.id }; return cs; }); }}/>}
     {lab && <LabelSheet init={lab.init} labels={[...sectionsOf(boards.find(b => b.id === lab.bid) || {}, filaments).map(s => s.label), "Indispo"]} onClose={() => setLab(null)}
       onPick={label => { const l = lab; setLab(null); setCells(l.bid, cs => { cs[l.k] = { t: "d", label }; return cs; }); }}/>}
-    {cfg && <BoardSettings board={cfg} types={types} onClose={() => setCfg(null)}
+    {cfg && <BoardSettings board={cfg} types={types} onClose={() => setCfg(null)} onAdd={() => { setCfg(null); addBoard(); }}
+      onPropose={async b => { setCfg(null); const cells = Object.fromEntries(Object.entries(b.cells).filter(([k]) => { const [r, c] = k.split(":").map(Number); return r < b.rows && c < b.cols; }));
+        const nb = { ...b, cells, rails: Math.min(b.rails, b.cols) }; await save(boards.map(x => x.id === b.id ? nb : x)); setCur(b.id); auto(nb); }}
       onSave={b => { setCfg(null); const cells = Object.fromEntries(Object.entries(b.cells).filter(([k]) => { const [r, c] = k.split(":").map(Number); return r < b.rows && c < b.cols; }));
         save(boards.map(x => x.id === b.id ? { ...b, cells, rails: Math.min(b.rails, b.cols) } : x)); }}
       onDelete={async () => { if (!(await showConfirm(`Supprimer « ${cfg.name} » ? Ses échantillons repartent dans « à placer ».`))) return;

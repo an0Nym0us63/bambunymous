@@ -31,7 +31,7 @@ const sinceTxt = s => new Date(String(s).endsWith("Z") ? s : `${s}Z`).toLocaleDa
 // profil et les filaments retenus (depuis la fiche du modele : « 📌 Retenir
 // pour la file »), les besoins additionnes par filament et ce qui est
 // imprimable tout de suite avec l'AMS ou avec le stock.
-const fmtDur = s => { if (!s) return "—"; const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+const fmtDur = s => { if (!s) return "—"; const t = Math.round(s / 60), h = Math.floor(t / 60), m = t % 60;   // 59,6 min : 1 h 00, pas « 0 h 60 »
   return h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`; };
 const g = v => `${Math.round(v || 0).toLocaleString("fr-FR")} g`;
 const STATUS = {
@@ -393,6 +393,19 @@ export default function MwQueue() {
                 style={{ fontSize:10, fontWeight:800, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>sur {all}</div>}
             </div>))}
         </div>
+        {/* (10/11/2026) l'avancement de la liste : fait / reste a faire, en heures d'impression (les grammes a defaut) */}
+        {(() => { const all = t.seconds || t.weight_g, left = t.seconds ? t.left_seconds : t.left_weight_g;
+          if (!all || left == null || left >= all - 0.5) return null;
+          const pc = Math.max(0, Math.min(100, Math.round((1 - left / all) * 100)));
+          return <div data-tip={t.seconds ? `Fait : ${fmtDur(all - left)} · reste : ${fmtDur(left)} sur ${fmtDur(all)}` : `Fait : ${g(all - left)} · reste : ${g(left)}`}
+            style={{ display:"flex", flexDirection:"column", gap:5, padding:"9px 12px", borderRadius:16, border:"1px solid color-mix(in srgb, #8B5CF6 22%, var(--border))", background:"var(--surface2)" }}>
+            <div style={{ display:"flex", alignItems:"baseline", gap:8, fontSize:12, fontWeight:800, color:"var(--text2)" }}>
+              <span style={{ fontWeight:900, color:"var(--text)" }}>Avancement</span>
+              <span style={{ ...grad("#8B5CF6", "#C084FC"), fontWeight:900 }}>{pc} % fait</span>
+              <span style={{ marginLeft:"auto", color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                reste {t.seconds ? fmtDur(left) : g(left)}</span></div>
+            <ProgressBar pc={pc}/>
+          </div>; })()}
 
         {/* pret a imprimer : la barre des etats, et ses pastilles qui filtrent la liste */}
         <div style={{ padding:"11px 12px", borderRadius:18, border:"1px solid color-mix(in srgb, #22C55E 22%, var(--border))", display:"flex", flexDirection:"column", gap:9,
@@ -616,6 +629,13 @@ export default function MwQueue() {
                         {r.cost != null && <span style={grad("#16A34A", "#4ADE80")} data-tip="Reste à imprimer / total">💶 {of(L.cost, r.cost, v => `${moneyVal(v, 2)} €`)}</span>}
                       </>; })()}
                   </span>
+                  {/* l'avancement du modele (10/11/2026), quand une partie est deja faite */}
+                  {(() => { const all = r.seconds || r.weight_g, left = r.seconds ? r.left?.seconds : r.left?.weight_g;
+                    if (!all || left == null || left >= all - 0.5) return null;
+                    const pc = Math.max(0, Math.min(100, Math.round((1 - left / all) * 100)));
+                    return <span data-tip={`${pc} % fait`} style={{ display:"flex", alignItems:"center", gap:6, marginTop:4, maxWidth:260 }}>
+                      <span style={{ flex:1 }}><ProgressBar pc={pc} h={5}/></span>
+                      <span style={{ fontSize:10, fontWeight:900, color:"#7C3AED" }}>{pc} %</span></span>; })()}
                   {/* au planning : de quand a quand, sa priorite ; toucher ouvre sa fiche du planning */}
                   {plan?.by?.[r.design_id] && (() => { const x = plan.by[r.design_id], pr = pd?.prio?.[r.design_id];
                     // les gestes rapides (06/11/2026) : la priorite et figer, sans ouvrir la fiche
@@ -815,6 +835,9 @@ const round = { width:36, height:36, borderRadius:12, border:"1px solid var(--bo
 const tag = { fontSize:10, fontWeight:800, padding:"1px 7px", borderRadius:20, lineHeight:1.5 };
 const mv = { width:28, height:28, borderRadius:9, border:"1px solid var(--border)", background:"var(--surface)",
   color:"var(--text)", fontSize:13, fontWeight:900, cursor:"pointer", padding:0, lineHeight:1 };
+// une barre d'avancement : fait en violet, le reste en creux
+const ProgressBar = ({ pc, h = 8 }) => <span style={{ display:"block", height:h, borderRadius:h, background:"color-mix(in srgb, #8B5CF6 14%, var(--surface))", overflow:"hidden" }}>
+  <span style={{ display:"block", width:`${pc}%`, height:"100%", borderRadius:h, background:"linear-gradient(90deg, #8B5CF6, #C084FC)" }}/></span>;
 const grad = (a, b) => ({ backgroundImage:`linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" });
 // une pastille d'etat qui filtre ; grisee quand un mode la rend sans effet
 const chip = (on, c, off) => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 11px", borderRadius:20, fontSize:12, fontWeight:700,
