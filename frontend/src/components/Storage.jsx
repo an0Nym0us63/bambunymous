@@ -1111,7 +1111,7 @@ export function ToStoreBanner({ onOpen }) {
 // spools : la liste filtree de l'onglet Stock ; renderSpool(s) : la carte de bobine de la page.
 // filtering (09/11/2026) : une recherche ou un filtre ecarte des bobines ; les sections qui ont des resultats s'ouvrent, ce qui
 // correspond s'allume, le reste s'estompe
-export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = false }) {
+export function StorageMap({ spools, all = null, onOpen, renderSpool, admin, filtering = false }) {
   const st = useStorage();
   const [fold, setFold] = useState(() => { try { return JSON.parse(localStorage.getItem("bn_storage_fold") || "{}"); } catch { return {}; } });
   const [fill, setFill] = useState(null);            // une case libre a remplir
@@ -1147,7 +1147,10 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
   if (!st) return null;
   const { kids, roots, by } = index(st);
   const TO = st.to_store_label || "À ranger";
-  const printer = spools.filter(s => !s.ordered && inPrinter(s.location));
+  // (10/11/2026) l'imprimante se comporte comme un rangement : toutes ses bobines restent, celles que le filtre ecarte estompees
+  const matchIds = new Set(spools.map(s => s.id));
+  const printer = (all || spools).filter(s => !s.ordered && !s.archived && inPrinter(s.location));
+  const printerHits = printer.filter(s => matchIds.has(s.id)).length;
   // les AMS, puis les HT, et le support externe toujours en dernier (07/11/2026)
   const unitRank = u => /^externe/i.test(u) ? 2 : /^HT-/i.test(u) ? 1 : 0;
   const units = [...new Set(printer.map(s => unitOf(s.location)))].sort((a, b) => unitRank(a) - unitRank(b) || a.localeCompare(b, "fr", { numeric: true }));
@@ -1267,15 +1270,17 @@ export function StorageMap({ spools, onOpen, renderSpool, admin, filtering = fal
     <style>{CELL_CSS}</style>
     <SpoolIdHost/>
     {/* (09/11/2026) condense comme les rangements : chaque unite a sa largeur, les bobines debout, serrees, le slot dans le coin */}
-    {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={printer.length} tone="#0EA5E9">
+    {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={filtering ? printerHits : printer.length} tone="#0EA5E9">
       {(() => { const Unit = ({ u }) => { const list = printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true }));
         return <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)", minWidth: 0,
           background: "color-mix(in srgb, #0EA5E9 4%, var(--surface2))" }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: "var(--text2)", textAlign: "center" }}>{u}</div>
           <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.max(1, list.length)}, minmax(0, ${CELL_W("v")}px))` }}>
-            {list.map(s => <button key={s.id} type="button" className={`bn-cell bn-tight${filtering ? " bn-match" : ""}`} onClick={() => onOpen(s)} {...idTip(s)}>
+            {list.map(s => { const off = !matchIds.has(s.id);
+              return <button key={s.id} type="button" className={`bn-cell bn-tight${filtering && !off ? " bn-match" : ""}`} onClick={() => !off && onOpen(s)} {...idTip(s)}
+              style={off ? { opacity: 0.3, cursor: "default" } : undefined}>
               {slotTag(s) && <span className="bn-num">{slotTag(s)}</span>}
-              <span className="bn-band"><SpoolEdge s={s} vertical len="min(48px, 140cqw)" thick="min(24px, 70cqw)"/></span></button>)}
+              <span className="bn-band"><SpoolEdge s={s} vertical len="min(48px, 140cqw)" thick="min(24px, 70cqw)"/></span></button>; })}
           </div></div>; };
         return <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", maxWidth: "100%", minWidth: 0 }}>
           {uCols.length > 0 && <div style={{ display: "grid", gap: 6, alignItems: "start", maxWidth: "100%", gridTemplateColumns: `repeat(${uCols.length}, minmax(0, max-content))` }}>
