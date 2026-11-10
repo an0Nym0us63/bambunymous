@@ -54,7 +54,7 @@ class _LogNoiseFilter(logging.Filter):
 
 # Un jeton dans une adresse (« ?_t=… », images et flux lus sans en-tete) ne s'ecrit jamais au journal (03/11/2026 : on
 # le lisait en clair dans le journal d'acces, et un journal se copie facilement)
-_TOKEN_IN_URL = re.compile(r"([?&]_t=)[^&\s\"']+")
+_TOKEN_IN_URL = re.compile(r"([?&]_t=|/mcp/k/)[^&/?\s\"']+")
 
 
 class _RedactTokenFilter(logging.Filter):
@@ -62,7 +62,7 @@ class _RedactTokenFilter(logging.Filter):
         try:
             if isinstance(record.args, tuple) and record.args:
                 record.args = tuple(_TOKEN_IN_URL.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args)
-            if isinstance(record.msg, str) and "_t=" in record.msg:
+            if isinstance(record.msg, str) and ("_t=" in record.msg or "/mcp/k/" in record.msg):
                 record.msg = _TOKEN_IN_URL.sub(r"\1***", record.msg)
         except Exception:
             pass
@@ -434,7 +434,8 @@ async def track_activity(request, call_next):
     response = await call_next(request)
 
     path = request.url.path
-    if not path.startswith("/api/"):
+    # le MCP (10/11/2026) tient son propre compte, et son adresse peut porter le jeton : rien dans l'activite
+    if not path.startswith("/api/") or path.startswith("/api/v1/mcp"):
         return response
     # La reponse part tout de suite : le suivi (lecture du compte, ecritures) se fait en fond (26/10/2026).
     # Avant, chaque requete attendait une lecture en base avant d'etre rendue, et une page en lance 10 a 20.

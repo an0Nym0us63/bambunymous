@@ -31,6 +31,7 @@ _ID = re.compile(r"/(\d+|[0-9a-f]{12,}|[0-9a-f-]{32,36})(?=/|$)", re.I)
 def route_key(method: str, path: str) -> str:
     p = path[len("/api/v1"):] if path.startswith("/api/v1") else path
     p = re.sub(r"^/friends/[^/]+/p/", "/friends/{copain}/", p)
+    p = re.sub(r"^/mcp/k/[^/]+", "/mcp/k/{jeton}", p)           # le jeton du MCP (10/11/2026) : jamais garde
     p = _ID.sub("/{n}", p)
     p = re.sub(r"/(file|photo|snapshot|upload|thumb|video|img)/[^/]+", r"/\1/{f}", p)
     return f"{method} {p}"

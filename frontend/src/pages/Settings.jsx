@@ -23,6 +23,7 @@ import TelegramSettings from "../components/TelegramSettings";
 import PublicLinksCard from "../components/PublicLinksCard";
 import MailOrdersSettings from "../components/MailOrdersSettings";
 import ClaudeSettings from "../components/ClaudeSettings";
+import McpSettings from "../components/McpSettings";
 import SwitchCard, { phoneWidth } from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
@@ -2382,6 +2383,8 @@ export default function Settings() {
       <AdminOnly><MailOrdersSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       {/* Claude (07/11/2026) : la cle de l'API, et les categories et etiquettes des impressions qu'il propose */}
       <AdminOnly><ClaudeSettings card={card} cardTitle={cardTitle}/></AdminOnly>
+      {/* le serveur MCP (10/11/2026) : Claude interroge l'appli et, si on le permet, agit dessus */}
+      <AdminOnly><McpSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       <FriendsCard/>
       </div>)}
 
