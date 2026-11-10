@@ -383,7 +383,10 @@ function SwatchTip({ f, where, tag, bid, k }) {
       <SampleArt f={f} fo={fillOf(f)} bid={bid} k={k}/></svg>
       : <span style={{ width: 46, height: 62, borderRadius: 8, flexShrink: 0, border: "1px solid rgba(255,255,255,.2)", ...swatchBg(f, 46) }}/>}
     <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-      <div style={{ fontSize: 13, fontWeight: 900, color: "#f8fafc", lineHeight: 1.25 }}>{fname(f)}</div>
+      <div style={{ fontSize: 13, fontWeight: 900, color: "#f8fafc", lineHeight: 1.25 }}>
+        {/* (10/11/2026) son numero BambuNymous, celui de l'etiquette QR de l'echantillon */}
+        <span data-tip="Le numéro de l'étiquette QR" style={{ display: "inline-block", marginRight: 6, padding: "0 6px", borderRadius: 6, fontSize: 11.5, fontWeight: 900,
+          background: "#f8fafc", color: "#0f172a", verticalAlign: 1 }}>{f.id}</span>{fname(f)}</div>
       <div style={{ fontSize: 11.5, fontWeight: 700, color: "#94a3b8" }}>{f.manufacturer} · {f.fila_type || f.material}</div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: "#e2e8f0" }}>📍 {where}</div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: dispo(f) ? "#86efac" : "#fca5a5" }}>
