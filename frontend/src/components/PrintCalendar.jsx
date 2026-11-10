@@ -122,9 +122,11 @@ const CACHES = {};
 const cacheOf = () => { const k = currentFriend()?.id || "me"; return (CACHES[k] = CACHES[k] || { pd: null, days: {} }); };
 // et d'une ouverture de l'appli a l'autre (06/11/2026) : le dernier planning garde dans ce navigateur, par compte et par
 // BambuNymous visite, s'affiche aussitot ; le frais le remplace en une seconde. Efface a la deconnexion (bn_tiles_snap*).
+const PD_FRESH_MS = 30 * 60000;
 const pdKey = () => { try { return `bn_tiles_snap_plan:${useAuth.getState().username || ""}:${currentFriend()?.id || "me"}`; } catch { return null; } };
 const pdStored = () => {
-  try { const o = JSON.parse(localStorage.getItem(pdKey()) || "null"); return o && Date.now() - (o.at || 0) < 3 * 86400000 && o.pd?.jobs ? o.pd : null; }
+  // (10/11/2026) seulement s'il est recent : un planning de plusieurs jours, montre le temps de la synchro, deroutait
+  try { const o = JSON.parse(localStorage.getItem(pdKey()) || "null"); return o && Date.now() - (o.at || 0) < PD_FRESH_MS && o.pd?.jobs ? o.pd : null; }
   catch { return null; }
 };
 let pdSaveT = null;
@@ -172,10 +174,10 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
   const [month, setMonth] = useState(() => { const d = dayParam.current ? new Date(`${dayParam.current}T12:00`) : new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [days, setDays] = useState(null);       // {date: {count, duration, items}}
   // le planning (05/11/2026) : « A faire » plateau par plateau, pose par le serveur selon les consignes
-  const [pd, setPd] = useState(() => cacheOf().pd || pdStored());
+  const [pd, setPd] = useState(() => (cacheOf().pd && Date.now() - (cacheOf().pdAt || 0) < PD_FRESH_MS ? cacheOf().pd : null) || pdStored());
   // le planning affiche d'abord le dernier etat connu (07/11/2026) : tant que le frais n'est pas arrive, une pastille le dit
   const [pdFresh, setPdFresh] = useState(false);
-  useEffect(() => { if (pd && pd.jobs) { cacheOf().pd = pd; pdStore(pd); } }, [pd]);
+  useEffect(() => { if (pd && pd.jobs) { cacheOf().pd = pd; cacheOf().pdAt = Date.now(); pdStore(pd); } }, [pd]);
   setFilColors(pd?.fcolors);
   // venu d'« À faire » (06/11/2026) : ?plan=… ouvre la fiche de ce modele du planning (?model= ouvre la fiche MakerWorld)
   const modelParam = useRef(new URLSearchParams(window.location.search).get("plan"));
