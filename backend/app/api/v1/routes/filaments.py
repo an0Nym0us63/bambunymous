@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
 import os
+import re
 
 from ....core.colors import buckets_for, all_buckets, apply_alpha
 from ....core.materials import family_of, is_family
@@ -556,6 +557,76 @@ async def custom_labels_pdf(body: dict = Body({}), _: str = Depends(get_current_
     import io as _io2
     return StreamingResponse(_io2.BytesIO(pdf), media_type="application/pdf",
                              headers={"Content-Disposition": 'attachment; filename="planche-etiquettes.pdf"'})
+
+
+# Les planches des echantillons (10/11/2026) : le rangement physique du nuancier, une ou plusieurs planches (SKADIS
+# ou autre), chacune en lignes de cases (des rails cote a cote) et de sa couleur. Une case tient un echantillon (un
+# filament) ou un intercalaire (son etiquette) ; un intercalaire prend une case. Un echantillon n'est qu'a un endroit,
+# toutes planches confondues. Tout tient dans un reglage :
+# {boards: [{id, name, model, color, rows, cols, rails, cells: {"ligne:case": {t: "s", fid} | {t: "d", label}}}]}
+BOARD_KEY = "SWATCH_BOARDS"
+
+
+def _boards_clean(body: dict) -> dict:
+    out, seen, ids = [], set(), set()
+    for i, b in enumerate((body.get("boards") or [])[:20]):
+        if not isinstance(b, dict):
+            continue
+        try:
+            rows = max(1, min(60, int(b.get("rows") or 0)))
+            cols = max(1, min(80, int(b.get("cols") or 0)))
+            rails = max(1, min(cols, int(b.get("rails") or 1)))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Lignes, cases et rails : des nombres")
+        bid = str(b.get("id") or f"p{i + 1}")[:20]
+        while bid in ids:
+            bid += "b"
+        ids.add(bid)
+        color = str(b.get("color") or "#1f1f1f")
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            color = "#1f1f1f"
+        cells = {}
+        for k, v in (b.get("cells") or {}).items():
+            try:
+                r, c = (int(x) for x in str(k).split(":"))
+            except ValueError:
+                continue
+            if not (0 <= r < rows and 0 <= c < cols) or not isinstance(v, dict):
+                continue
+            if v.get("t") == "d":
+                cells[f"{r}:{c}"] = {"t": "d", "label": str(v.get("label") or "")[:40]}
+            elif v.get("t") == "s":
+                try:
+                    fid = int(v.get("fid"))
+                except (TypeError, ValueError):
+                    continue
+                if fid in seen:
+                    continue
+                seen.add(fid)
+                cells[f"{r}:{c}"] = {"t": "s", "fid": fid}
+        out.append({"id": bid, "name": str(b.get("name") or f"Planche {i + 1}")[:40], "model": str(b.get("model") or "")[:30],
+                    "color": color, "rows": rows, "cols": cols, "rails": rails, "cells": cells})
+    return {"boards": out}
+
+
+@router.get("/boards")
+async def boards_get(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    import json as _json
+    from ....services.settings_service import get_setting
+    raw = await get_setting(db, BOARD_KEY, "")
+    try:
+        return _boards_clean(_json.loads(raw) if raw else {})
+    except ValueError:
+        return {"boards": []}
+
+
+@router.put("/boards")
+async def boards_put(body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    import json as _json
+    from ....services.settings_service import set_setting
+    b = _boards_clean(body)
+    await set_setting(db, BOARD_KEY, _json.dumps(b, separators=(",", ":")))
+    return b
 
 
 @router.get("/store-links")

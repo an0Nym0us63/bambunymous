@@ -33,6 +33,7 @@ import { Ghost, GhostBadge, HeroSpool, ORD_C, ORD_BG, tipStock, tipOrdered } fro
 import { fRound } from "../components/FicheKit";
 import { EmptyCard, FCard, FLAB, FROW, FRow, FSheet, FTile, FVAL, PageTabs, SearchRow, agoFr, dayFr, fBtn, fChip, fGrad, isLight, lighten, fOutline } from "../components/FicheKit";
 import GalleryCompare from "../components/GalleryCompare";
+import SwatchBoard from "../components/SwatchBoard";
 import { useLiveCurrent, useLiveSpool } from "../store/liveUsage";
 import { LiveHatch, LiveTo } from "../components/LiveUsage";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
@@ -3866,7 +3867,7 @@ export default function Filaments() {
           {/* Switch Photos / Nuancier + bouton Sélectionner */}
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             <div style={{ display:"flex", gap:3, padding:3, borderRadius:14, background:"var(--surface2)", border:"1px solid var(--border)" }}>
-              {[["photos","📷 Photos","#EC4899"],["swatch","🎨 Nuancier","#F59E0B"]].map(([id,label,c]) => (
+              {[["photos","📷 Photos","#EC4899"],["swatch","🎨 Nuancier","#F59E0B"],["board","🧷 Planches","#14B8A6"]].map(([id,label,c]) => (
                 <button key={id} onClick={()=>{ setGalleryMode(id); setGalSelectMode(false); setGalPreselect(null); }} style={{
                   padding:"6px 12px", borderRadius:11, fontSize:12, fontWeight:800, cursor:"pointer", border:"none", whiteSpace:"nowrap",
                   background: galleryMode===id ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
@@ -3893,6 +3894,8 @@ export default function Filaments() {
             </div>
           </div>
 
+          {/* (10/11/2026) les planches des echantillons : ou est rangee chaque plaquette */}
+          {galleryMode==="board" && <SwatchBoard filaments={allFilaments} visible={filaments} compareHue={compareHue}/>}
           {galleryMode==="photos" && (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
               {filaments.map(f => {
