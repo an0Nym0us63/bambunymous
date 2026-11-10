@@ -272,7 +272,57 @@ async def call_api(app, method: str, path: str, mode: str, query: dict | None = 
         if "html" in ct:
             txt = html_text(txt)
         return [_text(_SECRET_VAL.sub("•••", txt), max_chars)]
-    return [{"type": "text", "text": f"Fichier {ct or 'binaire'} de {len(r.content) // 1024} Ko : pas lisible ici (ouvre-le dans l'appli)."}]
+    return binary_content(r.content, ct, full, max_chars)
+
+
+# ── Les fichiers (10/11/2026) : 3MF lu de l'interieur, vue 3D decrite, documents rendus tels quels ──────────────────
+_ZIP_TEXT = (".config", ".json", ".xml", ".rels", ".txt", ".gcode.md5")
+BLOB_MAX = 8_000_000
+
+
+def binary_content(data: bytes, ct: str, path: str, max_chars: int = MAX_CHARS) -> list:
+    """Un fichier que l'API rend : un 3MF (une archive) est ouvert et ses reglages lus ; un modele 3D glTF est decrit
+    (maillages, boites) ; le reste (PDF, documents…) part tel quel, en ressource, s'il n'est pas trop lourd."""
+    import io
+    import struct
+    import zipfile
+    name = path.rsplit("/", 1)[-1]
+    kb = len(data) // 1024
+    if data[:4] == b"PK\x03\x04":
+        try:
+            z = zipfile.ZipFile(io.BytesIO(data))
+            infos = z.infolist()
+            parts = [f"Archive {name} ({kb} Ko), {len(infos)} fichiers :"]
+            parts += [f"  {i.filename}  {i.file_size // 1024} Ko" for i in infos[:300]]
+            for i in infos:
+                low = i.filename.lower()
+                if low.endswith(_ZIP_TEXT) and i.file_size <= 400_000:
+                    try:
+                        txt = z.read(i).decode("utf-8", "replace")
+                    except Exception:
+                        continue
+                    parts.append(f"\n=== {i.filename} ===\n{_SECRET_VAL.sub('•••', txt)}")
+            return [_text("\n".join(parts), max(max_chars, 120000))]
+        except zipfile.BadZipFile:
+            pass
+    if data[:4] == b"glTF" and len(data) > 20:
+        try:
+            ln, kind = struct.unpack("<II", data[12:20])
+            if kind == 0x4E4F534A:
+                g = json.loads(data[20:20 + ln])
+                desc = {"file": name, "ko": kb, "meshes": len(g.get("meshes") or []), "nodes": len(g.get("nodes") or []),
+                        "materials": [m.get("name") for m in g.get("materials") or []][:60],
+                        "boxes": [{"mesh": (g.get("meshes") or [{}])[0].get("name"), "min": a.get("min"), "max": a.get("max")}
+                                  for a in (g.get("accessors") or []) if a.get("type") == "VEC3" and a.get("min")][:60],
+                        "extras": g.get("extras") or g.get("asset", {}).get("extras")}
+                return [_text(json.dumps(desc, ensure_ascii=False, default=str), max_chars)]
+        except Exception:
+            pass
+    if len(data) <= BLOB_MAX:
+        return [{"type": "text", "text": f"Fichier {name} ({ct or 'binaire'}, {kb} Ko), joint tel quel."},
+                {"type": "resource", "resource": {"uri": "bambunymous://api" + path, "mimeType": ct or "application/octet-stream",
+                                                  "blob": base64.b64encode(data).decode("ascii")}}]
+    return [{"type": "text", "text": f"Fichier {name} ({ct or 'binaire'}, {kb} Ko) : trop lourd pour être joint (plus de {BLOB_MAX // 1_000_000} Mo)."}]
 
 
 def _text(s: str, max_chars: int) -> dict:
@@ -447,6 +497,45 @@ _T = [
      "POST", "/makerworld/plan/color-day", {"day": STR(DATE), "filament_id": INT("Le filament")}, ["day", "filament_id"], {"rw": True}),
     ("plan_chain", "D'une traite", "Un objet d'une traite : ses plateaux à la suite (plates), tout (all) ou rien (null).",
      "POST", "/makerworld/plan/chain", {"design_id": STR("Ligne du modèle"), "mode": STR("plates, all, ou vide")}, ["design_id"], {"rw": True}),
+    ("plates_fit", "Plateaux : tiennent-ils ensemble ?",
+     "Pour regrouper : la machine (surface, hauteur, dégagements sous la tige et le capot, rayon de la tête), le mode du profil lu dans son 3MF, "
+     "la taille mesurée de chaque plateau, et le verdict couche par couche (un seul filament) et objet par objet (couleurs différentes). "
+     "iid : le profil (champ iid d'un plateau de l'outil plan). Si des tailles manquent, ouvrir la vue 3D (api_get /makerworld/3d/{design_id}?fetch=1&profile={iid}).",
+     "GET", "/makerworld/plan/fit", {"design_id": STR("Le modèle"), "iid": STR("Le profil (iid)"), "plates": STR("Numéros des plateaux, ex. 1,2,3"),
+                                     "mixed": INT("1 couleurs différentes, 0 un seul filament, -1 les deux (d'office)")}, ["design_id"], {}),
+    ("model_3d", "Vue 3D et 3MF d'un modèle",
+     "Récupère et lit le 3MF d'un profil (fetch=1 le télécharge et le convertit au besoin) : ses plateaux, leur taille en mm, la source. "
+     "C'est ce qui mesure les plateaux pour plates_fit.",
+     "GET", "/makerworld/3d/{design_id}", {"design_id": STR("Le modèle"), "profile": STR("Le profil (iid)"), "fetch": INT("1 : récupérer le 3MF s'il manque")},
+     ["design_id"], {}),
+    # (10/11/2026) les fichiers : 3MF ouverts (leurs reglages et plateaux en texte), documents et vues 3D
+    ("model_3mf", "3MF d'origine d'un profil",
+     "Ouvre le 3MF MakerWorld d'un profil (iid) et en rend le contenu : la liste des fichiers et le texte des réglages "
+     "(project_settings, model_settings, plate_N.json, slice_info…). S'il manque, model_3d avec fetch=1 le récupère.",
+     "GET", "/makerworld/source3mf/file/{iid}", {"iid": STR("Le profil (iid)"), "max_chars": MAXC}, ["iid"], {}),
+    ("print_3mf", "3MF d'une impression", "Le 3MF d'une impression (celui envoyé à l'imprimante), ouvert : fichiers et réglages en texte.",
+     "GET", "/prints/{print_id}/3mf", {"print_id": INT("Numéro de l'impression"), "max_chars": MAXC}, ["print_id"], {}),
+    ("print_files", "Fichiers d'une impression", "Les fichiers joints à une impression (photos, 3MF, documents).",
+     "GET", "/prints/{print_id}/files", {"print_id": INT("Numéro de l'impression")}, ["print_id"], {}),
+    ("print_file", "Un fichier d'une impression", "Un fichier joint à une impression : image vue telle quelle, 3MF ouvert, document joint.",
+     "GET", "/prints/{print_id}/file/{filename}", {"print_id": INT("Numéro de l'impression"), "filename": STR("Le nom du fichier (print_files)"),
+                                                   "max_chars": MAXC}, ["print_id", "filename"], {}),
+    ("group_3mf", "3MF d'un groupe", "Le 3MF d'un groupe d'impressions, ouvert.", "GET", "/prints/groups/{group_id}/3mf",
+     {"group_id": INT("Le groupe"), "max_chars": MAXC}, ["group_id"], {}),
+    ("group_files", "Fichiers d'un groupe", "Les fichiers d'un groupe d'impressions.", "GET", "/prints/groups/{group_id}/files",
+     {"group_id": INT("Le groupe")}, ["group_id"], {}),
+    ("mw_doc", "Document d'un modèle", "Un document joint à un modèle MakerWorld (notice, nomenclature…) : rendu tel quel (PDF, image).",
+     "GET", "/makerworld/doc/{design_id}/{doc_id}", {"design_id": STR("Le modèle"), "doc_id": STR("Le document (fiche du modèle)")},
+     ["design_id", "doc_id"], {}),
+    ("model_3d_file", "Fichier de la vue 3D", "Un fichier de la vue 3D (glb : maillages, matières et boîtes de chaque pièce ; ou json : plateaux et assemblage).",
+     "GET", "/makerworld/3d/file/{key}/{name}", {"key": STR("La clé de la vue (url des plateaux de model_3d)"), "name": STR("Le fichier"), "max_chars": MAXC},
+     ["key", "name"], {}),
+    ("model_colors", "Couleurs de la vue 3D", "Les couleurs de chaque pièce dans la vue 3D d'un modèle (et ce qui a été choisi).",
+     "GET", "/makerworld/3d/{design_id}/colors", {"design_id": STR("Le modèle"), "profile": STR("Le profil (iid)")}, ["design_id"], {}),
+    ("model_profiles", "Profil de chaque impression", "Le profil (iid) retenu pour chaque impression d'un modèle (ids : numéros d'impressions séparés par des virgules).",
+     "GET", "/makerworld/model/{design_id}/print-profiles", {"design_id": STR("Le modèle"), "ids": STR("Numéros d'impressions, ex. 12,13")}, ["design_id"], {}),
+    ("source_info", "3MF importé d'une impression", "Ce que dit le 3MF importé à la main pour des impressions (titre, plateaux, profil).",
+     "GET", "/prints/source-info", {"ids": STR("Numéros d'impressions, ex. 12,13"), "group": INT("Ou un groupe")}, [], {}),
     # (10/11/2026) regrouper et ranger, comme a la main dans le planning
     ("plan_merge", "Regrouper des plateaux",
      "Regroupe des plateaux d'un même modèle en une seule impression (keys, 2 à 12), ou défait un regroupement (gid, l'id « m1 »… vu dans l'outil plan).",

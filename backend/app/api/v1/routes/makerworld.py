@@ -528,6 +528,65 @@ async def mw_plan_plates_bind(body: dict = Body({}), _: str = Depends(require_mw
     return await mw_plan_plates()
 
 
+@router.get("/source3mf/file/{iid}")
+async def mw_source3mf_file(iid: str, _: str = Depends(require_admin)):
+    """Le 3MF d'origine d'un profil MakerWorld deja recupere (10/11/2026, pour le MCP : le lire de l'interieur)."""
+    from fastapi.responses import FileResponse
+    from ....services.mw_source import path_of
+    if not str(iid).isalnum():
+        raise HTTPException(400, "Profil invalide")
+    p = path_of(str(iid))
+    if not p or not p.is_file():
+        raise HTTPException(404, "Ce 3MF n'est pas encore récupéré : ouvre la vue 3D du modèle (fetch=1).")
+    return FileResponse(p, media_type="model/3mf", filename=f"{iid}.3mf")
+
+
+@router.get("/plan/fit")
+async def mw_plan_fit(design_id: str, iid: str = "", plates: str = "", mixed: int = -1, _: str = Depends(get_current_user)):
+    """Ces plateaux d'un meme profil tiennent-ils ensemble ? (10/11/2026, pour le MCP et le regroupement) La machine
+    (surface, hauteur, degagements sous la tige et le capot, rayon de la tete), le profil lu dans son 3MF (mode
+    d'impression), la taille de chaque plateau (mesuree par la vue 3D), et le verdict couche par couche et objet par
+    objet. mixed : 1 des couleurs differentes (objet par objet), 0 un seul filament, -1 les deux verdicts."""
+    from ....services import plate_merge as PM
+    from ....services.makerworld import my_printer
+    from ....services.mw_source import known
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise HTTPException(400, "design_id invalide")
+    try:
+        PM.MY["model"] = await my_printer()
+    except Exception:
+        pass
+    iid = str(iid or "").strip() or known(did, "") or ""
+    if not iid:
+        raise HTTPException(404, "Aucun 3MF de ce modèle n'est encore récupéré : ouvre sa vue 3D (outil api_get /makerworld/3d/{design_id}?fetch=1).")
+    info = await asyncio.to_thread(PM.profile_info, did, iid)
+    if not info:
+        raise HTTPException(404, "Le 3MF de ce profil est introuvable ou illisible : ouvre sa vue 3D d'abord (fetch=1, profile=iid).")
+    try:
+        ns = [int(x) for x in str(plates or "").replace(";", ",").split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(400, "plates : des numéros de plateaux séparés par des virgules")
+    ns = ns or sorted(info["sizes"])
+    mc = PM.MACHINES.get(PM.MY["model"])
+    out = {"design_id": did, "iid": iid, "machine": {"model": PM.MY["model"] or None, "known": bool(mc)},
+           "bed_mm": [info["W"], info["H"]], "profile_sequence": info["seq"],
+           "clearance": {"rod_h_mm": info["rod_h"], "lid_h_mm": info["lid_h"], "max_h_mm": info.get("max_h"),
+                         "rod_dist_mm": info["rod_d"], "head_radius_mm": info.get("head_r")},
+           "rules": {"layer_gap_mm": PM.GAP_LAYER, "edge_mm": 5,
+                     "object_mode": "tous sauf le plus haut sous la tige (rod_h), le plus haut sous max_h, la tête (head_radius) entre deux objets",
+                     "layer_mode": "un seul et même filament partout ; 5 mm entre plateaux"},
+           "sizes_mm": {str(n): info["sizes"].get(n) for n in ns},
+           "missing": [n for n in ns if info["sizes"].get(n) is None]}
+    if out["missing"]:
+        out["hint"] = "Tailles inconnues : ouvre la vue 3D de ce profil (api_get /makerworld/3d/{design_id}?fetch=1&profile={iid}), elle mesure chaque plateau."
+    for k, by_obj in (("layer", False), ("object", True)):
+        if mixed == -1 or mixed == int(by_obj):
+            conf, mode = PM.fits(info, ns, by_obj) if not out["missing"] else (None, None)
+            out[k] = {"fits": bool(conf), "confidence": conf, "mode": mode or ("objet par objet" if by_obj else "couche par couche")}
+    return out
+
+
 @router.post("/plan/merge")
 async def mw_plan_merge(body: dict = Body({}), _: str = Depends(require_mw)):
     """Regrouper des plateaux d'un meme modele ({keys}) ou defaire un regroupement ({gid})."""
