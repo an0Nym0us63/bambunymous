@@ -87,14 +87,14 @@ function pack(board, groups) {
 // sur la tranche, pose dans le rail et qui depasse un poil dessous, l'intercalaire avec son etiquette comme les vrais.
 // Tout en millimetres dans un seul SVG qui prend la largeur ; l'echantillon et son ombrage sont dessines une fois
 // (<defs>) puis repris par <use> : la couleur seule change d'une case a l'autre.
-// (10/11/2026, revu) aux proportions de la vraie planche, en cases : les trous d'une meme rangee a 3,5 cases, les
-// rangees de trous en quinconce a mi-pas, un rail par rangee de trous, l'echantillon deux cases de haut. Le support
-// comme le vrai : un embout a gauche, une jonction entre deux rails, un embout a droite, poses sur des colonnes de trous
-// (ils s'y accrochent) ; rien d'autre ne touche la planche, les trous restent visibles entre les rails. Pas de trou
-// colle au bord : les premiers et les derniers sont a un bon demi-pas du chant.
-const PITCH = 20, JOIN = 20, ROW = 70, HOLE = 70, HW = 9, HH = 26, EDGE = 75, HMARGIN = 40;
-const SW = 18, SH = 38, BAR = 6, OVER = 5;                  // l'echantillon (tranche) ; le rail ; ce qui depasse dessous
-const MT = 75;
+// (10/11/2026, revu deux fois, mesure sur la photo de la vraie planche) en cases : les rails vont presque d'un chant a
+// l'autre (embout gauche, jonction, embout droit, seules pieces accrochees), un rail tous les 3,5 cases ; les trous ont
+// leur propre grille, independante des rails : 3,5 cases entre deux trous d'une rangee, rangees en quinconce tous les
+// 1,4 case, trous d'environ 0,5 x 1,75 case, les premiers a 2 cases du chant ; l'echantillon 2,2 cases de haut
+const PITCH = 20, JOIN = 20, ROW = 70, EDGE = 26;
+const HX = 70, HY = 28, HW = 10.5, HH = 35, HMX = 38, HMY = 30;     // les trous : pas, quinconce, taille, marges au chant
+const SW = 19, SH = 44, BAR = 6, OVER = 5;                  // l'echantillon (tranche) ; le rail ; ce qui depasse dessous
+const MT = 80;
 // l'echantillon : un prisme hexagonal torsade, couche sur la tranche. A chaque abscisse, l'hexagone a tourne : ses
 // sommets montent et descendent, ce qui fait le bord ondule en haut et en bas, et ses faces passent de l'ombre a la
 // lumiere en diagonale (le vrille de la piece)
@@ -166,19 +166,18 @@ const cellX = (c, rails) => { const rl = rails.find(r => c < r.start + r.n) || r
 
 function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
   const rails = railsOf(board.cols, board.rails);
-  const W = 2 * EDGE + board.cols * PITCH + board.rails * JOIN, yLast = MT + (board.rows - 1) * ROW + BAR / 2;
-  const H = yLast + HOLE / 2 + HMARGIN + 4;
+  const W = 2 * EDGE + board.cols * PITCH + board.rails * JOIN, yLast = MT + (board.rows - 1) * ROW;
+  const H = yLast + BAR + OVER + 50;
   const dark = isDark(board.color);
-  // les trous : une colonne au milieu de la planche, les rangees du rail au milieu de sa barre, l'autre rangee en
-  // quinconce a mi-pas ; seulement ceux qui tombent a HMARGIN du bord au moins
+  // les trous : une colonne au milieu de la planche, des rangees en quinconce centrees en hauteur, rien pres du chant
   const holes = [];
-  for (let j = -Math.ceil(MT / (HOLE / 2)); MT + BAR / 2 + j * HOLE / 2 <= H; j++) {
-    const y = MT + BAR / 2 + j * HOLE / 2;
-    if (y < HMARGIN || y > H - HMARGIN) continue;
-    for (let m = -Math.ceil(W / HOLE) * 2; m <= Math.ceil(W / HOLE) * 2; m++) {
+  const ny = Math.floor((H - 2 * HMY) / HY), y0 = (H - ny * HY) / 2;
+  for (let j = 0; j <= ny; j++) {
+    const y = y0 + j * HY;
+    for (let m = -Math.ceil(W / HX) * 2; m <= Math.ceil(W / HX) * 2; m++) {
       if ((m + j) % 2) continue;
-      const x = W / 2 + m * HOLE / 2;
-      if (x >= HMARGIN && x <= W - HMARGIN) holes.push([x, y]);
+      const x = W / 2 + m * HX / 2;
+      if (x >= HMX && x <= W - HMX) holes.push([x, y]);
     }
   }
   // les pieces du support d'une rangee : embout gauche, jonctions, embout droit
