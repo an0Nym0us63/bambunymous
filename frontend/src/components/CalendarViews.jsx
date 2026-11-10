@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
-import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, finBorder, finBg, dayInfo, DayMarks } from "./PlanDay";
+import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, toneColor, toneStyle, dayInfo, DayMarks } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
@@ -44,7 +44,7 @@ export function dayEvents(day, days, jobs, live = null) {
     if (j.end.slice(0, 10) < day || j.start.slice(0, 10) > day) continue;
     const a = minOf(j.start, day), b = minOf(j.end, day);
     if (b <= a) continue;
-    out.push({ kind: "plan", key: j.key + day, a, b, j, color: j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E" });
+    out.push({ kind: "plan", key: j.key + day, a, b, j, color: toneColor(j) });
   }
   return out.sort((x, y) => x.a - y.a);
 }
@@ -185,12 +185,9 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               data-tip={`${plan ? jobName(e.j) : title} · ${String(Math.floor(e.a / 60)).padStart(2, "0")}:${String(e.a % 60).padStart(2, "0")}`}
               style={{ position: "absolute", left: 4, right: 3, top, height: h, zIndex: 1, overflow: "hidden", cursor: "pointer", textAlign: "left", font: "inherit",
                 display: "flex", alignItems: big ? "flex-start" : "center", gap: 6, padding: big ? "4px 6px" : "0 6px", borderRadius: 8, boxSizing: "border-box",
-                // la fin d'un objet (06/11/2026 : trop discrete) : bord vert franc et fond plus vert ; le 🏁 du titre suffit
-                border: plan ? (e.j.completes ? finBorder(e.j) : `${e.j.locked ? 2 : 1.5}px ${e.j.locked ? "solid" : "dashed"} ${e.color}`) : "none",
-                boxShadow: plan && isFinal(e.j) ? "0 0 0 2px color-mix(in srgb, #10B981 25%, transparent)" : "none",
-                background: plan ? (e.j.completes ? finBg(e.j)
-                  : `color-mix(in srgb, ${e.color} 14%, var(--surface))`)
-                  : `linear-gradient(135deg, color-mix(in srgb, ${e.color} 80%, #000 0%), color-mix(in srgb, ${e.color} 55%, transparent))`,
+                // la charte des plateaux prevus (10/11/2026) : une couleur par sens, la fin d'un objet ressort
+                ...(plan ? toneStyle(e.j) : { border: "none", boxShadow: "none",
+                  background: `linear-gradient(135deg, color-mix(in srgb, ${e.color} 80%, #000 0%), color-mix(in srgb, ${e.color} 55%, transparent))` }),
                 color: plan ? "var(--text)" : "#fff" }}>
               {big && <Thumb e={e} size={Math.min(one ? 44 : 28, h - 8)}/>}
               <span style={{ minWidth: 0, flex: 1 }}>
@@ -205,6 +202,10 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               </span>
               {plan && e.j.low_info?.length > 0 && <span data-tip={`📉 ${e.j.low_info.map(x => `${x.name} sous le seuil (il en restera ${x.left} g)`).join(" · ")}`}
                 style={{ position: "absolute", top: 2, right: 2, padding: "0 4px", borderRadius: 6, background: "#FEE2E2", border: "1px solid #FCA5A5", fontSize: 10, lineHeight: "14px" }}>📉</span>}
+              {/* (10/11/2026) la fin d'un objet se lit d'un coup d'oeil : une etiquette dans le coin */}
+              {plan && e.j.completes && h >= 26 && <span style={{ position: "absolute", bottom: 3, right: 4, padding: "0 6px", borderRadius: 7, fontSize: 9.5, fontWeight: 900,
+                lineHeight: "15px", color: "#fff", background: toneColor(e.j), whiteSpace: "nowrap", boxShadow: "0 1px 4px rgba(0,0,0,.18)" }}>
+                {isFinal(e.j) ? "🏆 objet fini" : `🏁 ex. ${e.j.completes}/${e.j.qty}`}</span>}
             </button>;
           })}
           {over?.d === d && <span style={{ position: "absolute", left: 0, right: 0, top: over.m / 60 * hourPx, height: 0, borderTop: "2px dashed #6366F1", zIndex: 4, pointerEvents: "none" }}>
@@ -242,9 +243,8 @@ export function WeekAgenda({ dates, days, jobs, settings, now, live, pick, onPic
           const plan = e.kind === "plan";
           return <button key={e.key} type="button" onClick={() => plan ? onOpenJob(e.j) : onOpenPrint(e.it)}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: 5, borderRadius: 11, cursor: "pointer", textAlign: "left", font: "inherit",
-              border: plan ? (e.j.completes ? finBorder(e.j) : `1.5px dashed ${e.color}`) : "1px solid var(--border)",
-              background: plan ? (e.j.completes ? finBg(e.j, "var(--surface2)") : `color-mix(in srgb, ${e.color} 7%, var(--surface2))`) : "var(--surface2)" }}>
-            <span style={{ width: 44, flexShrink: 0, fontSize: 12, fontWeight: 900, color: plan ? "#16A34A" : e.color, textAlign: "center" }}>
+              ...(plan ? toneStyle(e.j, "var(--surface2)") : { border: "1px solid var(--border)", background: "var(--surface2)" }) }}>
+            <span style={{ width: 44, flexShrink: 0, fontSize: 12, fontWeight: 900, color: e.color, textAlign: "center" }}>
               {String(Math.floor(e.a / 60)).padStart(2, "0")}:{String(e.a % 60).padStart(2, "0")}</span>
             <Thumb e={e} size={34}/>
             <span style={{ flex: 1, minWidth: 0 }}>

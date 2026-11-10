@@ -31,6 +31,27 @@ export const finBg = (j, base = "var(--surface)") => isFinal(j)
   : `color-mix(in srgb, #10B981 10%, ${base})`;
 // le plateau qui termine un objet : vert profond, plein (05/11/2026 : en dore, il faisait penser a un avertissement)
 const GOLD = "#059669";
+// la charte des plateaux prevus (10/11/2026) : une couleur par sens, et l'ordinaire en bleu discret (tout etait vert : la
+// fin d'un objet ne se voyait plus). Un liseré a gauche de la couleur, le fond teinte ; la fin d'un objet, pleine et cernee.
+export const TONES = {
+  final: { c: "#059669", t: "Termine l'objet (tous ses exemplaires)", ic: "🏆" },
+  copy: { c: "#0D9488", t: "Termine un exemplaire", ic: "🏁" },
+  locked: { c: "#6366F1", t: "Figé, jour et heure", ic: "🔒" },
+  merged: { c: "#D97706", t: "Plateaux regroupés en une impression", ic: "🧩" },
+  plain: { c: "#0EA5E9", t: "Plateau prévu, libre (bord en pointillés)", ic: "┆" },
+  unret: { c: "#94A3B8", t: "Modèle pas retenu dans « À faire »", ic: "○" },
+  long: { c: "#EF4444", t: "Trop long pour la plage où il est posé", ic: "⚠" },
+};
+export const toneOf = j => j.too_long ? "long" : isFinal(j) ? "final" : j.completes ? "copy" : j.locked ? "locked" : unretained(j) ? "unret" : j.merged ? "merged" : "plain";
+export const toneColor = j => TONES[toneOf(j)].c;
+export const toneStyle = (j, base = "var(--surface)") => {
+  const k = toneOf(j), c = TONES[k].c, soft = k === "plain" || k === "unret";
+  return { border: `${k === "final" ? 2.5 : soft ? 1.5 : 2}px ${soft ? "dashed" : "solid"} ${soft ? `color-mix(in srgb, ${c} 60%, var(--border))` : c}`,
+    borderLeft: `5px solid ${c}`,
+    background: k === "final" ? `linear-gradient(135deg, color-mix(in srgb, ${c} 32%, ${base}), color-mix(in srgb, ${c} 14%, ${base}))`
+      : `color-mix(in srgb, ${c} ${soft ? 7 : 13}%, ${base})`,
+    boxShadow: k === "final" ? `0 0 0 2px color-mix(in srgb, ${c} 28%, transparent), 0 4px 12px -4px color-mix(in srgb, ${c} 55%, transparent)` : "none" };
+};
 const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? +m[1] * 60 + +m[2] : null; };
 
 // une plage d'heures sur la frise : [debut, fin] en minutes du jour, coupee a minuit
@@ -193,10 +214,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
     onDrop={e => { const k = e.dataTransfer.getData("text/bn-job"); setOver(false); if (k && k !== j.key) { e.preventDefault(); e.stopPropagation(); onDropBefore?.(k, j.key); } }}
     onClick={compact ? onOpen : undefined}
     style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 13, cursor: compact ? "pointer" : edit ? "grab" : "default", opacity: dragging === j.key ? 0.45 : 1,
-      border: `${j.locked || isFinal(j) ? 2 : 1.5}px ${j.completes || j.locked ? "solid" : "dashed"} ${j.too_long ? "#EF4444" : j.locked ? "#4F46E5" : unretained(j) ? UNRET : j.completes ? (isFinal(j) ? GOLD : "#10B981") : "color-mix(in srgb, #22C55E 50%, var(--border))"}`,
-      boxShadow: over ? "0 -3px 0 0 #6366F1" : "none",
-      background: j.completes ? `linear-gradient(120deg, color-mix(in srgb, ${GOLD} ${isFinal(j) ? 22 : 9}%, transparent), transparent 60%), var(--surface2)`
-        : unretained(j) ? "var(--surface2)" : "color-mix(in srgb, #22C55E 5%, var(--surface2))" }}>
+      ...toneStyle(j, "var(--surface2)"), ...(over ? { boxShadow: "0 -3px 0 0 #6366F1" } : {}) }}>
     <div style={{ display: "flex", gap: 9, minWidth: 0 }}>
       <PlateThumb j={j} onClick={onOpen}/>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -290,6 +308,14 @@ export const LEGEND = [
 ];
 export function Legend() {
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    {/* (10/11/2026) les couleurs des plateaux prevus, comme sur le calendrier */}
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#6366F1", marginBottom: 5 }}>Les couleurs</div>
+      {Object.entries(TONES).map(([k, v]) => <div key={k} style={{ display: "flex", gap: 9, alignItems: "center", padding: "3px 0" }}>
+        <span style={{ width: 34, height: 16, borderRadius: 5, flexShrink: 0, boxSizing: "border-box", ...toneStyle({ too_long: k === "long", completes: k === "final" || k === "copy" ? 1 : 0,
+          qty: k === "copy" ? 2 : 1, locked: k === "locked", retained: k === "unret" ? false : true, merged: k === "merged" ? ["a"] : null }), boxShadow: "none" }}/>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}>{v.ic} {v.t}</span></div>)}
+    </div>
     {LEGEND.map(([t, rows]) => <div key={t}>
       <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#6366F1", marginBottom: 5 }}>{t}</div>
       {rows.map(([ic, txt]) => <div key={ic + txt} style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "3px 0" }}>
