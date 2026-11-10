@@ -4098,6 +4098,8 @@ function Spool({ status, o, sz }) {
   if (live && t.empty) {
     const gName = gone ? (gone.name || gone.type || "Bobine") : null, gCol = gone ? hexCss(gone.fil_color || gone.color) : "#f59e0b";
     const body = big => <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: big ? "14px 16px" : "10px 12px", borderRadius: 14,
+      // (10/11/2026) dans la tuile, avec sa marge : le pointille deborde plus du bord arrondi
+      boxSizing: "border-box", minWidth: 0, minHeight: 0, maxWidth: "100%", margin: 2, overflow: "hidden",
       border: "2px dashed #f59e0b", background: "repeating-linear-gradient(-45deg, rgba(245,158,11,0.10) 0 3px, transparent 3px 9px)" }}>
       <span style={{ fontSize: big ? 17 : 15, fontWeight: 900, color: "var(--text)" }}>{slotOf(t)} · vide dans l'AMS</span>
       {gone && <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 800, color: "var(--text2)", minWidth: 0 }}>
