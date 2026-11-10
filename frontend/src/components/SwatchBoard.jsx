@@ -445,7 +445,7 @@ function LabelSheet({ init = "", labels = SECTIONS, onPick, onClose }) {
   </FSheet>;
 }
 
-function BoardSettings({ board, types, onSave, onDelete, onClose, onPropose, onAdd }) {
+function BoardSettings({ board, types, onSave, onDelete, onClose, onPropose, onAdd, onPrint }) {
   const [b, setB] = useState(board);
   const secs = b.sections?.length ? b.sections : defaultSections(types.map(x => x.t));
   const setSecs = v => setB(x => ({ ...x, sections: v }));
@@ -472,6 +472,8 @@ function BoardSettings({ board, types, onSave, onDelete, onClose, onPropose, onA
           style={{ height: 34, padding: "0 12px", borderRadius: 12, border: "1px solid color-mix(in srgb, #7C3AED 45%, var(--border))", background: "color-mix(in srgb, #7C3AED 10%, var(--surface2))", color: "#7C3AED", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>✨ Proposer une organisation</button>
         <button type="button" onClick={onAdd} data-tip="Une autre planche (une autre SKÅDIS, un autre mur…)"
           style={{ height: 34, padding: "0 12px", borderRadius: 12, border: "1px solid color-mix(in srgb, #14B8A6 45%, var(--border))", background: "color-mix(in srgb, #14B8A6 10%, var(--surface2))", color: "#0F766E", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>＋ Ajouter une planche</button>
+        <button type="button" onClick={onPrint} data-tip="Les étiquettes des intercalaires de cette planche, au format 20 × 10 mm (selon ce qui est enregistré)"
+          style={{ height: 34, padding: "0 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>🏷 Imprimer les intercalaires</button>
         <button type="button" onClick={onDelete} data-tip="Retirer cette planche (créée par erreur…) : ses échantillons repartent dans « à placer »"
           style={{ height: 34, padding: "0 12px", borderRadius: 12, border: "1px solid #FCA5A5", background: "transparent", color: "#DC2626", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>🗑 Supprimer cette planche</button>
       </div>
@@ -720,16 +722,17 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
         background: board?.id === b.id ? "color-mix(in srgb, #14B8A6 14%, var(--surface2))" : "var(--surface2)", color: "var(--text)" }}>
         <span style={{ width: 12, height: 12, borderRadius: 3, background: b.color, border: "1px solid var(--border)" }}/>{b.name}</button>)}
       {edit && !boards.length && pill("＋ Planche", addBoard, "Ajouter une planche (une autre SKÅDIS, un autre mur…)", "#14B8A6")}
+      {/* (11/11/2026) discrets, au bout de la ligne des planches : les reglages (ou, sans le droit de modifier, les intercalaires seuls) */}
+      {board && <button type="button" disabled={busy} onClick={edit ? () => setCfg(board) : printDividers}
+        aria-label={edit ? "Réglages de la planche" : "Imprimer les intercalaires"}
+        data-tip={edit ? "Réglages : modèle, lignes, cases, sections ; proposer une organisation, imprimer les intercalaires, ajouter ou supprimer une planche" : "Imprimer les intercalaires (20 × 10 mm)"}
+        style={{ marginLeft: "auto", width: 32, height: 32, borderRadius: 16, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", fontSize: 15, cursor: "pointer", flexShrink: 0 }}>{edit ? "⚙" : "🏷"}</button>}
     </div>
     {!board && <div style={{ padding: 18, borderRadius: 14, border: "1px dashed var(--border)", color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
       Pas encore de planche. {edit ? "« ＋ Planche » en crée une : choisis son modèle, ses lignes, ses cases et sa couleur, puis pose tes échantillons et tes intercalaires." : ""}</div>}
     {board && <>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {edit && pill("⚙ Réglages", () => setCfg(board), "Modèle, lignes, cases, sections ; proposer une organisation, ajouter ou supprimer une planche")}
-        {pill("🏷 Imprimer les intercalaires", printDividers, "Les étiquettes des intercalaires de cette planche, au format 20 × 10 mm")}
-        <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-          {Object.values(board.cells).filter(c => c.t === "s").length} échantillons · {board.rows * board.cols - Object.keys(board.cells).length} cases libres</span>
-      </div>
+      <div style={{ textAlign: "right", fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginTop: -4 }}>
+        {Object.values(board.cells).filter(c => c.t === "s").length} échantillons · {board.rows * board.cols - Object.keys(board.cells).length} cases libres</div>
       {hold && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 12, background: "color-mix(in srgb, #F59E0B 14%, var(--surface2))",
         border: "1px solid color-mix(in srgb, #F59E0B 45%, var(--border))", fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>
         {hold.block ? <>⇉ Touche la case où poser le début du bloc ({hold.block.length} cases, il faut autant de cases libres à la suite)</>
@@ -763,7 +766,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
       onPick={f => { const p = pick; setPick(null); setCells(p.bid, cs => { cs[p.k] = { t: "s", fid: f.id }; return cs; }); }}/>}
     {lab && <LabelSheet init={lab.init} labels={[...sectionsOf(boards.find(b => b.id === lab.bid) || {}, filaments).map(s => s.label), "Indispo"]} onClose={() => setLab(null)}
       onPick={label => { const l = lab; setLab(null); setCells(l.bid, cs => { cs[l.k] = { t: "d", label }; return cs; }); }}/>}
-    {cfg && <BoardSettings board={cfg} types={types} onClose={() => setCfg(null)} onAdd={() => { setCfg(null); addBoard(); }}
+    {cfg && <BoardSettings board={cfg} types={types} onClose={() => setCfg(null)} onAdd={() => { setCfg(null); addBoard(); }} onPrint={printDividers}
       onPropose={async b => { setCfg(null); const cells = Object.fromEntries(Object.entries(b.cells).filter(([k]) => { const [r, c] = k.split(":").map(Number); return r < b.rows && c < b.cols; }));
         const nb = { ...b, cells, rails: Math.min(b.rails, b.cols) }; await save(boards.map(x => x.id === b.id ? nb : x)); setCur(b.id); auto(nb); }}
       onSave={b => { setCfg(null); const cells = Object.fromEntries(Object.entries(b.cells).filter(([k]) => { const [r, c] = k.split(":").map(Number); return r < b.rows && c < b.cols; }));
