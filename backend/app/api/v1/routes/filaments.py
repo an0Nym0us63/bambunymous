@@ -620,7 +620,11 @@ def _boards_clean(body: dict) -> dict:
                 gap = max(0, min(10, int(s.get("gap") or 0)))
             except (TypeError, ValueError):
                 gap = 0
-            sections.append({"label": str(s.get("label") or "Section")[:40], "types": types, "gap": gap})
+            # « avec » : un sous-type range dans le bloc d'un autre ; « brand » : chaque bloc coupe par marque
+            w = {str(k)[:60]: str(v)[:60] for k, v in (s.get("with") or {}).items() if str(k) in types and str(v) in types and k != v} \
+                if isinstance(s.get("with"), dict) else {}
+            sections.append({"label": str(s.get("label") or "Section")[:40], "types": types, "gap": gap,
+                             **({"with": w} if w else {}), **({"brand": True} if s.get("brand") is True else {})})
         out.append({"id": bid, "name": str(b.get("name") or f"Planche {i + 1}")[:40], "model": str(b.get("model") or "")[:30],
                     "color": color, "rows": rows, "cols": cols, "rails": rails, "cells": cells,
                     "margin": margin, "marginPct": margin_pct, "fill": b.get("fill") is True,
