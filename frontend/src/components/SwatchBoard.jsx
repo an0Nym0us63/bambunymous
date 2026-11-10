@@ -50,9 +50,10 @@ const newBoard = (n, m = BOARD_MODELS[0]) => ({ id: `p${Date.now().toString(36)}
 // echantillons par teinte, puis sa marge (au moins 2 cases, 20 %, plus une case par filament qui attend son
 // echantillon) ; ce qui reste de la planche s'ajoute aux marges, a proportion, pour qu'aucune case ne reste a part.
 // Une section qui passe a la ligne suivante y reprend avec son intercalaire ; jamais un intercalaire seul en bout de ligne.
-// (10/11/2026) la marge se regle par planche : au moins « margin » cases, « marginPct » %, et « spread » (d'office)
-// repartit ce qui reste de la planche dans les marges ; sans, le reste est laisse a la fin
-const marginOf = b => ({ min: b.margin ?? 2, pct: b.marginPct ?? 20, spread: b.spread !== false });
+// (10/11/2026) la marge se regle par planche : au moins « margin » cases, « marginPct » %, et « fill » (non d'office :
+// elle creusait de grands trous) repartit ce qui reste de la planche dans les marges ; sans, le reste est a la fin.
+// Un seul intercalaire par section : une section qui passe a la ligne suivante y continue sans le repeter.
+const marginOf = b => ({ min: b.margin ?? 2, pct: b.marginPct ?? 20, spread: b.fill === true });
 function pack(board, groups) {
   const W = board.cols, cap = board.rows * board.cols;
   const lay = extra => {
@@ -63,7 +64,6 @@ function pack(board, groups) {
       if (W - (pos % W) === 1) pos++;                       // pas d'intercalaire seul en bout de ligne
       cells[key(Math.floor(pos / W), pos % W)] = { t: "d", label: g.label }; pos++;
       for (let i = 0; i < seq.length; i++) {
-        if (pos % W === 0 && i > 0 && seq.slice(i).some(Boolean)) { cells[key(Math.floor(pos / W), 0)] = { t: "d", label: g.label }; pos++; }
         if (seq[i]) cells[key(Math.floor(pos / W), pos % W)] = seq[i];
         pos++;
       }
@@ -449,7 +449,7 @@ function BoardSettings({ board, onSave, onDelete, onClose }) {
       <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>Le rangement automatique</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{num("margin", 0, 20)}{num("marginPct", 0, 100)}</div>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 700, color: "var(--text2)", cursor: "pointer" }}>
-        <input type="checkbox" checked={marginOf(b).spread} onChange={e => set("spread", e.target.checked)}/>
+        <input type="checkbox" checked={marginOf(b).spread} onChange={e => set("fill", e.target.checked)}/>
         Répartir les cases en trop dans les marges (sinon, elles restent libres à la fin de la planche)</label>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
         Après chaque section, la plus grande des deux marges, plus une case par filament qui attend encore son échantillon.</div>

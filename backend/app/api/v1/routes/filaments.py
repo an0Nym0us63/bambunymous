@@ -612,7 +612,7 @@ def _boards_clean(body: dict) -> dict:
             margin, margin_pct = 2, 20
         out.append({"id": bid, "name": str(b.get("name") or f"Planche {i + 1}")[:40], "model": str(b.get("model") or "")[:30],
                     "color": color, "rows": rows, "cols": cols, "rails": rails, "cells": cells,
-                    "margin": margin, "marginPct": margin_pct, "spread": b.get("spread") is not False})
+                    "margin": margin, "marginPct": margin_pct, "fill": b.get("fill") is True})
     return {"boards": out}
 
 
