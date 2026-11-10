@@ -327,8 +327,11 @@ export default function MwQueue() {
     ["stock", "Stock OK", "#F59E0B", "#FBBF24"], ["short", "Manque", "#EF4444", "#F87171"]];
   const segTotal = SEG.reduce((s, [k]) => s + (t[k] ?? 0), 0);
   const locked = sorting || cutting || choosing;   // filtres sans effet pendant ces modes
-  const kpis = [["📋 Modèles", t.models, "#3B82F6", "#60A5FA"], ["⏱ Temps", fmtDur(t.seconds), "#8B5CF6", "#C084FC"],
-    ["⚖ Filament", g(t.weight_g), "#F59E0B", "#FBBF24"], ["💶 Coût", t.cost ? `${moneyVal(t.cost, 2)} €` : "—", "#16A34A", "#4ADE80"]];
+  // (10/11/2026) ce qui reste a imprimer (les plateaux pas encore faits), et le total en dessous
+  const eur = v => v ? `${moneyVal(v, 2)} €` : "—";
+  const lt = (left, all, f) => left != null && Math.abs(left - all) > 0.5 ? [f(left), f(all)] : [f(all), null];
+  const kpis = [["📋 Modèles", [t.models, null], "#3B82F6", "#60A5FA"], ["⏱ Temps", lt(t.left_seconds, t.seconds, fmtDur), "#8B5CF6", "#C084FC"],
+    ["⚖ Filament", lt(t.left_weight_g, t.weight_g, g), "#F59E0B", "#FBBF24"], ["💶 Coût", lt(t.left_cost, t.cost, eur), "#16A34A", "#4ADE80"]];
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom: cutting || cutRow || choosing || picked ? 92 : 16 }}>
@@ -381,11 +384,13 @@ export default function MwQueue() {
       ) : (<>
         {/* les chiffres de la liste (ou de son debut / des modeles choisis) */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6 }}>
-          {kpis.map(([label, val, c1, c2]) => (
+          {kpis.map(([label, [val, all], c1, c2]) => (
             <div key={label} style={{ minWidth:0, padding:"7px 8px", borderRadius:14, border:`1px solid color-mix(in srgb, ${c1} 22%, var(--border))`,
               background:`radial-gradient(90% 70% at 100% 0%, ${c1}22, transparent 70%), var(--surface2)`, boxShadow:`0 6px 18px -12px ${c1}` }}>
               <div style={{ fontSize:9.5, fontWeight:800, letterSpacing:".05em", textTransform:"uppercase", color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden" }}>{label}</div>
               <div style={{ fontSize:"clamp(13px, 3.9vw, 16px)", fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", ...grad(c1, c2) }}>{val}</div>
+              {all && <div data-tip="Reste à imprimer (plateaux pas encore faits) / total de la liste"
+                style={{ fontSize:10, fontWeight:800, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>sur {all}</div>}
             </div>))}
         </div>
 
@@ -602,9 +607,14 @@ export default function MwQueue() {
                   <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}</span>
                   <span style={{ display:"flex", gap:8, marginTop:2, fontSize:11.5, fontWeight:800, flexWrap:"wrap" }}>
-                    <span style={grad("#8B5CF6", "#C084FC")}>⏱ {fmtDur(r.seconds)}</span>
-                    <span style={grad("#F59E0B", "#FBBF24")}>⚖ {g(r.weight_g)}</span>
-                    {r.cost != null && <span style={grad("#16A34A", "#4ADE80")}>💶 {moneyVal(r.cost, 2)} €</span>}
+                    {/* (10/11/2026) le reste a imprimer, puis le total quand des plateaux sont deja faits */}
+                    {(() => { const L = r.left || {}, of = (left, all, f) => left != null && all != null && Math.abs(left - all) > 0.5
+                      ? <>{f(left)}<span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", WebkitTextFillColor:"var(--muted)", backgroundImage:"none" }}> / {f(all)}</span></> : f(all);
+                      return <>
+                        <span style={grad("#8B5CF6", "#C084FC")} data-tip="Reste à imprimer / total">⏱ {of(L.seconds, r.seconds, fmtDur)}</span>
+                        <span style={grad("#F59E0B", "#FBBF24")} data-tip="Reste à imprimer / total">⚖ {of(L.weight_g, r.weight_g, g)}</span>
+                        {r.cost != null && <span style={grad("#16A34A", "#4ADE80")} data-tip="Reste à imprimer / total">💶 {of(L.cost, r.cost, v => `${moneyVal(v, 2)} €`)}</span>}
+                      </>; })()}
                   </span>
                   {/* au planning : de quand a quand, sa priorite ; toucher ouvre sa fiche du planning */}
                   {plan?.by?.[r.design_id] && (() => { const x = plan.by[r.design_id], pr = pd?.prio?.[r.design_id];

@@ -902,6 +902,10 @@ def _aggregate(models: list, stock_of: dict) -> dict:
         "totals": {"models": len(models), "seconds": sum(r["seconds"] or 0 for r in models),
                    "weight_g": round(sum(r["weight_g"] for r in models), 1),
                    "cost": round(sum(r["_cost"] for r in models), 2),
+                   # ce qui reste a imprimer (10/11/2026)
+                   "left_seconds": sum((r.get("left") or {}).get("seconds") or 0 for r in models),
+                   "left_weight_g": round(sum((r.get("left") or {}).get("weight_g") or 0 for r in models), 1),
+                   "left_cost": round(sum(r.get("_left_cost", r["_cost"]) for r in models), 2),
                    "ams": sum(1 for r in models if r["status"] == "ams"),
                    "partial": sum(1 for r in models if r["status"] == "partial"),
                    "stock": sum(1 for r in models if r["status"] == "stock"),
@@ -1261,4 +1265,17 @@ async def _compute(fresh: bool = False) -> dict:
                 c += pg * f["g"]
         r["cost"] = round(c, 2) if known and r["filaments"] else None
         r["_cost"] = c
+        # (10/11/2026) ce qui reste a imprimer : les exemplaires de chaque plateau pas encore faits (dans la serie en
+        # cours), en part du temps (par les heures des plateaux) et du poids et du cout (par leurs grammes)
+        pls, q = r.get("plates") or [], r.get("qty") or 1
+        fs = fw = 1.0
+        if pls:
+            rem = {p["index"]: max(0, q - (p.get("printed") or 0)) for p in pls}
+            ts = sum((p.get("seconds") or 0) * q for p in pls)
+            tw = sum((p.get("weight_g") or 0) * q for p in pls)
+            fw = sum((p.get("weight_g") or 0) * rem[p["index"]] for p in pls) / tw if tw else sum(rem.values()) / (len(pls) * q)
+            fs = sum((p.get("seconds") or 0) * rem[p["index"]] for p in pls) / ts if ts else fw
+        r["left"] = {"seconds": round((r["seconds"] or 0) * fs) if r["seconds"] else None,
+                     "weight_g": round(r["weight_g"] * fw, 1), "cost": round(c * fw, 2) if r["cost"] is not None else None}
+        r["_left_cost"] = c * fw
     return {"collections": [{"id": c, "title": colls[c]} for c in chosen], "models": models, "stock_of": stock_of}
