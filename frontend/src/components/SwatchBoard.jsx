@@ -663,7 +663,11 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
       let parts = sec && (sec.gap > 0 || sec.brand) ? blocksOf(sec).map(bl => items.filter(f => bl.includes(typeOf(f)))) : [items];
       if (sec?.brand) parts = parts.flatMap(p => { const by = {}; p.forEach(f => { (by[f.manufacturer || "?"] ||= []).push(f); });
         return Object.keys(by).sort((a, b) => a.localeCompare(b)).map(m => by[m]); });
-      parts = parts.map(p => p.sort(hue)).filter(p => p.length);
+      // (10/11/2026) les multicolores (degrades, bi- et tricolores) : une sous-famille de leur bloc, apres les unis
+      // (avec l'ecart de la section s'il y en a un), chacune par teinte
+      const multi = f => !!f.multicolor_type && f.multicolor_type !== "monochrome";
+      parts = parts.flatMap(p => { const u = p.filter(f => !multi(f)).sort(hue), m = p.filter(multi).sort(hue);
+        return sec?.gap > 0 ? [u, m] : [[...u, ...m]]; }).filter(p => p.length);
       const mg = marginOf(board);
       return { label, items: parts.flat(), parts, gap: sec?.gap || 0, margin: Math.max(mg.min, Math.ceil(items.length * mg.pct / 100)) };
     }).filter(g => g.items.length);
