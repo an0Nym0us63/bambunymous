@@ -2125,9 +2125,9 @@ async def prints_kpis_daily(
     async with AsyncSessionLocal() as db:
         # une impression peut avoir commence avant la periode et tourner dedans : 4 jours de marge
         rows = (await db.execute(select(Print.print_date, Print.duration_seconds, Print.total_weight_g, Print.total_cost, Print.status,
-                                        Print.id, Print.file_name, Print.estimated_seconds, Print.translated_name)
+                                        Print.id, Print.file_name, Print.estimated_seconds, Print.translated_name, Print.design_id)
                                  .where(Print.print_date >= lo - timedelta(days=4), Print.print_date < hi))).all()
-    for start, dur, w, c, status, pid, fname, est, tname in rows:
+    for start, dur, w, c, status, pid, fname, est, tname, did in rows:
         if not start:
             continue
         if getattr(start, "tzinfo", None) is not None:
@@ -2151,7 +2151,8 @@ async def prints_kpis_daily(
                 days[k]["duration"] += (nxt - t).total_seconds()
                 if detail:
                     days[k]["items"].append({"id": pid, "name": fname, "title": tname or fname, "start": local.isoformat(timespec="minutes"),
-                                             "seconds": int((nxt - t).total_seconds()), "status": status})
+                                             "seconds": int((nxt - t).total_seconds()), "status": status,
+                                             **({"design_id": str(did).strip()} if did and str(did).strip() else {})})
             t = nxt
     return [{"date": k, "count": v["count"], "duration": int(v["duration"]), "weight_g": round(v["weight_g"], 1),
              "cost": round(v["cost"], 2), **({"items": sorted(v["items"], key=lambda x: x["start"])} if detail else {})}

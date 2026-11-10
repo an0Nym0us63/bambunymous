@@ -4,7 +4,7 @@ import MwImg, { thumbSrc } from "./MwImg";
 import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, toneColor, toneStyle, toneBadge, dayInfo, DayMarks } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 import { tipCard } from "./TipHost";
-import { PlanTipCard } from "./PlanDay";
+import { PlanTipCard, ObjectRest } from "./PlanDay";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
 // les plateaux prevus sont poses a leur vraie heure ; les heures de fonctionnement en fond, les heures de lancement
@@ -55,7 +55,8 @@ export function dayEvents(day, days, jobs, live = null) {
 export function PrintTipCard({ it, live = null }) {
   const [c, l] = ST[it.status] || ST.SUCCESS;
   const run = it.status === "IN_PROGRESS";
-  return <div style={{ display: "flex", gap: 10, alignItems: "flex-start", width: 260, maxWidth: "100%" }}>
+  return <div style={{ display: "flex", flexDirection: "column", gap: 8, width: 270, maxWidth: "100%" }}>
+  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
     <img src={apiThumb(apiUrl(`/prints/${it.id}/image`), 132)} alt="" style={{ width: 66, height: 66, borderRadius: 10, objectFit: "cover", background: "#fff", flexShrink: 0 }}
       onError={x => { x.currentTarget.style.visibility = "hidden"; }}/>
     <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -64,6 +65,8 @@ export function PrintTipCard({ it, live = null }) {
       <div style={{ fontSize: 11.5, fontWeight: 600, color: "#e2e8f0" }}>🕒 {it.start ? `${dayName(it.start.slice(0, 10))} · ${it.start.slice(11, 16)}` : ""}{it.seconds ? ` · ${hm(it.seconds)}` : ""}</div>
       {run && live?.end && <div style={{ fontSize: 11.5, fontWeight: 700, color: "#93c5fd" }}>⏳ fin vers {hhmm(live.end)}</div>}
     </div>
+  </div>
+  <ObjectRest designId={it.design_id} dark/>
   </div>;
 }
 

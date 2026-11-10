@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor, UsedFils } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor, UsedFils, ObjectRest } from "./PlanDay";
 import Lightbox from "./Lightbox";
 import { useStackZ } from "../utils/zstack";
 import { useSwipeClose } from "../utils/swipeClose";
@@ -127,6 +127,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
         {j.why && j.why.map((r, i) => <span key={i} style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ {r}</span>)}
       </div>
     </div>
+    <div style={{ marginBottom: 10 }}><ObjectRest designId={j.design_id} iid={j.iid} exclude={j.key} jobs={jobs}/></div>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {/* la fiche simplifiee (06/11/2026) : figer ; trois actions cote a cote ; l'objet entier dans sa propre fiche ; le reste
           en petits boutons. Toutes les fonctions d'avant y sont. */}

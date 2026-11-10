@@ -20,6 +20,7 @@ import { useFriend, currentFriend } from "../store/friend";
 import { noPageGesture } from "../utils/pullRefreshGuard";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
+import { ObjectRest } from "../components/PlanDay";
 import { showAlert, showConfirm, showChoice } from "../utils/dialog";
 import { COPY_CHOICES } from "../utils/queueSort";
 import { egg } from "../eggs";
@@ -1733,6 +1734,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
               </span>}
           </div>
         </div>)}
+      {/* (10/11/2026) ses autres plateaux et exemplaires encore prevus, et quand */}
+      <div style={{ padding: "0 4px" }}><ObjectRest designId={p.design_id}/></div>
     </div>);
   const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateSet.has(String(p.design_id));
   // (09/11/2026) MakerWorld et les categories : sur ordinateur dans la colonne de gauche, sous les chiffres (elle restait
@@ -2234,6 +2237,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
               </span>}
           </div>
         </div>)}
+      {/* (10/11/2026) ce qui reste prevu de ses modeles */}
+      {[...new Set(prints.map(x => String(x.design_id || "").trim()).filter(x => /^\d+$/.test(x)))].map(d => <div key={d} style={{ padding: "0 4px" }}><ObjectRest designId={d}/></div>)}
     </div>);
   // les impressions : des rangees (ou une grille) ; toucher ouvre la fiche, ⋯ : vignette du groupe, retirer
   const row = x => { const [l, c, ic] = V2_STATUS[x.status] || [x.status || "", "#94a3b8", "•"], d = utcDate(x.print_date), [dy, hr] = whenFr(d);
