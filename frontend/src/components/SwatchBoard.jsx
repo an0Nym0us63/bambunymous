@@ -120,7 +120,7 @@ const GEO = (() => {
       // un soupcon de recouvrement entre bandes : sans lui, un fil du fond passe entre deux (anticrenelage)
       const a0 = f(a - .05), b0 = f(b + .05);
       const d = `M${a0},${f(vy(a, k))} L${b0},${f(vy(b, k))} L${b0},${f(vy(b, k + 1))} L${a0},${f(vy(a, k + 1))} Z`;
-      polys.push({ d, s, t: Math.sin(n) });                                // t : de face (1) a la tranche (0)
+      polys.push({ d, s, t: Math.sin(n), c: Math.cos(n) });                // t : de face (1) a la tranche (0) ; c : vers le haut (1) ou le bas (-1)
     }
   }
   for (const k of K) {                                                      // les aretes visibles, en fin liseré clair
@@ -136,7 +136,9 @@ const hex6 = c => `#${String(c || "94a3b8").replace("#", "").slice(0, 6)}`;
 // sur la tranche, fondues l'une dans l'autre
 const mixHex = (a, b, t) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   const [x, y] = [p(a), p(b)]; return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(",")})`; };
-const coaxAt = (cs, t) => { const u = Math.min(1, Math.max(0, (1 - t) * 1.25)) * (cs.length - 1), k = Math.min(cs.length - 2, Math.floor(u));
+// (10/11/2026) d'apres l'orientation haut / bas de la face : par l'angle de face, les faces rasantes faisaient de fins
+// liseres de l'autre couleur sur les bords
+const coaxAt = (cs, c) => { const u = Math.min(1, Math.max(0, (1 - c) / 2)) * (cs.length - 1), k = Math.min(cs.length - 2, Math.floor(u));
   return mixHex(cs[k], cs[k + 1], u - k); };
 // la matiere d'un echantillon : ses couleurs (un degrade s'imprime du bas vers le haut : couche sur la tranche, il va
 // de gauche a droite ; un coaxial, bi- ou tricolore, montre une couleur par face), sa finition, sa transparence
@@ -292,23 +294,13 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
     {cells.map(({ k, cell, x, yb, f }) => {
       const sx = x + (PITCH - SW) / 2, sy = yb + BAR + OVER - SH, dim = dimOf(cell);
       const tip = cell?.t === "d" ? { "data-tip": `Intercalaire « ${cell.label || "sans nom"} »\n${where(k)}` }
-        : f ? { "data-tipcard": tipCard(`board:${board.id}:${k}`, () => <SwatchTip f={f} where={where(k)} tag={!f.swatch ? "Échantillon pas coché sur sa fiche" : null}/>) }
+        : f ? { "data-tipcard": tipCard(`board:${board.id}:${k}`, () => <SwatchTip f={f} bid={board.id} k={k} where={where(k)} tag={!f.swatch ? "Échantillon pas coché sur sa fiche" : null}/>) }
         : edit ? { "data-tip": `Case libre · ${where(k)}` } : {};
       const fo = f && fillOf(f);
       return <g key={k} data-k={k} className="sbc" onClick={edit ? () => tapK(k) : undefined} style={{ cursor: edit ? "pointer" : "default" }} opacity={dim ? 0.2 : 1} {...tip}>
         <rect x={x + 1} y={yb - SH + 6} width={PITCH - 2} height={SH + 4} rx="2" fill="transparent"/>
         <rect className="sbhi" x={x + 1} y={yb - SH + 6} width={PITCH - 2} height={SH + 4} rx="2" fill={dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.08)"}/>
-        {cell?.t === "s" && <g transform={`translate(${sx} ${sy})`}>
-          {fo?.fx === "glow" && <use href="#sw-out" fill={fo.cs[0]} filter={`url(#swglow-${board.id})`} opacity=".85"/>}
-          <use href="#sw-out" fill={!f ? "#94a3b8" : fo.kind === "grad" ? `url(#swg-${board.id}-${k.replace(":", "-")})` : fo.cs[0]}
-            fillOpacity={fo?.trans ? 0.7 : 1} stroke="rgba(0,0,0,.35)" strokeWidth=".3"/>
-          {fo?.kind === "coax" && GEO.polys.map((p, i) => <path key={i} d={p.d} fill={coaxAt(fo.cs, p.t)} fillOpacity={fo.trans ? 0.7 : 1}/>)}
-          {fo?.kind === "coax" && <use href="#sw-out" fill={`url(#swirid-${board.id})`} style={{ mixBlendMode: "screen" }}/>}
-          {fo?.fx && (FX_PAT[fo.fx] || ["marble", "wood"].includes(fo.fx)) ? <use href="#sw-out" fill={`url(#swp-${board.id}-${fo.fx})`}/> : null}
-          <use href="#sw-shade" opacity={fo?.fx === "matte" || fo?.fx === "carbon" ? 0.55 : fo?.trans ? 0.7 : 1}/>
-          {fo?.fx !== "matte" && fo?.fx !== "carbon" && <use href="#sw-ridge"/>}
-          {(fo?.fx === "silk" || fo?.fx === "metal") && <use href="#sw-gloss"/>}
-        </g>}
+        {cell?.t === "s" && <g transform={`translate(${sx} ${sy})`}><SampleArt f={f} fo={fo} bid={board.id} k={k}/></g>}
         {cell?.t === "d" && <rect x={x + 4} y={yb - SH * .6} width={PITCH - 8} height={SH * .6 + BAR} rx="1.2" fill="#101010" stroke="#2e2e2e" strokeWidth=".5"/>}
         {holdK === k && <rect x={x + .6} y={yb - SH + 5.5} width={PITCH - 1.2} height={SH + 5} rx="2.5" fill="none" stroke="#F59E0B" strokeWidth="1.4"/>}
       </g>; })}
@@ -347,9 +339,29 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
   </div>;
 }
 
-function SwatchTip({ f, where, tag }) {
+// l'echantillon dessine, sur la planche et dans sa fiche au survol : les degrades, motifs et reflets sont ceux que
+// definit la planche (la fiche ne s'ouvre que sur elle)
+function SampleArt({ f, fo, bid, k }) {
+  const board = { id: bid };
+  return <>
+          {fo?.fx === "glow" && <use href="#sw-out" fill={fo.cs[0]} filter={`url(#swglow-${board.id})`} opacity=".85"/>}
+          <use href="#sw-out" fill={!f ? "#94a3b8" : fo.kind === "grad" ? `url(#swg-${board.id}-${k.replace(":", "-")})` : fo.cs[0]}
+            fillOpacity={fo?.trans ? 0.7 : 1} stroke="rgba(0,0,0,.35)" strokeWidth=".3"/>
+          {fo?.kind === "coax" && GEO.polys.map((p, i) => <path key={i} d={p.d} fill={coaxAt(fo.cs, p.c)} fillOpacity={fo.trans ? 0.7 : 1}/>)}
+          {fo?.kind === "coax" && <use href="#sw-out" fill={`url(#swirid-${board.id})`} style={{ mixBlendMode: "screen" }}/>}
+          {fo?.fx && (FX_PAT[fo.fx] || ["marble", "wood"].includes(fo.fx)) ? <use href="#sw-out" fill={`url(#swp-${board.id}-${fo.fx})`}/> : null}
+          <use href="#sw-shade" opacity={fo?.fx === "matte" || fo?.fx === "carbon" ? 0.55 : fo?.trans ? 0.7 : 1}/>
+          {fo?.fx !== "matte" && fo?.fx !== "carbon" && <use href="#sw-ridge"/>}
+          {(fo?.fx === "silk" || fo?.fx === "metal") && <use href="#sw-gloss"/>}
+  </>;
+}
+
+function SwatchTip({ f, where, tag, bid, k }) {
   return <div style={{ display: "flex", gap: 10, alignItems: "flex-start", width: 250, maxWidth: "100%" }}>
-    <span style={{ width: 46, height: 62, borderRadius: 8, flexShrink: 0, border: "1px solid rgba(255,255,255,.2)", ...swatchBg(f, 46) }}/>
+    {/* l'echantillon tel que sur la planche (couleur, finition, reflets) ; pas encore place : un apercu a plat */}
+    {bid ? <svg viewBox={`-2 -2 ${SW + 4} ${SH + 4}`} width="40" height={Math.round(40 * (SH + 4) / (SW + 4))} style={{ flexShrink: 0 }}>
+      <SampleArt f={f} fo={fillOf(f)} bid={bid} k={k}/></svg>
+      : <span style={{ width: 46, height: 62, borderRadius: 8, flexShrink: 0, border: "1px solid rgba(255,255,255,.2)", ...swatchBg(f, 46) }}/>}
     <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
       <div style={{ fontSize: 13, fontWeight: 900, color: "#f8fafc", lineHeight: 1.25 }}>{fname(f)}</div>
       <div style={{ fontSize: 11.5, fontWeight: 700, color: "#94a3b8" }}>{f.manufacturer} · {f.fila_type || f.material}</div>
