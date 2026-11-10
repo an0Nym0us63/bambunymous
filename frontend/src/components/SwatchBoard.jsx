@@ -88,11 +88,13 @@ function pack(board, groups) {
 // Tout en millimetres dans un seul SVG qui prend la largeur ; l'echantillon et son ombrage sont dessines une fois
 // (<defs>) puis repris par <use> : la couleur seule change d'une case a l'autre.
 // (10/11/2026, revu) aux proportions de la vraie planche, en cases : les trous d'une meme rangee a 3,5 cases, les
-// rangees de trous en quinconce a mi-pas, un rail par rangee de trous (il passe au milieu des trous et s'y accroche),
-// l'echantillon deux cases de haut
-const PITCH = 20, RAILGAP = 8, ML = 18, MR = 18, ROW = 70, MB = 26, HOLE = 70, HW = 9, HH = 26;
+// rangees de trous en quinconce a mi-pas, un rail par rangee de trous, l'echantillon deux cases de haut. Le support
+// comme le vrai : un embout a gauche, une jonction entre deux rails, un embout a droite, poses sur des colonnes de trous
+// (ils s'y accrochent) ; rien d'autre ne touche la planche, les trous restent visibles entre les rails. Pas de trou
+// colle au bord : les premiers et les derniers sont a un bon demi-pas du chant.
+const PITCH = 20, JOIN = 20, ROW = 70, HOLE = 70, HW = 9, HH = 26, EDGE = 75, HMARGIN = 40;
 const SW = 18, SH = 38, BAR = 6, OVER = 5;                  // l'echantillon (tranche) ; le rail ; ce qui depasse dessous
-const MT = SH + 10;
+const MT = 75;
 // l'echantillon : un prisme hexagonal torsade, couche sur la tranche. A chaque abscisse, l'hexagone a tourne : ses
 // sommets montent et descendent, ce qui fait le bord ondule en haut et en bas, et ses faces passent de l'ombre a la
 // lumiere en diagonale (le vrille de la piece)
@@ -157,15 +159,30 @@ const FxPattern = ({ id, fx }) => {
     <path d="M.6,0 C.9,2 .3,5 .7,8 M1.8,0 C1.6,3 2.1,5 1.7,8" fill="none" stroke="#3b2412" strokeOpacity=".3" strokeWidth=".35"/></pattern>;
   return null;
 };
-const railsOf = (cols, rails) => { let s = 0; return railCols(cols, rails).map((n, i) => { const r = { i, start: s, n }; s += n; return r; }); };
-const cellX = (c, rails) => { const ri = rails.findIndex(r => c < r.start + r.n); return ML + c * PITCH + Math.max(0, ri) * RAILGAP; };
+// chaque rail : ses cases, ou il commence (x0, la premiere case) ; une jonction (ou un embout) a JOIN/2 de chaque bout
+const railsOf = (cols, rails) => { let s = 0, x = EDGE + JOIN / 2;
+  return railCols(cols, rails).map((n, i) => { const r = { i, start: s, n, x0: x }; s += n; x += n * PITCH + JOIN; return r; }); };
+const cellX = (c, rails) => { const rl = rails.find(r => c < r.start + r.n) || rails[rails.length - 1]; return rl.x0 + (c - rl.start) * PITCH; };
 
 function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
   const rails = railsOf(board.cols, board.rails);
-  const W = ML + board.cols * PITCH + (board.rails - 1) * RAILGAP + MR, H = MT + (board.rows - 1) * ROW + BAR + OVER + MB;
+  const W = 2 * EDGE + board.cols * PITCH + board.rails * JOIN, yLast = MT + (board.rows - 1) * ROW + BAR / 2;
+  const H = yLast + HOLE / 2 + HMARGIN + 4;
   const dark = isDark(board.color);
-  const holeX = W / 2 - HOLE * Math.floor(W / 2 / HOLE);    // la colonne de trous la plus a gauche, symetrique
-  const hooks = (x0, x1) => { const out = []; for (let h = holeX; h <= W; h += HOLE) if (h > x0 + 4 && h < x1 - 4) out.push(h); return out; };
+  // les trous : une colonne au milieu de la planche, les rangees du rail au milieu de sa barre, l'autre rangee en
+  // quinconce a mi-pas ; seulement ceux qui tombent a HMARGIN du bord au moins
+  const holes = [];
+  for (let j = -Math.ceil(MT / (HOLE / 2)); MT + BAR / 2 + j * HOLE / 2 <= H; j++) {
+    const y = MT + BAR / 2 + j * HOLE / 2;
+    if (y < HMARGIN || y > H - HMARGIN) continue;
+    for (let m = -Math.ceil(W / HOLE) * 2; m <= Math.ceil(W / HOLE) * 2; m++) {
+      if ((m + j) % 2) continue;
+      const x = W / 2 + m * HOLE / 2;
+      if (x >= HMARGIN && x <= W - HMARGIN) holes.push([x, y]);
+    }
+  }
+  // les pieces du support d'une rangee : embout gauche, jonctions, embout droit
+  const joints = [EDGE, ...rails.map(rl => rl.x0 + rl.n * PITCH + JOIN / 2)];
   const hole = dark ? "#d9d7d1" : "color-mix(in srgb, " + board.color + " 55%, #000)";
   const rail = "#141414", railHi = "#3a3a3a";
   const grads = [];
@@ -191,8 +208,9 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
   };
   const down = e => {
     if (e.pointerType !== "touch") return;
+    if (press.current) { clearTimeout(press.current.t); press.current = null; lpRef.current = null; setLp(null); return; }   // un 2e doigt : on lache tout
     const p = { x: e.clientX, y: e.clientY, on: false };
-    p.t = setTimeout(() => { p.on = true; show(p.x, p.y); try { navigator.vibrate?.(8); } catch { /* rien */ } }, 300);
+    p.t = setTimeout(() => { if (press.current !== p) return; p.on = true; show(p.x, p.y); try { navigator.vibrate?.(8); } catch { /* rien */ } }, 300);
     press.current = p;
   };
   const move = e => {
@@ -211,6 +229,16 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
     lpRef.current = null; setLp(null); skip.current = Date.now();
     if (k && edit && !cancel) tap(k);                       // le systeme qui reprend le doigt n'ouvre rien
   };
+  // le doigt leve n'importe ou (hors de la planche, apres un defilement…) referme la loupe : elle restait en l'air
+  useEffect(() => {
+    if (!lp) return undefined;
+    const close = () => { if (press.current?.on) return; lpRef.current = null; setLp(null); };
+    const lift = e => { if (press.current?.on && e.type !== "scroll") up(e.type !== "pointerup" && e.type !== "touchend"); else close(); };
+    const evs = ["pointerup", "pointercancel", "touchend", "touchcancel"];
+    evs.forEach(n => window.addEventListener(n, lift, true));
+    window.addEventListener("scroll", close, true);
+    return () => { evs.forEach(n => window.removeEventListener(n, lift, true)); window.removeEventListener("scroll", close, true); };
+  }, [lp]); // eslint-disable-line react-hooks/exhaustive-deps
   // la loupe ouverte, le doigt ne fait plus defiler la page
   useEffect(() => {
     const el = wrap.current;
@@ -228,11 +256,6 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
   <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", borderRadius: 14, filter: "drop-shadow(0 10px 18px rgba(0,0,0,.35))" }}
     role="img" aria-label={`Planche ${board.name}`}>
     <defs>
-      {/* les trous : centres sur la planche, la rangee du rail au milieu de sa barre, l'autre en quinconce a mi-pas */}
-      <pattern id={`sk-${board.id}`} width={HOLE} height={HOLE} patternUnits="userSpaceOnUse" x={holeX - HOLE * .75} y={MT + BAR / 2 - HOLE * .75}>
-        <rect x={HOLE * .25 - HW / 2} y={HOLE * .25 - HH / 2} width={HW} height={HH} rx={HW / 2} fill={hole}/>
-        <rect x={HOLE * .75 - HW / 2} y={HOLE * .75 - HH / 2} width={HW} height={HH} rx={HW / 2} fill={hole}/>
-      </pattern>
       <path id="sw-out" d={GEO.outline}/>
       <g id="sw-shade">{GEO.polys.map((p, i) => <path key={i} d={p.d} fill={p.s > 0 ? "#fff" : "#000"} fillOpacity={Math.abs(p.s) * (p.s > 0 ? 0.6 : 0.65)}/>)}</g>
       <g id="sw-ridge">{GEO.ridges.map((d, i) => <path key={i} d={d} fill="none" stroke="#fff" strokeOpacity=".45" strokeWidth=".4"/>)}</g>
@@ -251,17 +274,14 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
     <g id={`bc-${board.id}`}>
     {/* la planche et ses trous */}
     <rect x="0" y="0" width={W} height={H} rx="9" fill={board.color}/>
-    <rect x="0" y="0" width={W} height={H} rx="9" fill={`url(#sk-${board.id})`}/>
+    {holes.map(([x, y]) => <rect key={`${x}:${y}`} x={x - HW / 2} y={y - HH / 2} width={HW} height={HH} rx={HW / 2} fill={hole}/>)}
     <rect x=".4" y=".4" width={W - .8} height={H - .8} rx="8.6" fill="none" stroke={dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.18)"} strokeWidth=".8"/>
     {/* les rails : le fond a peigne, puis les echantillons, puis la barre de devant, puis les etiquettes */}
     {Array.from({ length: board.rows }, (_, r) => { const yb = MT + r * ROW;
       return <g key={`rb${r}`}>
-        <text x={ML - 9} y={yb + 4} fontSize="4" fontWeight="800" fill={dark ? "rgba(255,255,255,.35)" : "rgba(0,0,0,.4)"} textAnchor="middle">{r + 1}</text>
+        <text x={EDGE - 16} y={yb + 4} fontSize="4" fontWeight="800" fill={dark ? "rgba(255,255,255,.35)" : "rgba(0,0,0,.4)"} textAnchor="middle">{r + 1}</text>
         {rails.map(rl => { const x0 = cellX(rl.start, rails), x1 = x0 + rl.n * PITCH;
           return <g key={rl.i}>
-            {/* ses attaches, dans les trous qu'il croise (derriere les echantillons) */}
-            {hooks(x0, x1).map(h => <rect key={h} x={h - HW / 2 - .8} y={yb - HH / 2 + BAR / 2 + 2} width={HW + 1.6} height={HH - 4} rx="2" fill="#0d0d0d"/>)}
-            <rect x={x0 - 2.5} y={yb - 3} width={x1 - x0 + 5} height={BAR + 3} rx="1" fill="#0b0b0b"/>
             {Array.from({ length: rl.n + 1 }, (_, i) => <rect key={i} x={x0 + i * PITCH - .45} y={yb - 4} width=".9" height={BAR + 4} fill={rail}/>)}
           </g>; })}
       </g>; })}
@@ -292,10 +312,14 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
       return <g key={`rf${r}`} pointerEvents="none">
         {rails.map(rl => { const x0 = cellX(rl.start, rails), x1 = x0 + rl.n * PITCH;
           return <g key={rl.i}>
-            <rect x={x0 - 1} y={yb} width={x1 - x0 + 2} height={BAR} rx=".8" fill={rail}/>
-            <rect x={x0 - 1} y={yb} width={x1 - x0 + 2} height=".7" fill={railHi}/>
-            <rect x={x0 - 2.2} y={yb - 1.5} width="1.6" height={BAR + 3} rx=".6" fill="#0d0d0d"/>
-            <rect x={x1 + .6} y={yb - 1.5} width="1.6" height={BAR + 3} rx=".6" fill="#0d0d0d"/>
+            <rect x={x0 - JOIN / 2} y={yb} width={x1 - x0 + JOIN} height={BAR} rx=".8" fill={rail}/>
+            <rect x={x0 - JOIN / 2} y={yb} width={x1 - x0 + JOIN} height=".7" fill={railHi}/>
+          </g>; })}
+        {/* l'embout gauche, les jonctions, l'embout droit : les seules pieces accrochees a la planche */}
+        {joints.map((jx, i) => { const end = i === 0 || i === joints.length - 1, w = end ? 12 : 10;
+          return <g key={`j${i}`}>
+            <rect x={jx - w / 2} y={yb - (end ? 20 : 23)} width={w} height={(end ? 20 : 23) + BAR + 9} rx="2" fill="#111"/>
+            <rect x={jx - w / 2 + 1} y={yb - (end ? 19 : 22)} width={w - 2} height="1" rx=".5" fill={railHi}/>
           </g>; })}
       </g>; })}
     {/* les etiquettes des intercalaires, sous le rail, comme les vraies */}
@@ -307,14 +331,14 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
     </g>
   </svg>
   {lp && createPortal(<div style={{ position: "fixed", zIndex: 10000, pointerEvents: "none", left: Math.max(6, Math.min(window.innerWidth - LS - 6, lp.x - LS / 2)),
-      top: Math.max(6, lp.y - LS - 46), display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+      top: Math.max(6, lp.y - LS - 74), display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+    <span style={{ maxWidth: 220, minHeight: 22, padding: "3px 10px", borderRadius: 12, background: lpTxt ? "rgba(15,23,42,.92)" : "transparent", color: "#fff", fontSize: 12,
+      fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", boxSizing: "border-box" }}>{lpTxt}</span>
     <div style={{ width: LS, height: LS, borderRadius: "50%", overflow: "hidden", background: board.color, border: "3px solid #fff", boxShadow: "0 10px 26px rgba(0,0,0,.45)", position: "relative" }}>
       <svg width={LS} height={LS} viewBox={`${lp.ux - LS / lp.sc / Z / 2} ${lp.uy - LS / lp.sc / Z / 2} ${LS / lp.sc / Z} ${LS / lp.sc / Z}`} style={{ display: "block" }}>
         <use href={`#bc-${board.id}`}/></svg>
       <span style={{ position: "absolute", left: "50%", top: "50%", width: 10, height: 10, marginLeft: -5, marginTop: -5, borderRadius: "50%", border: "2px solid #F59E0B" }}/>
     </div>
-    {lpTxt && <span style={{ maxWidth: 220, padding: "3px 10px", borderRadius: 12, background: "rgba(15,23,42,.92)", color: "#fff", fontSize: 12, fontWeight: 800,
-      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lpTxt}</span>}
   </div>, document.body)}
   </div>;
 }
