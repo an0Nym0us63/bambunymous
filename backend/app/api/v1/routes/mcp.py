@@ -89,8 +89,17 @@ async def mcp_settings_set(body: dict = Body({}), _: str = Depends(require_admin
 
 @router.post("/token")
 async def mcp_token_new(_: str = Depends(require_admin)):
-    """Un nouveau jeton, montre une seule fois (l'ancien ne vaut plus rien)."""
+    """Un nouveau jeton (l'ancien ne vaut plus rien)."""
     return await M.new_token()
+
+
+@router.get("/token")
+async def mcp_token_show(_: str = Depends(require_admin)):
+    """Revoir le jeton en cours (10/11/2026), pour recopier la configuration."""
+    tok = await M.show_token()
+    if not tok:
+        raise HTTPException(404, "Ce jeton a été créé avant qu'on le garde : crée un nouveau jeton pour pouvoir le revoir.")
+    return {"token": tok}
 
 
 @router.delete("/token")

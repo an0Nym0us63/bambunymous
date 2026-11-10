@@ -554,7 +554,7 @@ async def _track(rv: dict) -> None:
                     username=username, method=rv["method"], path=path,
                     status=response_status, kind="action",
                     # (10/11/2026) ce que Claude a fait par le MCP se reconnait dans le journal
-                    label=(("Claude (MCP) · " + (_activity_label(rv["method"], path) or path))[:120] if hdr.get("x-app-page") == "/mcp"
+                    label=(("MCP · " + (_activity_label(rv["method"], path) or path))[:120] if hdr.get("x-app-page") == "/mcp"
                            else _activity_label(rv["method"], path)),
                     created_at=now))
                 await db.commit()

@@ -1,5 +1,5 @@
 """
-BambuNymous en serveur MCP (10/11/2026) : Claude (l'appli, Claude Code, le telephone) interroge l'appli et, si on
+BambuNymous en serveur MCP (10/11/2026) : un assistant (n'importe quel client MCP) interroge l'appli et, si on
 l'autorise, agit dessus, pendant une conversation.
 
 Le protocole : Model Context Protocol, transport HTTP « streamable » sans flux (chaque message JSON-RPC recoit sa
@@ -7,15 +7,19 @@ reponse en JSON ; aucune session). Les messages : initialize, ping, tools/list, 
 resources/read, prompts/list, prompts/get, logging/setLevel, completion/complete ; les notifications sont acquittees.
 
 Deux modes, choisis dans Parametres › Liens : lecture seule (ro) ou lecture et ecriture (rw) ; d'office desactive.
-Un seul jeton (« mcp_… »), cree dans Parametres et montre une fois : on ne garde que son empreinte. Il se donne en
-en-tete (Authorization: Bearer) ou dans l'adresse (/api/v1/mcp/k/<jeton>, pour les connecteurs de l'appli Claude
-qui ne savent pas poser d'en-tete). Les journaux, les mesures et l'activite ne gardent jamais le jeton.
+Un seul jeton (« mcp_… »), cree dans Parametres, que l'administrateur peut revoir (10/11/2026). Il se donne en
+en-tete (Authorization: Bearer) ou dans l'adresse (/api/v1/mcp/k/<jeton>, pour les connecteurs qui ne savent pas
+poser d'en-tete). Les journaux, les mesures et l'activite ne gardent jamais le jeton.
+Le mode se lit a chaque appel (10/11/2026) : la liste des outils est toujours complete (un client la garde en
+memoire des la connexion : passer en ecriture ne doit pas obliger a rebrancher), et une ecriture en lecture seule
+est refusee au moment de l'appel, en le disant.
 
 Les outils appellent l'API de l'appli elle-meme, dans le processus, au nom du compte administrateur principal :
 chaque outil fait exactement ce que fait l'interface, avec ses controles. Par-dessus :
   - lecture seule : seules les lectures (GET) passent, quel que soit l'outil ;
-  - jamais : l'authentification, les comptes, les invitations, les identifiants (mot de passe, code d'acces,
-    cles), l'import ou la remise a zero de la base, le reglage du MCP lui-meme, les flux sans fin (camera) ;
+  - jamais : l'authentification, les comptes, les copains, les connexions (imprimante, MakerWorld, mails, Claude,
+    Telegram, telephones) et leurs identifiants, l'import ou la remise a zero de la base, le reglage du MCP lui-meme,
+    les flux sans fin (camera) ; tout le reste se lit et s'ecrit ;
   - dans les reponses, tout ce qui ressemble a un secret est masque.
 Une liste d'outils soignes couvre l'usage courant ; trois outils generiques (le catalogue des routes, une lecture,
 un appel) couvrent tout le reste de l'API.
@@ -37,6 +41,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 K_MODE, K_HASH, K_HINT, K_USAGE, K_AT = "MCP_MODE", "MCP_TOKEN_HASH", "MCP_TOKEN_HINT", "MCP_USAGE", "MCP_TOKEN_AT"
+K_TOK = "MCP_TOKEN"            # (10/11/2026) le jeton lui-meme, pour que l'administrateur puisse revoir la configuration
 MODES = ("off", "ro", "rw")
 PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 SERVER = {"name": "bambunymous", "title": "BambuNymous", "version": "1.0.0"}
@@ -76,7 +81,7 @@ async def settings_get() -> dict:
         use = {}
     if use.get("month") != datetime.now().strftime("%Y-%m"):
         use = {"last_at": use.get("last_at"), "last_tool": use.get("last_tool"), "client": use.get("client")}
-    return {"mode": mode if mode in MODES else "off", "has_token": bool(await _get(K_HASH, "")),
+    return {"mode": mode if mode in MODES else "off", "has_token": bool(await _get(K_HASH, "")), "can_show": bool(await _get(K_TOK, "")),
             "hint": await _get(K_HINT, "") or None, "token_at": await _get(K_AT, "") or None,
             "usage": {"calls": int(use.get("calls") or 0), "errors": int(use.get("errors") or 0),
                       "last_at": use.get("last_at"), "last_tool": use.get("last_tool"), "client": use.get("client")},
@@ -93,15 +98,24 @@ async def settings_set(body: dict) -> dict:
 
 
 async def new_token() -> dict:
-    """Un nouveau jeton (l'ancien ne vaut plus rien) : rendu une seule fois, seule son empreinte est gardee."""
+    """Un nouveau jeton (l'ancien ne vaut plus rien)."""
     tok = "mcp_" + secrets.token_urlsafe(32)
     await _set(K_HASH, _hash(tok))
+    await _set(K_TOK, tok)
     await _set(K_HINT, tok[-4:])
     await _set(K_AT, datetime.now().isoformat(timespec="seconds"))
     return {**(await settings_get()), "token": tok}
 
 
+async def show_token() -> str | None:
+    """Le jeton en cours, pour revoir la configuration (None : revoque, ou cree avant qu'on le garde)."""
+    tok = await _get(K_TOK, "")
+    want = await _get(K_HASH, "")
+    return tok if tok and want and hmac.compare_digest(_hash(tok), want) else None
+
+
 async def revoke() -> dict:
+    await _set(K_TOK, "")
     await _set(K_HASH, "")
     await _set(K_HINT, "")
     await _set(K_AT, "")
@@ -143,24 +157,32 @@ _DENY_ALWAYS = [re.compile(p) for p in (
     r"^/api/v1/auth(/|$)", r"^/api/v1/mcp(/|$)", r"/stream$", r"^/api/v1/import", r"^/api/v1/settings/reset-all$",
     r"^/api/v1/makerworld/(token|login|logout)$", r"^/api/v1/friends/[^/]+/p/",
 )]
+# (10/11/2026) seulement les comptes et les connexions : tout le reste s'ecrit
 _DENY_WRITE = [re.compile(p) for p in (
-    r"^/api/v1/users(/|$)", r"^/api/v1/friends(/|$)", r"^/api/v1/public-links(/|$)", r"^/api/v1/settings$",
-    r"^/api/v1/settings/(mail|claude)$", r"^/api/v1/share/telegram", r"^/api/v1/notify/devices",
+    r"^/api/v1/users(/|$)", r"^/api/v1/friends(/|$)", r"^/api/v1/settings/(mail|claude)$",
+    r"^/api/v1/share/telegram/(login|logout)", r"^/api/v1/notify/devices",
 )]
+# PATCH /settings : la connexion a l'imprimante et l'administrateur restent a l'appli ; le reste (tarif, nom) passe
+_SETTINGS_OPEN = {"COST_BY_HOUR", "PRINTER_NAME", "PRINTER_MODEL"}
 # (« key » seul n'est pas un secret : c'est la cle d'un plateau du planning, d'une alerte… ; les cles d'API sont « api_key »)
 _SECRET_KEY = re.compile(r"(pass(word|wd)?|secret|token|api_?key|access_?code|cookie|session|_hash$|private_?key)", re.I)
 _SECRET_VAL = re.compile(r"\b(sk-ant-[\w-]{8,}|fk_[\w-]{8,}|mcp_[\w-]{8,}|gh[pousr]_[\w]{12,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{6,})")
 
 
-def guard(method: str, path: str, mode: str) -> None:
+RO_MSG = "Le MCP est en lecture seule : passe-le en lecture et écriture dans Paramètres › Liens › MCP pour agir (sans rebrancher)."
+
+
+def guard(method: str, path: str, mode: str, body=None) -> None:
     m = method.upper()
     if any(p.search(path) for p in _DENY_ALWAYS):
-        raise ToolError("Cette route n'est pas ouverte au MCP (authentification, comptes, identifiants, import, flux).")
+        raise ToolError("Cette route n'est pas ouverte au MCP (authentification, comptes, connexions, import, flux).")
     if m not in ("GET", "HEAD"):
         if mode != "rw":
-            raise ToolError("Le MCP est en lecture seule : passe-le en lecture et écriture dans Paramètres › Liens pour agir.")
+            raise ToolError(RO_MSG)
         if any(p.search(path) for p in _DENY_WRITE):
-            raise ToolError("Cette écriture n'est pas ouverte au MCP (comptes, invitations, identifiants) : fais-la dans l'appli.")
+            raise ToolError("Cette écriture n'est pas ouverte au MCP (comptes, copains, connexions et identifiants) : fais-la dans l'appli.")
+        if path == API + "/settings" and m == "PATCH" and (not isinstance(body, dict) or set(body) - _SETTINGS_OPEN):
+            raise ToolError("Ici, seuls COST_BY_HOUR, PRINTER_NAME et PRINTER_MODEL : la connexion à l'imprimante et le compte admin restent à l'appli.")
 
 
 def redact(v, key: str = ""):
@@ -218,7 +240,7 @@ async def call_api(app, method: str, path: str, mode: str, query: dict | None = 
     """L'appel, et son resultat en contenus MCP (texte JSON masque et coupe, ou image)."""
     import httpx
     full = _norm(path)
-    guard(method, full, mode)
+    guard(method, full, mode, body)
     m = method.upper()
     kw = {"params": _clean_query(query), "headers": {"Authorization": f"Bearer {await _auth()}", "X-App-Page": "/mcp"}}
     if body is not None and m not in ("GET", "HEAD", "DELETE"):
@@ -535,9 +557,11 @@ _BY_NAME = {t[0]: t for t in _T}
 
 
 def tools_for(mode: str) -> list:
-    out = [_tool_def(t) for t in _T if mode == "rw" or not t[7].get("rw")]
+    """Les outils. (10/11/2026) le serveur donne toujours la liste complete (mode « all ») : un client la garde des la
+    connexion, et passer en ecriture ne doit pas obliger a rebrancher ; une ecriture en lecture seule est refusee a l'appel."""
+    out = [_tool_def(t) for t in _T if mode in ("rw", "all") or not t[7].get("rw")]
     for g in _GENERIC:
-        if g.get("rw") and mode != "rw":
+        if g.get("rw") and mode not in ("rw", "all"):
             continue
         out.append({k: v for k, v in g.items() if k != "rw"})
     return out
@@ -553,7 +577,7 @@ async def call_tool(app, name: str, args: dict, mode: str) -> dict:
             return {"content": await call_api(app, "GET", args.get("path"), mode, args.get("query"), None, maxc)}
         if name == "api_call":
             if mode != "rw":
-                raise ToolError("Le MCP est en lecture seule.")
+                raise ToolError(RO_MSG)
             m = str(args.get("method") or "").upper()
             if m not in ("POST", "PUT", "PATCH", "DELETE"):
                 raise ToolError("Méthode : POST, PUT, PATCH ou DELETE")
@@ -561,8 +585,10 @@ async def call_tool(app, name: str, args: dict, mode: str) -> dict:
         if name == "guide":
             return {"content": [_text(guide(args.get("page"), args.get("q")), maxc)]}
         t = _BY_NAME.get(name)
-        if not t or (t[7].get("rw") and mode != "rw"):
+        if not t:
             raise ToolError(f"Outil inconnu : {name}")
+        if t[7].get("rw") and mode != "rw":
+            raise ToolError(RO_MSG)
         _n, _ti, _d, method, path, params, req, opt = t
         miss = [r for r in req if args.get(r) in (None, "")]
         if miss:
@@ -587,6 +613,26 @@ async def call_tool(app, name: str, args: dict, mode: str) -> dict:
         return {"content": [{"type": "text", "text": f"Erreur interne : {type(e).__name__}"}], "isError": True}
 
 
+def _route_args(r) -> dict:
+    """(10/11/2026) ce qu'une route attend : ses parametres d'adresse et, pour un corps type, ses champs."""
+    out = {}
+    try:
+        dep = r.dependant
+        qs = [p.name for p in dep.query_params]
+        if qs:
+            out["query"] = qs
+        for b in dep.body_params:
+            ann = getattr(b.field_info, "annotation", None) or getattr(b, "type_", None)
+            fields = getattr(ann, "model_fields", None)
+            if fields:
+                out["body"] = {k: str(getattr(v.annotation, "__name__", v.annotation)) for k, v in fields.items()}
+            else:
+                out["body"] = "objet JSON (voir doc)"
+    except Exception:
+        pass
+    return out
+
+
 def catalog(app, q=None, method=None, mode="ro") -> list:
     """Les routes de l'API, celles que le MCP peut appeler dans ce mode."""
     out = []
@@ -599,11 +645,14 @@ def catalog(app, q=None, method=None, mode="ro") -> list:
             if m in ("HEAD", "OPTIONS") or (ml and m != ml):
                 continue
             try:
-                guard(m, path, mode)
+                guard(m, path, "rw", {})
             except ToolError:
-                continue
+                if not (m == "PATCH" and path == API + "/settings"):
+                    continue
             doc = " ".join(((getattr(r, "endpoint", None) and r.endpoint.__doc__) or "").split())[:240]
-            row = {"method": m, "path": path[len(API):], "doc": doc}
+            row = {"method": m, "path": path[len(API):], "doc": doc, **_route_args(r)}
+            if m not in ("GET", "HEAD") and mode != "rw":
+                row["rw"] = True                   # le MCP doit etre en lecture et ecriture pour l'appeler
             if ql and ql not in row["path"].lower() and ql not in doc.lower():
                 continue
             out.append(row)
@@ -723,11 +772,11 @@ async def handle(app, msg, mode: str):
                        "capabilities": {"tools": {"listChanged": False}, "resources": {"listChanged": False, "subscribe": False},
                                         "prompts": {"listChanged": False}, "logging": {}, "completions": {}},
                        "serverInfo": SERVER,
-                       "instructions": INSTRUCTIONS + (" Ce serveur est en LECTURE SEULE." if mode != "rw" else "")})
+                       "instructions": INSTRUCTIONS + (" Pour l'instant en LECTURE SEULE (le mode peut changer : une écriture refusée le dit)." if mode != "rw" else "")})
         if method == "ping":
             return ok({})
         if method == "tools/list":
-            return ok({"tools": tools_for(mode)})
+            return ok({"tools": tools_for("all")})
         if method == "tools/call":
             name = str(params.get("name") or "")
             res = await call_tool(app, name, params.get("arguments") or {}, mode)

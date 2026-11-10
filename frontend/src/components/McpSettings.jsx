@@ -3,16 +3,16 @@ import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { egg } from "../eggs";
 
-// Le serveur MCP (10/11/2026) : Claude (l'appli, Claude Code, le telephone) interroge BambuNymous et, si on le permet,
-// agit dessus. Le mode (desactive, lecture seule, lecture et ecriture), le jeton (montre une seule fois), de quoi le
-// brancher dans Claude, ce qui a ete demande ce mois-ci, la liste des outils.
+// Le serveur MCP (10/11/2026) : un assistant (n'importe quel client MCP) interroge BambuNymous et, si on le permet,
+// agit dessus. Le mode (desactive, lecture seule, lecture et ecriture : il change sans rebrancher), le jeton (qu'on peut
+// revoir), de quoi le brancher, ce qui a ete demande ce mois-ci, la liste des outils.
 const btn = (primary, dis = false, danger = false) => ({ padding:"8px 13px", borderRadius:10, fontSize:13, fontWeight:700, cursor: dis ? "not-allowed" : "pointer",
   border: primary ? "none" : "1px solid var(--border)", background: dis ? "var(--border)" : primary ? "linear-gradient(135deg, #D97757, #B45309)" : "var(--surface2)",
   color: primary || dis ? "white" : danger ? "#ef4444" : "var(--text)", fontFamily:"inherit" });
 const code = { display:"block", padding:"8px 10px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)", fontSize:11.5,
   fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace", color:"var(--text)", wordBreak:"break-all", whiteSpace:"pre-wrap", lineHeight:1.45 };
-const MODES = [["off", "Désactivé", "Rien ne répond"], ["ro", "Lecture seule", "Claude lit tout, ne change rien"],
-  ["rw", "Lecture et écriture", "Claude peut aussi agir (planning, rangements, bobines…)"]];
+const MODES = [["off", "Désactivé", "Rien ne répond"], ["ro", "Lecture seule", "L'assistant lit tout, ne change rien"],
+  ["rw", "Lecture et écriture", "L'assistant peut aussi agir (planning, rangements, bobines…)"]];
 const when = s => s ? new Date(s).toLocaleString("fr-FR", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : "jamais";
 
 function Copy({ label, text }) {
@@ -37,27 +37,31 @@ export default function McpSettings({ card, cardTitle }) {
     try { setS((await client.put("/mcp/settings", { mode: m })).data); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   const newTok = async () => {
-    if (s.has_token && !(await showConfirm("Créer un nouveau jeton ? L'ancien cessera de marcher tout de suite : il faudra mettre à jour Claude."))) return;
+    if (s.has_token && !(await showConfirm("Créer un nouveau jeton ? L'ancien cessera de marcher tout de suite : il faudra mettre à jour les clients branchés."))) return;
     setBusy(true);
     try { const { data } = await client.post("/mcp/token"); setTok(data.token); setS(data); egg("mcp_branche"); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
+  // (10/11/2026) revoir la configuration : le jeton est garde, l'administrateur peut le reafficher
+  const show = async () => {
+    try { setTok((await client.get("/mcp/token")).data.token); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const revoke = async () => {
-    if (!(await showConfirm("Révoquer le jeton ? Claude ne pourra plus joindre BambuNymous jusqu'à un nouveau jeton."))) return;
+    if (!(await showConfirm("Révoquer le jeton ? Plus aucun client ne pourra joindre BambuNymous jusqu'à un nouveau jeton."))) return;
     try { setS((await client.delete("/mcp/token")).data); setTok(null); } catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
-  if (!s) return <div className="card" style={card}><div style={cardTitle}>🔌 MCP (Claude)</div>
+  if (!s) return <div className="card" style={card}><div style={cardTitle}>🔌 Serveur MCP</div>
     <p style={{ fontSize:12.5, color:"var(--muted)", margin:0 }}>Chargement…</p></div>;
   const origin = window.location.origin, u = s.usage || {};
   return (
     <div className="card" style={card}>
-      <div style={cardTitle}>🔌 MCP (Claude)</div>
+      <div style={cardTitle}>🔌 Serveur MCP</div>
       <div style={{ display:"flex", flexDirection:"column", gap:11 }}>
         <p style={{ fontSize:12.5, color:"var(--text2)", margin:0, lineHeight:1.45 }}>
-          Branche BambuNymous sur Claude (l'appli, le téléphone, Claude Code) : dans une conversation, Claude lit l'imprimante, le stock,
-          les rangements, l'historique, la file et le planning, et peut agir si tu l'y autorises. C'est ton abonnement Claude qui travaille :
-          rien n'est facturé ici.</p>
+          Branche BambuNymous sur un assistant qui parle MCP (protocole ouvert, accepté par la plupart des assistants et des outils de code) :
+          dans une conversation, il lit l'imprimante, le stock, les rangements, l'historique, la file et le planning, et peut agir si tu l'y
+          autorises. Le mode change tout de suite, sans rebrancher. Rien n'est facturé ici.</p>
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:6 }}>
           {MODES.map(([k, t, d]) => { const on = s.mode === k;
@@ -70,25 +74,26 @@ export default function McpSettings({ card, cardTitle }) {
         </div>
         <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>
           {s.tools?.ro} outils en lecture seule, {s.tools?.rw} en lecture et écriture, {s.resources} chapitres du guide et {s.prompts} invites toutes faites.
-          Jamais : les comptes, les invitations, les mots de passe et clés, l'import ou la remise à zéro ; les secrets sont masqués dans les réponses.</div>
+          Tout se lit et s'écrit, sauf les comptes, les copains et les connexions (imprimante, MakerWorld, mails, Claude, Telegram, téléphones), l'import
+          ou la remise à zéro ; les secrets sont masqués dans les réponses.</div>
 
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <button type="button" disabled={busy} onClick={newTok} style={btn(true, busy)}>{s.has_token ? "🔑 Nouveau jeton" : "🔑 Créer le jeton"}</button>
+          {s.has_token && !tok && <button type="button" onClick={show} style={btn(false)} data-tip={s.can_show ? "Réafficher l'adresse et la configuration" : "Ce jeton date d'avant : crée-en un nouveau pour pouvoir le revoir"}>👁 Revoir la configuration</button>}
           {s.has_token && <button type="button" onClick={revoke} style={btn(false, false, true)}>Révoquer</button>}
           {s.has_token && !tok && <span style={{ fontSize:12, color:"var(--muted)" }}>Jeton …{s.hint} créé le {when(s.token_at)}</span>}
         </div>
-        {s.mode === "off" && s.has_token && <div style={{ fontSize:12, fontWeight:700, color:"#B45309" }}>Le MCP est désactivé : choisis un mode pour que Claude puisse le joindre.</div>}
+        {s.mode === "off" && s.has_token && <div style={{ fontSize:12, fontWeight:700, color:"#B45309" }}>Le MCP est désactivé : choisis un mode pour qu'un client puisse le joindre.</div>}
 
         {tok && <div style={{ display:"flex", flexDirection:"column", gap:9, padding:10, borderRadius:12, border:"1.5px solid color-mix(in srgb, #D97757 45%, var(--border))",
           background:"color-mix(in srgb, #D97757 6%, var(--surface))" }}>
-          <b style={{ fontSize:12.5, color:"#B45309" }}>Copie-le maintenant : il ne sera plus jamais affiché (seule son empreinte est gardée).</b>
-          <Copy label="Appli Claude (ordinateur, web, téléphone) : Paramètres › Connecteurs › Ajouter un connecteur personnalisé, cette adresse"
-            text={`${origin}/api/v1/mcp/k/${tok}`}/>
-          <Copy label="Claude Code (terminal)" text={`claude mcp add --transport http bambunymous ${origin}/api/v1/mcp --header "Authorization: Bearer ${tok}"`}/>
-          <Copy label="Autre client MCP (configuration JSON)" text={JSON.stringify({ mcpServers: { bambunymous: { type: "http", url: `${origin}/api/v1/mcp`,
+          <b style={{ fontSize:12.5, color:"#B45309" }}>Ta configuration (tu peux la revoir ici à tout moment) :</b>
+          <Copy label="Adresse avec le jeton : pour un client qui demande seulement une adresse (connecteur personnalisé)" text={`${origin}/api/v1/mcp/k/${tok}`}/>
+          <Copy label="Adresse sans jeton + en-tête : pour un client qui sait poser un en-tête" text={`URL : ${origin}/api/v1/mcp\nEn-tête : Authorization: Bearer ${tok}`}/>
+          <Copy label="Configuration JSON (format mcpServers, transport HTTP)" text={JSON.stringify({ mcpServers: { bambunymous: { type: "http", url: `${origin}/api/v1/mcp`,
             headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)}/>
-          <span style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>L'adresse du connecteur contient le jeton : ne la partage pas. Un nouveau jeton la rend caduque.</span>
-          <button type="button" onClick={() => setTok(null)} style={{ ...btn(false), alignSelf:"flex-start" }}>C'est noté</button>
+          <span style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Le jeton ouvre l'appli à qui l'a : ne le partage pas. Le serveur doit être joignable en HTTPS depuis là où tourne le client. Un nouveau jeton rend celui-ci caduc.</span>
+          <button type="button" onClick={() => setTok(null)} style={{ ...btn(false), alignSelf:"flex-start" }}>Masquer</button>
         </div>}
 
         <div style={{ fontSize:12, color:"var(--muted)", lineHeight:1.45 }}>
