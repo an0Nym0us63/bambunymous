@@ -610,9 +610,21 @@ def _boards_clean(body: dict) -> dict:
             margin_pct = max(0, min(100, int(b.get("marginPct", 20))))
         except (TypeError, ValueError):
             margin, margin_pct = 2, 20
+        # ses sections (10/11/2026) : un nom, les sous-types qu'elle prend, l'ecart entre eux ; absentes, devinees
+        sections = []
+        for s in (b.get("sections") or [])[:40]:
+            if not isinstance(s, dict):
+                continue
+            types = list(dict.fromkeys(str(t)[:60] for t in (s.get("types") or [])[:80] if str(t).strip()))
+            try:
+                gap = max(0, min(10, int(s.get("gap") or 0)))
+            except (TypeError, ValueError):
+                gap = 0
+            sections.append({"label": str(s.get("label") or "Section")[:40], "types": types, "gap": gap})
         out.append({"id": bid, "name": str(b.get("name") or f"Planche {i + 1}")[:40], "model": str(b.get("model") or "")[:30],
                     "color": color, "rows": rows, "cols": cols, "rails": rails, "cells": cells,
-                    "margin": margin, "marginPct": margin_pct, "fill": b.get("fill") is True})
+                    "margin": margin, "marginPct": margin_pct, "fill": b.get("fill") is True,
+                    **({"sections": sections} if sections else {})})
     return {"boards": out}
 
 

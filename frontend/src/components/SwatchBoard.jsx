@@ -24,20 +24,28 @@ export const BOARD_MODELS = [
 ];
 export const BOARD_COLORS = [["Noir", "#1f1f1f"], ["Blanc", "#f2f1ec"], ["Bois", "#c9a77c"], ["Gris", "#8f969c"], ["Vert", "#7f9479"], ["Rose", "#e3b5b0"], ["Bleu", "#4b6f9e"]];
 
-// le sous-type « large » d'un filament : la section ou range son echantillon
-// (10/11/2026) pas de separation par marque : tous les PLA sans finition vont dans « PLA Basic »
-const SECTIONS = ["PLA Basic", "PLA Matte", "PLA Silk", "PLA Wood", "PLA Effets", "PETG", "Techniques", "Indispo"];
-export function sectionOf(f) {
-  const t = String(f.fila_type || f.material || "").toLowerCase();
-  if (!(f.active_spool_count > 0)) return "Indispo";
-  if (/support|tpu|asa|-cf|\bcf\b|pa\b|pc\b|abs/.test(t)) return "Techniques";
-  if (t.includes("petg")) return "PETG";
-  if (t.includes("matte")) return "PLA Matte";
-  if (t.includes("silk")) return "PLA Silk";
-  if (t.includes("wood")) return "PLA Wood";
-  if (/sparkle|glow|galaxy|marble|metal|translucent|rainbow|gradient/.test(t)) return "PLA Effets";
-  return "PLA Basic";
-}
+// les sections d'une planche (10/11/2026) : chacune son nom, les sous-types qu'elle prend (« PLA Basic » peut prendre
+// PLA Basic, PLA Classic, PLA+…) et l'ecart entre ses sous-types (« PLA Effets » : Sparkle, Glow, Marble… espaces de
+// 2 cases). Chacun regle les siennes dans les reglages de la planche ; d'office, elles sont devinees d'apres les
+// sous-types des filaments, sans separation par marque. « Autres » prend ce qui n'est dans aucune, « Indispo » (pas de
+// bobine active) vient toujours en dernier.
+const typeOf = f => String(f.fila_type || f.material || "?").trim();
+const guessSection = t => { const s = t.toLowerCase();
+  if (/^tpu/.test(s)) return "TPU";
+  if (/support|asa|abs|-cf|\bcf\b|\bpa\b|\bpc\b|pa6|pa12/.test(s)) return "Techniques";
+  if (s.includes("petg")) return s.includes("translucent") ? "PETG Translucent" : "PETG";
+  if (s.includes("matte")) return "PLA Matte";
+  if (s.includes("silk")) return "PLA Silk";
+  if (s.includes("wood")) return "PLA Wood";
+  if (/sparkle|glow|galaxy|marble|metal|translucent|rainbow|gradient/.test(s)) return "PLA Effets";
+  return "PLA Basic"; };
+const SECTION_ORDER = ["PLA Basic", "PLA Matte", "PLA Silk", "PLA Wood", "PLA Effets", "PETG", "PETG Translucent", "Techniques", "TPU"];
+const SECTIONS = [...SECTION_ORDER, "Indispo"];
+export const defaultSections = types => SECTION_ORDER.map(label => ({ label, types: types.filter(t => guessSection(t) === label), gap: label === "PLA Effets" ? 2 : 0 }))
+  .filter(s => s.types.length);
+const sectionsOf = (board, filaments) => (board.sections?.length ? board.sections : defaultSections([...new Set(filaments.map(typeOf))].sort()));
+const sectionIn = (f, secs) => (!(f.active_spool_count > 0) ? "Indispo" : secs.find(s => s.types.includes(typeOf(f)))?.label || "Autres");
+export function sectionOf(f) { return !(f.active_spool_count > 0) ? "Indispo" : guessSection(typeOf(f)); }
 
 const key = (r, c) => `${r}:${c}`;
 const fname = f => f.translated_name || f.name;
@@ -61,7 +69,8 @@ function pack(board, groups) {
     const cells = {}; let pos = 0;
     for (let gi = 0; gi < groups.length; gi++) {
       const g = groups[gi];
-      const seq = [...g.items.map(f => ({ t: "s", fid: f.id })), ...Array(g.margin + extra[gi]).fill(null)];
+      const seq = [...(g.parts || [g.items]).flatMap((p, i) => [...(i ? Array(g.gap || 0).fill(null) : []), ...p.map(f => ({ t: "s", fid: f.id }))]),
+        ...Array(g.margin + extra[gi]).fill(null)];
       if (W - (pos % W) <= 3) pos += W - (pos % W);        // pas d'intercalaire dans les 3 dernieres cases : ligne suivante
       cells[key(Math.floor(pos / W), pos % W)] = { t: "d", label: g.label }; pos++;
       for (let i = 0; i < seq.length; i++) {
@@ -74,7 +83,7 @@ function pack(board, groups) {
   };
   const base = groups.map(() => 0);
   if (!lay(base)) return null;
-  const used = groups.reduce((a, g) => a + 1 + g.items.length + g.margin, 0);
+  const used = groups.reduce((a, g) => a + 1 + g.items.length + g.margin + (g.gap || 0) * Math.max(0, (g.parts?.length || 1) - 1), 0);
   const free = Math.max(0, cap - used), tot = groups.reduce((a, g) => a + g.items.length, 0) || 1;
   const extra = groups.map(g => (marginOf(board).spread ? Math.floor(free * g.items.length / tot) : 0));
   for (let guard = 0; guard < 400; guard++) {
@@ -404,7 +413,7 @@ function PickSheet({ filaments, placed, compareHue, onPick, onClose }) {
   </FSheet>;
 }
 
-function LabelSheet({ init = "", onPick, onClose }) {
+function LabelSheet({ init = "", labels = SECTIONS, onPick, onClose }) {
   const [v, setV] = useState(init);
   return <FSheet onClose={onClose}>
     <div style={{ padding: "18px 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -413,7 +422,7 @@ function LabelSheet({ init = "", onPick, onClose }) {
         onKeyDown={e => { if (e.key === "Enter" && v.trim()) onPick(v.trim()); }}
         style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 11px", fontSize: 14, color: "var(--text)", outline: "none" }}/>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {SECTIONS.map(s => <button key={s} type="button" onClick={() => setV(s)} style={{ padding: "4px 10px", borderRadius: 14, border: "1px solid var(--border)",
+        {labels.map(s => <button key={s} type="button" onClick={() => setV(s)} style={{ padding: "4px 10px", borderRadius: 14, border: "1px solid var(--border)",
           background: v === s ? "#14B8A6" : "var(--surface2)", color: v === s ? "#fff" : "var(--text2)", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{s}</button>)}
       </div>
       <button type="button" disabled={!v.trim()} onClick={() => onPick(v.trim())} style={{ height: 40, borderRadius: 12, border: "none", cursor: "pointer",
@@ -422,8 +431,14 @@ function LabelSheet({ init = "", onPick, onClose }) {
   </FSheet>;
 }
 
-function BoardSettings({ board, onSave, onDelete, onClose }) {
+function BoardSettings({ board, types, onSave, onDelete, onClose }) {
   const [b, setB] = useState(board);
+  const secs = b.sections?.length ? b.sections : defaultSections(types.map(x => x.t));
+  const setSecs = v => setB(x => ({ ...x, sections: v }));
+  const usedT = new Set(secs.flatMap(s => s.types)), freeT = types.filter(x => !usedT.has(x.t));
+  const upd = (i, p) => setSecs(secs.map((s, j) => (j === i ? { ...s, ...p } : s)));
+  const mv = (i, d) => { const n = [...secs], j = i + d; if (j < 0 || j >= n.length) return; [n[i], n[j]] = [n[j], n[i]]; setSecs(n); };
+  const sBtn = { width: 28, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", cursor: "pointer", fontSize: 12, flexShrink: 0 };
   const set = (k, v) => setB(x => ({ ...x, [k]: v }));
   const pickModel = id => { const m = BOARD_MODELS.find(x => x.id === id); setB(x => ({ ...x, model: id, ...(m?.rows ? { rows: m.rows, cols: m.cols, rails: m.rails } : {}) })); };
   const num = (k, min, max) => <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, fontWeight: 800, color: "var(--muted)", flex: "1 1 90px" }}>
@@ -454,6 +469,36 @@ function BoardSettings({ board, onSave, onDelete, onClose }) {
         Répartir les cases en trop dans les marges (sinon, elles restent libres à la fin de la planche)</label>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
         Après chaque section, la plus grande des deux marges, plus une case par filament qui attend encore son échantillon.</div>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>Les sections, dans l'ordre</div>
+      {secs.map((s, i) => <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 9px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)" }}>
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+          <input value={s.label} onChange={e => upd(i, { label: e.target.value })} maxLength={40} style={{ flex: 1, minWidth: 0, background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 8, padding: "5px 8px", fontSize: 13, fontWeight: 800, color: "var(--text)", outline: "none" }}/>
+          <label data-tip="Cases libres entre ses sous-types (0 : tous mêlés, par teinte)" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 800, color: "var(--muted)" }}>écart
+            <input type="number" min="0" max="10" value={s.gap || 0} onChange={e => upd(i, { gap: Math.max(0, Math.min(10, parseInt(e.target.value) || 0)) })}
+              style={{ width: 42, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "4px 5px", fontSize: 12.5, color: "var(--text)" }}/></label>
+          <button type="button" onClick={() => mv(i, -1)} style={sBtn} aria-label="Monter">▲</button>
+          <button type="button" onClick={() => mv(i, 1)} style={sBtn} aria-label="Descendre">▼</button>
+          <button type="button" onClick={() => setSecs(secs.filter((_, j) => j !== i))} style={{ ...sBtn, color: "#DC2626" }} aria-label="Retirer la section">✕</button>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+          {s.types.map(t => <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 4px 2px 8px", borderRadius: 10, fontSize: 11.5, fontWeight: 700,
+            background: "color-mix(in srgb, #14B8A6 13%, var(--surface))", color: "var(--text2)" }}>{t}
+            <button type="button" onClick={() => upd(i, { types: s.types.filter(x => x !== t) })} aria-label={`Retirer ${t}`}
+              style={{ border: "none", background: "none", color: "var(--muted)", cursor: "pointer", fontSize: 11, padding: "0 3px" }}>✕</button></span>)}
+          {freeT.length > 0 && <select value="" onChange={e => e.target.value && upd(i, { types: [...s.types, e.target.value] })}
+            style={{ fontSize: 11.5, padding: "3px 4px", borderRadius: 8, border: "1px dashed var(--border)", background: "var(--surface)", color: "var(--muted)" }}>
+            <option value="">＋ sous-type</option>{freeT.map(x => <option key={x.t} value={x.t}>{x.t} ({x.n})</option>)}</select>}
+          {!s.types.length && !freeT.length && <span style={{ fontSize: 11, color: "var(--muted)" }}>Aucun sous-type libre : retire-en un d'une autre section.</span>}
+        </div>
+      </div>)}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => setSecs([...secs, { label: "Nouvelle section", types: [], gap: 0 }])} style={{ ...sBtn, width: "auto", padding: "0 10px", fontWeight: 800, color: "#14B8A6" }}>＋ Section</button>
+        <button type="button" onClick={() => setSecs(defaultSections(types.map(x => x.t)))} style={{ ...sBtn, width: "auto", padding: "0 10px", fontWeight: 800 }}>↺ D'après mes filaments</button>
+      </div>
+      {freeT.length > 0 && <div style={{ fontSize: 11.5, fontWeight: 700, color: "#B45309" }}>Dans aucune section (rangés dans « Autres ») : {freeT.map(x => x.t).join(", ")}</div>}
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
+        « Indispo » (les filaments sans bobine active) vient toujours en dernier. L'écart met des cases libres entre les sous-types d'une même section (PLA Effets : Sparkle, Glow, Marble…).</div>
       {lost > 0 && <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626" }}>⚠ {lost} case{lost > 1 ? "s" : ""} occupée{lost > 1 ? "s" : ""} sortent de la planche : elles seront retirées.</div>}
       <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>La couleur</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -527,16 +572,22 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     else if (v === "del") setCells(bid, cs => { delete cs[k]; return cs; });
   };
 
+  // les sous-types des filaments, les plus nombreux d'abord : ce que les sections se partagent
+  const types = useMemo(() => { const m = {}; filaments.forEach(f => { const t = typeOf(f); m[t] = (m[t] || 0) + 1; });
+    return Object.entries(m).map(([t, n]) => ({ t, n })).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t)); }, [filaments]);
   const addBoard = () => { const nb = newBoard((boards?.length || 0) + 1); save([...(boards || []), nb]); setCur(nb.id); setCfg(nb); };
   const auto = async () => {
     const others = new Set([...placed.entries()].filter(([, p]) => p.b.id !== board.id).map(([fid]) => fid));
     const mine = filaments.filter(f => f.swatch && !others.has(f.id));
     if (!mine.length) { showAlert("Aucun échantillon à ranger sur cette planche."); return; }
-    const groups = SECTIONS.map(label => {
-      const items = mine.filter(f => sectionOf(f) === label).sort((a, b) => compareHue(a.color || "", b.color || ""));
-      const todo = label === "Indispo" ? 0 : filaments.filter(f => !f.swatch && f.active_spool_count > 0 && sectionOf(f) === label).length;
+    const secs = sectionsOf(board, filaments), hue = (a, b) => compareHue(a.color || "", b.color || "");
+    const groups = [...new Set([...secs.map(s => s.label), "Autres", "Indispo"])].map(label => {
+      const sec = secs.find(s => s.label === label), items = mine.filter(f => sectionIn(f, secs) === label);
+      // une section a ecart : ses sous-types dans leur ordre, chacun par teinte ; sinon tout par teinte
+      const parts = sec?.gap > 0 ? sec.types.map(t => items.filter(f => typeOf(f) === t).sort(hue)).filter(p => p.length) : [items.sort(hue)];
+      const todo = label === "Indispo" ? 0 : filaments.filter(f => !f.swatch && f.active_spool_count > 0 && sectionIn(f, secs) === label).length;
       const mg = marginOf(board);
-      return { label, items, margin: Math.max(mg.min, Math.ceil((items.length + todo) * mg.pct / 100)) + todo };
+      return { label, items: parts.flat(), parts, gap: sec?.gap || 0, margin: Math.max(mg.min, Math.ceil((items.length + todo) * mg.pct / 100)) + todo };
     }).filter(g => g.items.length);
     setBusy(true);
     const cells = pack(board, groups);
@@ -617,9 +668,9 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     </div>}
     {pick && <PickSheet filaments={filaments} placed={placed} compareHue={compareHue} onClose={() => setPick(null)}
       onPick={f => { const p = pick; setPick(null); setCells(p.bid, cs => { cs[p.k] = { t: "s", fid: f.id }; return cs; }); }}/>}
-    {lab && <LabelSheet init={lab.init} onClose={() => setLab(null)}
+    {lab && <LabelSheet init={lab.init} labels={[...sectionsOf(boards.find(b => b.id === lab.bid) || {}, filaments).map(s => s.label), "Indispo"]} onClose={() => setLab(null)}
       onPick={label => { const l = lab; setLab(null); setCells(l.bid, cs => { cs[l.k] = { t: "d", label }; return cs; }); }}/>}
-    {cfg && <BoardSettings board={cfg} onClose={() => setCfg(null)}
+    {cfg && <BoardSettings board={cfg} types={types} onClose={() => setCfg(null)}
       onSave={b => { setCfg(null); const cells = Object.fromEntries(Object.entries(b.cells).filter(([k]) => { const [r, c] = k.split(":").map(Number); return r < b.rows && c < b.cols; }));
         save(boards.map(x => x.id === b.id ? { ...b, cells, rails: Math.min(b.rails, b.cols) } : x)); }}
       onDelete={async () => { if (!(await showConfirm(`Supprimer « ${cfg.name} » ? Ses échantillons repartent dans « à placer ».`))) return;
