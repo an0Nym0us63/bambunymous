@@ -555,7 +555,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     for (const b of boards || []) for (const [k, c] of Object.entries(b.cells)) if (c.t === "s") m.set(c.fid, { b, k }); return m; }, [boards]);
   const board = (boards || []).find(b => b.id === cur) || boards?.[0];
   const unplaced = filaments.filter(f => f.swatch && !placed.has(f.id));
-  const waiting = filaments.filter(f => !f.swatch && !ign.has(f.id) && !placed.has(f.id)).length;   // sans echantillon ni place fantome
+  const waiting = filaments.filter(f => !f.swatch && f.active_spool_count > 0 && !ign.has(f.id) && !placed.has(f.id)).length;   // sans echantillon ni place fantome
 
   const save = async next => {
     const prev = boards;
@@ -622,9 +622,9 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   const addBoard = () => { const nb = newBoard((boards?.length || 0) + 1); save([...(boards || []), nb]); setCur(nb.id); setCfg(nb); };
   const auto = async () => {
     const others = new Set([...placed.entries()].filter(([, p]) => p.b.id !== board.id).map(([fid]) => fid));
-    // (10/11/2026) aussi les echantillons encore a faire (sans echantillon, pas ignores dans les points d'attention) :
-    // leur place est gardee, en fantome
-    const mine = filaments.filter(f => (f.swatch || !ign.has(f.id)) && !others.has(f.id));
+    // (10/11/2026) aussi les echantillons encore a faire : sans echantillon mais avec une bobine active, et pas ignores
+    // dans les points d'attention ; leur place est gardee, en fantome
+    const mine = filaments.filter(f => (f.swatch || (f.active_spool_count > 0 && !ign.has(f.id))) && !others.has(f.id));
     if (!mine.length) { showAlert("Aucun échantillon à ranger sur cette planche."); return; }
     const secs = sectionsOf(board, filaments), hue = (a, b) => compareHue(a.color || "", b.color || "");
     const groups = [...new Set([...secs.map(s => s.label), "Autres", "Indispo"])].map(label => {
