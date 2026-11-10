@@ -3634,7 +3634,10 @@ export default function Filaments() {
     catalog:"Filaments", gallery:"Galerie"}[tab] || tab }`);
   const [deepFil, setDeepFil] = useState(null);   // fiche ouverte via /filaments?id=XXX
   const [deepErr, setDeepErr] = useState(null);
-  const [galleryMode, setGalleryMode] = useState("photos");
+  // (10/11/2026) la vue de la galerie (Photos, Nuancier, Planches) est retenue dans ce navigateur : un rafraichissement
+  // revenait sur Photos
+  const [galleryMode, setGalleryMode] = useState(() => { try { const v = localStorage.getItem("bn_gal_mode"); return ["photos", "swatch", "board"].includes(v) ? v : "photos"; } catch { return "photos"; } });
+  useEffect(() => { try { localStorage.setItem("bn_gal_mode", galleryMode); } catch { /* indisponible */ } }, [galleryMode]);
   const [allFilaments, setAllFilaments] = useState([]);
   const [galQ, setGalQ] = useState("");
   const [galFilterOpen, setGalFilterOpen] = useState(false);
