@@ -25,7 +25,8 @@ export const BOARD_MODELS = [
 export const BOARD_COLORS = [["Noir", "#1f1f1f"], ["Blanc", "#f2f1ec"], ["Bois", "#c9a77c"], ["Gris", "#8f969c"], ["Vert", "#7f9479"], ["Rose", "#e3b5b0"], ["Bleu", "#4b6f9e"]];
 
 // le sous-type « large » d'un filament : la section ou range son echantillon
-const SECTIONS = ["PLA Basic", "Basic marques", "PLA Matte", "PLA Silk", "PLA Wood", "PLA Effets", "PETG", "Techniques", "Indispo"];
+// (10/11/2026) pas de separation par marque : tous les PLA sans finition vont dans « PLA Basic »
+const SECTIONS = ["PLA Basic", "PLA Matte", "PLA Silk", "PLA Wood", "PLA Effets", "PETG", "Techniques", "Indispo"];
 export function sectionOf(f) {
   const t = String(f.fila_type || f.material || "").toLowerCase();
   if (!(f.active_spool_count > 0)) return "Indispo";
@@ -35,7 +36,7 @@ export function sectionOf(f) {
   if (t.includes("silk")) return "PLA Silk";
   if (t.includes("wood")) return "PLA Wood";
   if (/sparkle|glow|galaxy|marble|metal|translucent|rainbow|gradient/.test(t)) return "PLA Effets";
-  return f.manufacturer === "Bambu Lab" ? "PLA Basic" : "Basic marques";
+  return "PLA Basic";
 }
 
 const key = (r, c) => `${r}:${c}`;
@@ -61,7 +62,7 @@ function pack(board, groups) {
     for (let gi = 0; gi < groups.length; gi++) {
       const g = groups[gi];
       const seq = [...g.items.map(f => ({ t: "s", fid: f.id })), ...Array(g.margin + extra[gi]).fill(null)];
-      if (W - (pos % W) === 1) pos++;                       // pas d'intercalaire seul en bout de ligne
+      if (W - (pos % W) <= 3) pos += W - (pos % W);        // pas d'intercalaire dans les 3 dernieres cases : ligne suivante
       cells[key(Math.floor(pos / W), pos % W)] = { t: "d", label: g.label }; pos++;
       for (let i = 0; i < seq.length; i++) {
         if (seq[i]) cells[key(Math.floor(pos / W), pos % W)] = seq[i];
