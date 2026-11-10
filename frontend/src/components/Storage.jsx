@@ -1153,7 +1153,8 @@ export function StorageMap({ spools, all = null, onOpen, renderSpool, admin, fil
   const printerHits = printer.filter(s => matchIds.has(s.id)).length;
   // les AMS, puis les HT, et le support externe toujours en dernier (07/11/2026)
   const unitRank = u => /^externe/i.test(u) ? 2 : /^HT-/i.test(u) ? 1 : 0;
-  const units = [...new Set(printer.map(s => unitOf(s.location)))].sort((a, b) => unitRank(a) - unitRank(b) || a.localeCompare(b, "fr", { numeric: true }));
+  // (10/11/2026) aussi les AMS sans bobine : leurs emplacements vides se voient
+  const units = [...new Set([...printer.map(s => unitOf(s.location)), ...(amsList || []).filter(a => !isExternal(a.id) && (a.trays || []).length).map(a => amsName(a.id))])].sort((a, b) => unitRank(a) - unitRank(b) || a.localeCompare(b, "fr", { numeric: true }));
   // (10/11/2026) placees comme sur la tuile AMS de l'accueil (la disposition choisie dans ses reglages) ; l'externe dessous
   const idOf = Object.fromEntries((amsList || []).map(a => [amsName(a.id), a.id]));
   const placedU = units.filter(u => idOf[u] != null && !isExternal(idOf[u]));
@@ -1271,12 +1272,23 @@ export function StorageMap({ spools, all = null, onOpen, renderSpool, admin, fil
     <SpoolIdHost/>
     {/* (09/11/2026) condense comme les rangements : chaque unite a sa largeur, les bobines debout, serrees, le slot dans le coin */}
     {printer.length > 0 && <Section k="printer" icon={<Printer size={16} strokeWidth={2.2}/>} title="Dans l'imprimante" n={filtering ? printerHits : printer.length} tone="#0EA5E9">
-      {(() => { const Unit = ({ u }) => { const list = printer.filter(s => unitOf(s.location) === u).sort((a, b) => (a.location || "").localeCompare(b.location || "", "fr", { numeric: true }));
+      {(() => {
+        // (10/11/2026) les emplacements d'une unite, vides compris (comme sur la tuile AMS) : autant que de slots remontes par
+        // l'imprimante ; une bobine sans numero de slot (ou au-dela) vient a la suite
+        const slotsOf = u => { const a = (amsList || []).find(x => amsName(x.id) === u), mine = printer.filter(s => unitOf(s.location) === u);
+          const n = a ? (isHt(a.id) ? 1 : (a.trays || []).length) : 0;
+          if (!n) return mine.sort((x, y) => (x.location || "").localeCompare(y.location || "", "fr", { numeric: true }));
+          const at = i => mine.find(s => slotTag(s) === String(i)) || (n === 1 ? mine.find(s => !slotTag(s)) : null);
+          const out = Array.from({ length: n }, (_, i) => at(i + 1) || { empty: true, n: i + 1 });
+          return [...out, ...mine.filter(s => !out.includes(s))]; };
+        const Unit = ({ u }) => { const list = slotsOf(u);
         return <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, borderRadius: 10, border: "1px solid var(--border)", minWidth: 0,
           background: "color-mix(in srgb, #0EA5E9 4%, var(--surface2))" }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: "var(--text2)", textAlign: "center" }}>{u}</div>
           <div style={{ display: "grid", gap: 2, gridTemplateColumns: `repeat(${Math.max(1, list.length)}, minmax(0, ${CELL_W("v")}px))` }}>
-            {list.map(s => { const off = !matchIds.has(s.id);
+            {list.map(s => { if (s.empty) return <span key={`e${s.n}`} className="bn-cell bn-free bn-tight bn-tightf" data-tip={`${u} · emplacement ${s.n} : vide`} style={{ cursor: "default" }}>
+                {list.length > 1 && <span className="bn-num">{s.n}</span>}<span style={{ display: "block", height: "min(48px, 140cqw)" }}/></span>;
+              const off = !matchIds.has(s.id);
               return <button key={s.id} type="button" className={`bn-cell bn-tight${filtering && !off ? " bn-match" : ""}`} onClick={() => !off && onOpen(s)} {...idTip(s)}
               style={off ? { opacity: 0.3, cursor: "default" } : undefined}>
               {slotTag(s) && <span className="bn-num">{slotTag(s)}</span>}
@@ -1285,7 +1297,7 @@ export function StorageMap({ spools, all = null, onOpen, renderSpool, admin, fil
         // (10/11/2026) les colonnes retrecissent toutes dans la meme proportion : en max-content, la colonne du HT (une bobine)
         // gardait sa pleine largeur pendant que celles des AMS se serraient, et sa bobine, qui suit la largeur de sa case, sortait plus grande
         const natW = n => n * CELL_W("v") + (n - 1) * 2 + 10;
-        const colW = uCols.map(col => natW(Math.max(1, ...col.filter(Boolean).map(a => printer.filter(s => unitOf(s.location) === a.u).length))));
+        const colW = uCols.map(col => natW(Math.max(1, ...col.filter(Boolean).map(a => slotsOf(a.u).length))));
         return <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", maxWidth: "100%", minWidth: 0 }}>
           {uCols.length > 0 && <div style={{ display: "grid", gap: 6, alignItems: "start", width: `min(100%, ${colW.reduce((a, b) => a + b, 0) + 6 * (colW.length - 1)}px)`,
             gridTemplateColumns: colW.map(w => `minmax(0, ${w}fr)`).join(" ") }}>
