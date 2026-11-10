@@ -1502,7 +1502,7 @@ async def _context(tz: int | None):
                     d["_ftype"][int(fid)] = (mt, ft)
                     # sa pastille (06/11/2026) : couleurs, multicolore, finition
                     d.setdefault("_fcol", {})[int(fid)] = {"color": col, "colors_array": arr, "multicolor_type": mct, "fila_finish": fin,
-                                                          "name": nm, "fila_type": ft}
+                                                          "name": nm, "fila_type": ft, "material": mt, "brand": br}
     except Exception:
         logger.exception("[PLANNING] noms des filaments")
     jobs, changed = _jobs(q.get("models") or [], d, stock_of)

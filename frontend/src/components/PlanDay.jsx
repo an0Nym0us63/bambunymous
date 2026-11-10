@@ -1203,19 +1203,31 @@ const lab = { fontSize: 12.5, fontWeight: 900, color: "var(--text2)", marginBott
 const hint = { fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45, marginTop: 5 };
 
 // les filaments du plateau (08/11/2026), meme sans rien a charger : leur pastille, et le slot de l'AMS ou chacun est
-// en ce moment (« ● Marron foncé · B1 ») ; celui a charger n'a pas encore de slot
+// en ce moment (« ● Marron foncé · B1 ») ; (10/11/2026) avec sa marque et son sous-type, en petit, et pour celui a
+// charger le slot ou il ira si l'echange propose est suivi (« → C4 », en orange)
+const slotShort = s => String(s || "").replace(/^AMS[- ]?/i, "").replace(/\s*slot\s*/i, "");
+const brandShort = b => String(b || "").replace(/\s+Lab$/i, "");
 export function UsedFils({ j }) {
   const ams = usePrinter(s => s.status?.ams_list);
   const fils = (j.fils || []).filter(f => f.filament_id);
   if (!fils.length) return null;
   const slotOf = fid => { for (const a of ams || []) for (const t of a.trays || []) if (t.spool_info?.filament_id === fid) return slotLabel(a.id, t.id); return null; };
+  const destOf = fid => { const i = (j.load_ids || []).indexOf(fid);
+    if (i < 0) return null;
+    const os = j.out_spots?.[i]?.slot, out = outOf(j, i)[1];
+    return os ? slotShort(os) : out ? slotOf(out) || "?" : freeOf(j, i) ? "libre" : "?"; };
   return <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 2 }}>
-    {fils.map((f, i) => { const sl = slotOf(f.filament_id);
-      return <span key={i} data-tip={`${f.name || "filament"}${f.g ? ` · ${f.g} g` : ""}${sl ? ` · dans ${sl}` : " · à charger"}`}
-        style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: "2px 8px 2px 5px", borderRadius: 20, fontSize: 11, fontWeight: 800,
-          color: "var(--text2)", background: "var(--surface2)", border: "1px solid var(--border)", maxWidth: "100%", minWidth: 0 }}>
+    {fils.map((f, i) => { const fc = FCOL[f.filament_id] || {};
+      const sl = slotOf(f.filament_id), dest = sl ? null : destOf(f.filament_id);
+      const sub = [brandShort(fc.brand), fc.fila_type || fc.material || f.type].filter(Boolean).join(" ");
+      return <span key={i} data-tip={`${f.name || "filament"}${sub ? ` · ${fc.brand || ""} ${fc.fila_type || fc.material || f.type || ""}`.replace(/\s+/g, " ") : ""}${f.g ? ` · ${Math.round(f.g)} g` : ""}${
+          sl ? ` · dans ${sl}` : dest ? ` · à charger, ira en ${dest === "libre" ? "place libre" : dest} si tu suis l'échange` : " · à charger"}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px 2px 5px", borderRadius: 20, fontSize: 11, fontWeight: 800, lineHeight: 1.3,
+          color: "var(--text2)", background: "var(--surface2)", border: `1px solid ${sl ? "var(--border)" : "color-mix(in srgb, #EA580C 40%, var(--border))"}`, maxWidth: "100%", minWidth: 0 }}>
         <FilDot id={f.filament_id} size={11}/>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{f.name}</span>
-        {sl && <span style={{ color: "#0284C7", fontWeight: 900, marginLeft: 3, flexShrink: 0 }}>· {sl}</span>}</span>; })}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{f.name}
+          {sub && <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--muted)" }}> · {sub}</span>}</span>
+        {sl ? <span style={{ color: "#0284C7", fontWeight: 900, flexShrink: 0 }}>· {sl}</span>
+          : dest && <span style={{ color: "#EA580C", fontWeight: 900, flexShrink: 0 }}>→ {dest}</span>}</span>; })}
   </div>;
 }
