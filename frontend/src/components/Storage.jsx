@@ -1282,8 +1282,13 @@ export function StorageMap({ spools, all = null, onOpen, renderSpool, admin, fil
               {slotTag(s) && <span className="bn-num">{slotTag(s)}</span>}
               <span className="bn-band"><SpoolEdge s={s} vertical len="min(48px, 140cqw)" thick="min(24px, 70cqw)"/></span></button>; })}
           </div></div>; };
+        // (10/11/2026) les colonnes retrecissent toutes dans la meme proportion : en max-content, la colonne du HT (une bobine)
+        // gardait sa pleine largeur pendant que celles des AMS se serraient, et sa bobine, qui suit la largeur de sa case, sortait plus grande
+        const natW = n => n * CELL_W("v") + (n - 1) * 2 + 10;
+        const colW = uCols.map(col => natW(Math.max(1, ...col.filter(Boolean).map(a => printer.filter(s => unitOf(s.location) === a.u).length))));
         return <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start", maxWidth: "100%", minWidth: 0 }}>
-          {uCols.length > 0 && <div style={{ display: "grid", gap: 6, alignItems: "start", maxWidth: "100%", gridTemplateColumns: `repeat(${uCols.length}, minmax(0, max-content))` }}>
+          {uCols.length > 0 && <div style={{ display: "grid", gap: 6, alignItems: "start", width: `min(100%, ${colW.reduce((a, b) => a + b, 0) + 6 * (colW.length - 1)}px)`,
+            gridTemplateColumns: colW.map(w => `minmax(0, ${w}fr)`).join(" ") }}>
             {uCols.flatMap((col, ci) => col.map((a, ri) => a && <div key={a.u} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0 }}><Unit u={a.u}/></div>))}</div>}
           {restU.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{restU.map(u => <Unit key={u} u={u}/>)}</div>}
         </div>; })()}
