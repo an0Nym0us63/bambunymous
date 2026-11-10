@@ -10,6 +10,7 @@ import { installChunkReload } from "./utils/importRetry";
 import { installDragClickGuard } from "./utils/dragClickGuard";
 import { installEscClose } from "./utils/escClose";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { registerSW } from "./utils/webPush";
 
 // Coquille Android : les rangees horizontales n'arment plus le tirer-pour-rafraichir.
 installPullRefreshGuard();
@@ -41,6 +42,9 @@ document.addEventListener("touchstart", e => {
 const _mtEnd = e => { if (!e.touches.length) document.documentElement.classList.remove("bn-multitouch"); };
 document.addEventListener("touchend", _mtEnd, { capture: true, passive: true });
 document.addEventListener("touchcancel", _mtEnd, { capture: true, passive: true });
+
+// (10/11/2026) le service worker de la PWA : les notifications systeme (Web Push)
+registerSW();
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 // le dernier filet (06/11/2026) : une erreur hors des pages (barre, menu) ne laisse plus une page blanche

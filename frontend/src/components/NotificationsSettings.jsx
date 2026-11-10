@@ -73,7 +73,7 @@ export default function NotificationsSettings() {
       ...(token !== undefined ? { token } : {}) });
     apply(data); setTokEdit(null);
   }, "Enregistré.");
-  const KIND_FR = { ntfy: "ntfy", telegram: "Telegram", app: "l'appli Android" };
+  const KIND_FR = { ntfy: "ntfy", telegram: "Telegram", app: "l'appli (Android et web)" };
   const where = () => {
     const l = Object.keys(KIND_FR).filter(k => cfg?.channels?.[k]).map(k => KIND_FR[k]);
     return l.length > 1 ? `${l.slice(0, -1).join(", ")} et ${l[l.length - 1]}` : l[0] || "aucun canal";
@@ -155,7 +155,7 @@ export default function NotificationsSettings() {
   return (<>
     {/* ── Canaux : un onglet chacun, chacun active ou non ── */}
     <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-      {[["journal", "Journal"], ["app", "Appli Android"], ["ntfy", "ntfy"], ["telegram", "Telegram"]].map(([k, l]) => (
+      {[["journal", "Journal"], ["app", "Appli"], ["ntfy", "ntfy"], ["telegram", "Telegram"]].map(([k, l]) => (
         <button key={k} onClick={() => setChTab(k)} style={{ flex:1, padding:"8px 10px", borderRadius:8, fontSize:12.5,
           fontWeight:700, cursor:"pointer", border:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
           background: chTab === k ? "#3b82f6" : "transparent", color: chTab === k ? "white" : "var(--muted)" }}>
@@ -287,7 +287,7 @@ export default function NotificationsSettings() {
     </>)}
 
     {/* ── Appli Android (UnifiedPush, ntfy en distributeur) ── */}
-    {chTab === "app" && channelCard("app", "Appli Android", <>
+    {chTab === "app" && channelCard("app", "Appli (Android et web)", <>
         Les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par
         section (son et vibration réglables dans Android), et la bonne page s'ouvre au toucher. Il faut l'appli
         <b> ntfy</b> sur le téléphone : elle les achemine (UnifiedPush).</>, <>
@@ -303,12 +303,13 @@ export default function NotificationsSettings() {
         </div>
       ) : (
         <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px" }}>
-          Pour inscrire un téléphone, ouvre cette page dans l'appli Android BambuNymous.</p>
+          Pour inscrire un téléphone : ouvre cette page dans l'appli Android BambuNymous, ou, sur l'appli web installée (iPhone : écran d'accueil ;
+          Android : Chrome), touche « 🔔 Activer les notifications ici » dans Mes notifications.</p>
       )}
       {devices.map(d => (
         <div key={d.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderTop:"1px solid var(--border)", fontSize:12.5 }}>
           <span style={{ flex:1, minWidth:0 }}>
-            <span style={{ fontWeight:700, color:"var(--text)" }}>📱 {d.name || "Téléphone"}</span>
+            <span style={{ fontWeight:700, color:"var(--text)" }}>{d.kind === "web" ? "🌐" : "📱"} {d.name || "Téléphone"}</span>
             <span style={{ fontSize:11, color:"var(--muted)", fontWeight:600 }}> · {d.user ? `👤 ${d.user}` : "propriétaire inconnu"}</span>
             <span style={{ display:"block", fontSize:11, color: d.last_err ? "#ef4444" : "var(--muted)" }}>
               {d.last_err ? `Échec ${d.last_err}` : d.last_ok ? `Dernier envoi : ${new Date(d.last_ok).toLocaleString("fr-FR")}`
@@ -413,7 +414,7 @@ export default function NotificationsSettings() {
       const tOf = savedTopics.find(t => t.topic === sec.route?.ntfy) || savedTopics[0];
       const cOf = savedChats.find(c => c.chat_id === sec.route?.telegram) || savedChats[0];
       const dests = [on.ntfy && tOf && `ntfy · ${topicName(tOf)}`, on.telegram && cOf && `Telegram · ${chatName(cOf)}`,
-                     on.app && devices.length && "Appli Android",
+                     on.app && devices.length && "Appli",
                      on.journal && (cfg.journal?.all || evs.some(ev => cfg.journal?.events?.[ev.id])) && "Journal"].filter(Boolean);
       const pickTopic = on.ntfy && savedTopics.length > 1;
       const pickChat = on.telegram && savedChats.length > 1;

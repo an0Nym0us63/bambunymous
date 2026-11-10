@@ -743,7 +743,7 @@ def _public(cfg: dict) -> dict:
                     "events": {k: journal_on({**cfg, "channels": {**cfg["channels"], "journal": True}}, k) for k in EVENTS}},
         # Appli Android (UnifiedPush) : les telephones inscrits, jamais leur adresse
         # d'envoi (elle suffit a leur ecrire).
-        "devices": [{k: d.get(k) for k in ("id", "name", "user", "added", "last_ok", "last_err")} for d in cfg.get("devices") or []],
+        "devices": [{k: d.get(k) for k in ("id", "name", "user", "added", "last_ok", "last_err", "kind")} for d in cfg.get("devices") or []],
         "ntfy": {"url": n.get("url") or "https://ntfy.sh", "topic": n.get("topic") or "",
                  "topics": n.get("topics") or [],
                  "app_url": n.get("app_url") or "", "has_token": bool(n.get("token"))},
@@ -1085,9 +1085,10 @@ def _endpoint_ok(u: str) -> str:
     return u
 
 
-async def add_device(endpoint: str, name: str = "", user: str = "") -> dict:
+async def add_device(endpoint: str, name: str = "", user: str = "", keys: dict | None = None) -> dict:
     """Inscrit (ou met a jour) un telephone de `user` ; la meme adresse n'est
-    gardee qu'une fois (reinscrite par un autre compte, elle change de main)."""
+    gardee qu'une fois (reinscrite par un autre compte, elle change de main).
+    (10/11/2026) `keys` : un abonnement Web Push de la PWA (iPhone, Android, ordinateur), ses cles p256dh et auth."""
     import secrets
     from datetime import datetime, timezone
     endpoint = _endpoint_ok(endpoint)
@@ -1104,8 +1105,61 @@ async def add_device(endpoint: str, name: str = "", user: str = "") -> dict:
         d["name"] = str(name).strip()[:60]
     if user:
         d["user"] = user
+    if keys:
+        if not (keys.get("p256dh") and keys.get("auth")):
+            raise NotifyError("Abonnement incomplet (clés manquantes)")
+        d["kind"], d["keys"] = "web", {"p256dh": str(keys["p256dh"])[:200], "auth": str(keys["auth"])[:100]}
     await _save(cfg)
     return _public(cfg)
+
+
+# ── PWA : Web Push (10/11/2026) ──────────────────────────────────────────────
+# Les notifications systeme de l'appli installee (ecran d'accueil sur iPhone, Chrome sur Android, ordinateur) : une
+# paire de cles VAPID generee une fois et gardee dans NOTIFY_CONFIG (la privee ne quitte jamais le serveur), chaque
+# appareil abonne devient un « telephone » de l'appli (kind "web"), avec les memes choix que l'appli Android.
+def _vapid(cfg: dict) -> dict:
+    w = cfg.get("webpush") or {}
+    if not w.get("priv"):
+        import base64
+        from py_vapid import Vapid01
+        from cryptography.hazmat.primitives import serialization
+        v = Vapid01()
+        v.generate_keys()
+        raw = v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+        w = {"priv": v.private_pem().decode(), "pub": base64.urlsafe_b64encode(raw).decode().rstrip("=")}
+        cfg["webpush"] = w
+    return w
+
+
+async def webpush_key() -> str:
+    """La cle publique VAPID (applicationServerKey du navigateur) ; creee au premier appel."""
+    cfg = await _load()
+    had = bool((cfg.get("webpush") or {}).get("priv"))
+    w = _vapid(cfg)
+    if not had:
+        await _save(cfg)
+    return w["pub"]
+
+
+def _post_web(cfg, d: dict, body: bytes) -> None:
+    """Un envoi Web Push (chiffre, signe VAPID). Un abonnement perime (404 / 410) est marque « gone »."""
+    from pywebpush import webpush, WebPushException
+    from py_vapid import Vapid01
+    w = cfg.get("webpush") or {}
+    if not w.get("priv"):
+        raise NotifyError("Clés Web Push absentes")
+    app = ((cfg.get("ntfy") or {}).get("app_url") or "").strip()
+    sub = app if app.startswith("https://") else "mailto:bambunymous@example.com"
+    try:
+        webpush({"endpoint": d["endpoint"], "keys": d.get("keys") or {}}, data=body,
+                vapid_private_key=Vapid01.from_pem(w["priv"].encode()), vapid_claims={"sub": sub},
+                ttl=86400, headers={"Urgency": "high"}, timeout=15)
+    except WebPushException as e:
+        st = getattr(getattr(e, "response", None), "status_code", None)
+        if st in (404, 410):
+            d["gone"] = True
+            raise NotifyError(f"HTTP {st}, abonnement expiré : réactive les notifications sur cet appareil")
+        raise NotifyError(f"HTTP {st}" if st else "envoi refusé")
 
 
 async def remove_device(dev_id: str = "", endpoint: str = "", user: str = "", admin: bool = True) -> dict:
@@ -1133,7 +1187,7 @@ def me_view(cfg, user: str) -> dict:
         "sections": [{"id": k, "label": v} for k, v in SECTIONS],
         "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
                     "app": app_wants(cfg, user, k), "mine": app_wants(cfg, user, k)} for k, v in EVENTS.items()],
-        "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err")}
+        "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err", "kind")}
                     for d in cfg.get("devices") or [] if (d.get("user") or "") == user],
     }
 
@@ -1220,6 +1274,14 @@ def _post_devices(cfg, devices, title, message, click, priority, section, attach
         # souvent ouverts en ecriture, mais pas toujours)
         auth = {"Authorization": f"Bearer {n['token']}"} if n.get("token") and urlparse(d["endpoint"]).netloc == ntfy_host else {}
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if d.get("kind") == "web":
+            try:
+                _post_web(cfg, d, body)
+                d["last_ok"], d["last_err"] = now, None
+            except Exception as e:
+                d["last_err"] = f"{now[:16]} : {e if isinstance(e, NotifyError) else type(e).__name__}"
+                errs.append(f"{d.get('name') or 'appareil'} : {d['last_err'].split(' : ', 1)[1]}")
+            continue
         try:
             r = session().post(d["endpoint"], data=body, headers={"Content-Type": "application/json",
                                                                  "TTL": "86400", "Urgency": "high", **auth}, timeout=15)
@@ -1237,6 +1299,9 @@ def _post_devices(cfg, devices, title, message, click, priority, section, attach
         except Exception as e:
             d["last_err"] = f"{now[:16]} : {e if isinstance(e, NotifyError) else type(e).__name__}"
             errs.append(f"{d.get('name') or 'téléphone'} : {d['last_err'].split(' : ', 1)[1]}")
+    # un abonnement Web Push expire (desinstalle, permission retiree) : oublie
+    if any(d.get("gone") for d in devices):
+        cfg["devices"] = [x for x in cfg.get("devices") or [] if not x.get("gone")]
     return errs
 
 
@@ -1274,7 +1339,7 @@ def _on(cfg) -> list:
     return [k for k in KINDS if (cfg.get("channels") or {}).get(k)]
 
 
-_KIND_FR = {"ntfy": "ntfy", "telegram": "Telegram", "app": "l'appli Android", "journal": "le journal"}
+_KIND_FR = {"ntfy": "ntfy", "telegram": "Telegram", "app": "l'appli (Android et web)", "journal": "le journal"}
 
 
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
@@ -1305,7 +1370,7 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     if not kinds:
         if (cfg.get("channels") or {}).get("journal") and event in EVENTS:
             return                          # le journal seul : c'est fait
-        raise NotifyError("Aucun canal activé (ntfy, Telegram ou appli Android)")
+        raise NotifyError("Aucun canal activé (ntfy, Telegram ou appli)")
     # ntfy et Telegram : seulement si l'administrateur a active ce type (un
     # envoi sans type, essai compris, part partout)
     if event in EVENTS and not global_on(cfg, event):
@@ -1331,13 +1396,13 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
             errors.append(str(e))
     if "app" in kinds:
         if not devs:
-            errors.append("Appli Android : aucun téléphone inscrit")
+            errors.append("Appli : aucun appareil inscrit")
         else:
             errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach, log_id,
                                            icon if icon != app_link(cfg, "/icon-192.png") else None)
             await _save(cfg)                    # derniers succes / echecs par telephone
             if len(errs) == len(devs):
-                errors.append("Appli Android : " + " · ".join(errs))
+                errors.append("Appli : " + " · ".join(errs))
             else:
                 for e in errs:
                     logger.warning(f"[NOTIF] appli : {e}")

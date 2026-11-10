@@ -821,6 +821,10 @@ if STATIC_DIR.exists():
                     return FileResponse(str(candidate), filename=candidate.name,
                                         media_type="application/vnd.android.package-archive",
                                         headers={"Cache-Control": "no-cache"})
+                if full_path == "sw.js":
+                    # le service worker de la PWA (notifications, 10/11/2026) : toujours revalide, portee sur tout le site
+                    return FileResponse(str(candidate), media_type="application/javascript",
+                                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
                 if full_path.startswith("doc/"):
                     # le guide change a chaque version : revalider plutot que garder un vieux chapitre
                     return FileResponse(str(candidate), headers={"Cache-Control": "no-cache"})

@@ -99,6 +99,21 @@ async def notify_add_device(body: dict = Body({}), acc=Depends(require_own_accou
     return await N.me_config(acc[0])
 
 
+@router.get("/webpush/key")
+async def notify_webpush_key(acc=Depends(require_own_account)):
+    """(10/11/2026) La cle publique VAPID, pour abonner la PWA de cet appareil."""
+    return {"key": await N.webpush_key()}
+
+
+@router.post("/webpush")
+async def notify_webpush_add(body: dict = Body({}), acc=Depends(require_own_account)):
+    """La PWA s'abonne : {subscription: {endpoint, keys: {p256dh, auth}}, name}."""
+    sub = body.get("subscription") if isinstance(body.get("subscription"), dict) else {}
+    await _call(N.add_device(str(sub.get("endpoint") or ""), str(body.get("name") or ""), acc[0],
+                             keys=sub.get("keys") if isinstance(sub.get("keys"), dict) else {"p256dh": "", "auth": ""}))
+    return await N.me_config(acc[0])
+
+
 @router.delete("/devices/{dev_id}")
 async def notify_remove_device(dev_id: str, acc=Depends(require_own_account)):
     await _call(N.remove_device(dev_id, "", acc[0], _is_admin(acc)))

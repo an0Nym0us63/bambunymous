@@ -83,12 +83,12 @@
   </section>
 
   <section id="notifications-canaux-appli">
-    <h3>Appli Android</h3>
-    <p>Les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par section (son et vibration réglables dans Android), et la bonne page s'ouvre quand tu la touches. Il faut l'appli <b>ntfy</b> sur le téléphone : c'est elle qui les achemine. Voir <a href="#premiers-pas-android">l'appli Android</a>.</p>
+    <h3>Appli (Android et web)</h3>
+    <p>Le canal <span class="ui">Appli</span> envoie sur les téléphones inscrits, de deux façons. <b>L'appli web installée</b> (iPhone, Android, ordinateur) : des notifications système, avec l'icône de BambuNymous ; toucher l'une ouvre la bonne page et la marque lue dans la cloche. Sur <b>iPhone</b> (iOS 16.4 ou plus), seulement l'appli ajoutée à l'écran d'accueil (Safari → Partager → « Sur l'écran d'accueil ») et ouverte depuis son icône ; sur <b>Android</b>, dans Chrome (installée ou non) ; sur ordinateur, dans Chrome, Edge ou Firefox. On l'active sur chaque appareil dans <a href="#notifications-mes-choix">Mes notifications</a>, <span class="ui">🔔 Activer les notifications ici</span> ; il apparaît alors dans la liste avec 🌐. <b>L'appli Android</b> : les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par section (son et vibration réglables dans Android), et la bonne page s'ouvre quand tu la touches. Il faut l'appli <b>ntfy</b> sur le téléphone : c'est elle qui les achemine. Voir <a href="#premiers-pas-android">l'appli Android</a>.</p>
     <figure><img src="img/notifications-appli.webp" alt="Canal Appli Android avec la liste des téléphones inscrits et la carte Mon téléphone"><figcaption>Le canal Appli Android : tous les téléphones inscrits, et à droite tes propres choix.</figcaption></figure>
     <ul>
-      <li><b>Ce téléphone</b> : dans l'appli Android, l'état de l'appareil (« inscrit », « installe l'appli ntfy d'abord », « pas encore inscrit ») et le bouton <span class="ui">Activer sur ce téléphone</span> (ou <span class="ui">Réinscrire</span>). Dans un navigateur : « Pour inscrire un téléphone, ouvre cette page dans l'appli Android BambuNymous. »</li>
-      <li><b>Les téléphones inscrits</b>, de tous les comptes : « 📱 nom · 👤 compte », la date du dernier envoi réussi ou l'erreur en rouge, <span class="ui">Tester</span> (envoie une notification d'essai sur ce téléphone) et <span class="ui">✕</span> (le retirer). 20 téléphones au plus.</li>
+      <li><b>Ce téléphone</b> : dans l'appli Android, l'état de l'appareil (« inscrit », « installe l'appli ntfy d'abord », « pas encore inscrit ») et le bouton <span class="ui">Activer sur ce téléphone</span> (ou <span class="ui">Réinscrire</span>). Dans un navigateur, le bouton de l'appli web (voir Mes notifications).</li>
+      <li><b>Les téléphones inscrits</b>, de tous les comptes : « 📱 nom · 👤 compte » (🌐 pour l'appli web : « iPhone · Safari (appli) », « Android · Chrome »…), la date du dernier envoi réussi ou l'erreur en rouge, <span class="ui">Tester</span> (envoie une notification d'essai sur ce téléphone) et <span class="ui">✕</span> (le retirer). 20 téléphones au plus.</li>
       <li>Ce que reçoit chaque téléphone se choisit compte par compte : la carte <b>Mon téléphone</b> à droite est la tienne (voir <a href="#notifications-mes-choix">Mes notifications</a>).</li>
     </ul>
   </section>
@@ -164,10 +164,10 @@
 
 <section id="notifications-mes-choix">
   <h2>Mes notifications (chaque compte)</h2>
-  <p>Chaque compte, même en lecture seule, choisit ce qu'il reçoit sur <b>son</b> téléphone par l'appli Android. Un compte non administrateur trouve ces choix dans <b>Paramètres → 🔔 Notifs</b> ; un administrateur, dans la carte <b>Mon téléphone</b> du canal Appli Android.</p>
+  <p>Chaque compte, même en lecture seule, choisit ce qu'il reçoit sur <b>ses</b> appareils : par l'appli Android, ou par l'appli web installée. Un compte non administrateur trouve ces choix dans <b>Paramètres → 🔔 Notifs</b> ; un administrateur, dans la carte <b>Mon téléphone</b> du canal Appli Android.</p>
   <figure class="phone"><img src="img/notifications-mes-choix.webp" alt="Mes notifications d'un compte en lecture seule, avec son téléphone et les catégories"><figcaption>« Mes notifications » d'un compte non administrateur.</figcaption></figure>
   <ul>
-    <li>En tête, l'état de ce téléphone et <span class="ui">Activer sur ce téléphone</span> (dans l'appli Android). Si l'administrateur n'a pas activé le canal, un message orange le dit : « rien ne partira sur le téléphone pour l'instant ».</li>
+    <li>En tête, l'état de cet appareil : dans l'appli Android, <span class="ui">Activer sur ce téléphone</span> ; ailleurs, <span class="ui">🔔 Activer les notifications ici</span> (le navigateur demande la permission ; sur iPhone, un message rappelle d'ajouter d'abord l'appli à l'écran d'accueil), puis « notifications activées » et <span class="ui">Couper sur cet appareil</span>. Un appareil désabonné (appli supprimée, permission retirée) est oublié au premier envoi qui échoue. Si l'administrateur n'a pas activé le canal, un message orange le dit : « rien ne partira sur le téléphone pour l'instant ».</li>
     <li>La liste de <b>tes</b> téléphones, avec <span class="ui">Tester</span> (« Envoyé sur « … ». ») et <span class="ui">✕</span>.</li>
     <li>Une carte par catégorie : le compteur (« 3/11 », vert dès qu'un type est choisi) et un interrupteur pour toute la catégorie (plein = tout, demi-teinte = une partie). Touche <span class="ui">▶</span> pour la déplier et choisir type par type. Les catégories dépliées sont retenues sur ce navigateur.</li>
   </ul>

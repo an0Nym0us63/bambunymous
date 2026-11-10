@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import CardHelp from "./CardHelp";
 import client from "../api/client";
 import { pushApi, readPushStatus, sendEndpoint } from "./PushBridge";
+import { webPushSupported, isIOS, standalone, currentSub, enableWebPush, disableWebPush } from "../utils/webPush";
 
 // Mes notifications sur l'appli Android : chaque compte de la maison inscrit
 // SES telephones et choisit, type par type, ce qu'il y recoit. ntfy et
@@ -14,6 +15,8 @@ export default function MyAppNotifications({ embedded = false }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(null);
   const [push, setPush] = useState(() => readPushStatus());
+  const [wsub, setWsub] = useState(null);           // (10/11/2026) l'abonnement Web Push de cet appareil (PWA)
+  useEffect(() => { currentSub().then(s => setWsub(s ? s.endpoint : "")); }, []);
   const [open, setOpen] = useState(() => {
     try { return JSON.parse(localStorage.getItem(OPEN_KEY) || "{}") || {}; } catch { return {}; }
   });
@@ -45,6 +48,9 @@ export default function MyAppNotifications({ embedded = false }) {
     pushApi().pushRegister();
     return "Choisis ntfy si Android le demande…";
   });
+  const webOn = () => run("web", async () => { const d = await enableWebPush(); setMe(d); setWsub((await currentSub())?.endpoint || "");
+    return "Notifications activées sur cet appareil."; });
+  const webOff = () => run("web", async () => { await disableWebPush(); setWsub(""); await load(); return "Notifications coupées sur cet appareil."; });
   const remove = id => run("dev", async () => { await client.delete(`/notify/devices/${id}`); await load(); });
   const test = d => run("dev", () => client.post("/notify/me/test", { device: d.id }), `Envoyé sur « ${d.name || "ce téléphone"} ».`);
 
@@ -60,12 +66,12 @@ export default function MyAppNotifications({ embedded = false }) {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
         {embedded ? "Mon téléphone" : "Mes notifications"}</h3>
       <CardHelp title={embedded ? "Mon téléphone" : "Mes notifications"}>
-        Active ce que tu veux recevoir sur ton téléphone (appli Android BambuNymous, avec l'appli <b>ntfy</b>). Tu les retrouves aussi dans la 🔔 cloche, lues dès que tu les touches.
+        Active ce que tu veux recevoir sur ton téléphone : l'appli Android BambuNymous (avec l'appli <b>ntfy</b>), ou l'appli web installée (iPhone : ajoutée à l'écran d'accueil ; Android : Chrome ; ordinateur aussi) avec <b>🔔 Activer les notifications ici</b>. Tu les retrouves aussi dans la 🔔 cloche, lues dès que tu les touches.
         Les autres comptes ont leurs propres choix.
       </CardHelp>
       {!me.app_on && (
         <p style={{ fontSize:12, color:"#f59e0b", margin:"0 0 10px" }}>
-          L'administrateur n'a pas activé l'appli Android : rien ne partira sur le téléphone pour l'instant.</p>
+          L'administrateur n'a pas activé le canal de l'appli (Android et web) : rien ne partira sur le téléphone pour l'instant.</p>
       )}
       {push ? (
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)", marginBottom:8 }}>
@@ -77,14 +83,24 @@ export default function MyAppNotifications({ embedded = false }) {
               {push.endpoint ? "Réinscrire" : "Activer sur ce téléphone"}</button>
           )}
         </div>
+      ) : webPushSupported() ? (
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)", marginBottom:8 }}>
+          Cet appareil : {wsub ? <b style={{ color:"#22c55e" }}>notifications activées</b> : <span style={{ color:"var(--muted)" }}>pas encore</span>}
+          <button onClick={wsub ? webOff : webOn} disabled={busy === "web"} style={wsub ? btn : primary}>
+            {busy === "web" ? "…" : wsub ? "Couper sur cet appareil" : "🔔 Activer les notifications ici"}</button>
+        </div>
+      ) : isIOS() && !standalone() ? (
+        <p style={{ fontSize:11.5, color:"#f59e0b", margin:"0 0 8px", lineHeight:1.45 }}>
+          Sur iPhone : ajoute d'abord BambuNymous à l'écran d'accueil (Safari → Partager → « Sur l'écran d'accueil », iOS 16.4 ou plus),
+          ouvre-le depuis son icône, puis reviens ici pour activer les notifications.</p>
       ) : (
         <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px" }}>
-          Pour inscrire un téléphone, ouvre cette page dans l'appli Android BambuNymous.</p>
+          Ce navigateur ne gère pas les notifications. Sur Android, utilise Chrome (ou l'appli Android BambuNymous) ; sur iPhone, l'appli ajoutée à l'écran d'accueil.</p>
       )}
       {me.devices.map(d => (
         <div key={d.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderTop:"1px solid var(--border)", fontSize:12.5 }}>
           <span style={{ flex:1, minWidth:0 }}>
-            <span style={{ fontWeight:700, color:"var(--text)" }}>📱 {d.name || "Téléphone"}</span>
+            <span style={{ fontWeight:700, color:"var(--text)" }}>{d.kind === "web" ? "🌐" : "📱"} {d.name || "Téléphone"}</span>
             <span style={{ display:"block", fontSize:11, color: d.last_err ? "#ef4444" : "var(--muted)" }}>
               {d.last_err ? `Échec ${d.last_err}` : d.last_ok ? `Dernier envoi : ${new Date(d.last_ok).toLocaleString("fr-FR")}`
                 : `Inscrit le ${new Date(d.added).toLocaleDateString("fr-FR")}`}</span>

@@ -30,6 +30,8 @@ manifold3d==3.5.4
 anthropic==1.17.0
 # Serveur MCP : les outils appellent l'API de l'appli en interne (ASGITransport). Plus tiré par anthropic (1.x : httpx2).
 httpx==0.28.1
+# Notifications systeme de la PWA (Web Push : chiffrement et signature VAPID).
+pywebpush==2.0.3
 
 aiohttp>=3.9.0
 aiofiles>=23.0.0
