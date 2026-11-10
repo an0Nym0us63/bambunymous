@@ -424,22 +424,23 @@ export default function MakerWorldView({ onSearch }) {
         <div style={{ padding:"2px 0 10px" }}>
           {status && (
             <>
-            {/* Onglets sur une seule ligne, meme sur telephone ; les actions passent dessous. */}
-            <div style={{ display:"flex", gap:3, marginTop:10, padding:3, borderRadius:16, background:"var(--surface2)", border:"1px solid var(--border)",
-              overflowX:"auto", scrollbarWidth:"none" }}>
+            {/* Onglets comme ceux des Statistiques (11/11/2026) : une ligne sans defilement, chacun son icone ; sur
+                telephone, les inactifs n'ont que leur icone. Les actions passent dessous. */}
+            <div style={{ display:"flex", gap:4, marginTop:10, padding:4, borderRadius:16, background:"var(--surface2)", border:"1px solid var(--border)" }}>
               {TABS.filter(([k]) => k !== "creator" || status.connected).map(([k, l]) => {
                 const [ic, c] = SUB[k], on = tab === k;
                 return (
                   <button key={k} onClick={() => { setTab(k); setCq(""); if (k !== "favorites") setColl(null); if (k === "history") egg("mw_vus_recemment"); }}
-                    style={{ flex:"1 0 auto", minWidth:0, padding:"7px 6px", borderRadius:12, fontSize:"clamp(10.5px, 3.1vw, 12.5px)", fontWeight:800,
+                    aria-label={l} data-tip={l}
+                    style={{ flex: on ? "1 1 auto" : "1 1 0", minWidth:0, padding:"8px 6px", borderRadius:12, fontSize:"clamp(11px, 3.3vw, 13px)", fontWeight:800,
                       cursor:"pointer", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", border:"none",
-                      display:"flex", alignItems:"center", justifyContent:"center", gap:4,
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"all 0.15s",
                       background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
-                      color: on ? "white" : "var(--muted)", boxShadow: on ? `0 6px 14px -6px ${c}` : "none" }}>
-                    {/* l'icone sur l'onglet ouvert seulement : les cinq noms tiennent sur une ligne */}
-                    {on && <span style={{ fontSize:"clamp(10px, 3vw, 12px)" }}>{ic}</span>}
-                    <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{l}</span></button>);
+                      color: on ? "white" : "var(--muted)", boxShadow: on ? `0 6px 16px -6px ${c}` : "none" }}>
+                    <span style={{ fontSize:15, filter: on ? "none" : "grayscale(.4)" }}>{ic}</span>
+                    <span className={on ? "" : "mw-tab-l"} style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{l}</span></button>);
               })}
+              <style>{`@media (max-width: 640px) { .mw-tab-l { display: none; } }`}</style>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
               {(view === "search" ? !!sq : view === "discover" ? !!dk : status.connected) && (

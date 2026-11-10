@@ -1031,11 +1031,12 @@ async def _compute(fresh: bool = False) -> dict:
     cfg = await _load()
     colls = {c["id"]: c["title"] for c in (await A.collections())["collections"]}
     chosen = [c for c in cfg["collections"] if c in colls]
-    designs, where = {}, {}
+    designs, where, where_ids = {}, {}, {}
     for cid in chosen:
         for x in await _collection_designs(cid, fresh):
             designs.setdefault(x["design_id"], x)
             where.setdefault(x["design_id"], []).append(colls[cid])
+            where_ids.setdefault(x["design_id"], []).append(cid)
     await _track_added(cfg, designs, {d: [c for c in chosen if colls[c] in w] for d, w in where.items()}, chosen)
 
     sem = asyncio.Semaphore(4)
@@ -1074,7 +1075,7 @@ async def _compute(fresh: bool = False) -> dict:
         prof = next((p for p in profiles if plan and p.get("instance_id") == plan.get("instance_id")), None) \
             or next((p for p in profiles if p.get("main")), None) or (profiles[0] if profiles else None)
         row = {"design_id": rid, "mw_id": did, "multi": multi, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
-               "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []),
+               "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []), "coll_ids": where_ids.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
                "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_inprog": m.get("in_progress") or 0,
                "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown",
@@ -1248,6 +1249,8 @@ async def _compute(fresh: bool = False) -> dict:
     for r in models:
         pls = r.get("plates") or []
         r["redo_hint"] = bool(pls and not r.get("since") and all((p.get("printed") or 0) >= (r.get("qty") or 1) for p in pls))
+        # (11/11/2026) fait en entier dans la serie en cours : « A faire » propose de le retirer de ses collections
+        r["done"] = bool(pls and all((p.get("printed") or 0) >= (r.get("qty") or 1) for p in pls))
     rank = {did: i for i, did in enumerate(cfg.get("order") or [])}
     # les retenus toujours devant les autres (06/11/2026), puis l'ordre choisi (les nouveaux en tete de leur groupe)
     models.sort(key=lambda r: (not r["planned"], r["design_id"] in rank, rank.get(r["design_id"], 0)))
