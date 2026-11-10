@@ -425,6 +425,18 @@ _T = [
      "POST", "/makerworld/plan/color-day", {"day": STR(DATE), "filament_id": INT("Le filament")}, ["day", "filament_id"], {"rw": True}),
     ("plan_chain", "D'une traite", "Un objet d'une traite : ses plateaux à la suite (plates), tout (all) ou rien (null).",
      "POST", "/makerworld/plan/chain", {"design_id": STR("Ligne du modèle"), "mode": STR("plates, all, ou vide")}, ["design_id"], {"rw": True}),
+    # (10/11/2026) regrouper et ranger, comme a la main dans le planning
+    ("plan_merge", "Regrouper des plateaux",
+     "Regroupe des plateaux d'un même modèle en une seule impression (keys, 2 à 12), ou défait un regroupement (gid, l'id « m1 »… vu dans l'outil plan).",
+     "POST", "/makerworld/plan/merge", {"keys": S("array", "Les keys des plateaux à imprimer ensemble", items={"type": "string"}),
+                                        "gid": STR("Le regroupement à défaire")}, [], {"rw": True}),
+    ("plan_arrange", "Ranger le planning",
+     "Range le planning d'un coup : order = les keys dans l'ordre voulu (le début suffit, le reste suit), pins = {key: jour AAAA-MM-JJ ou null} "
+     "pour poser ou libérer un plateau sur un jour, merge = des listes de keys à regrouper. Un plateau figé ne se déplace pas. Annulable (plan_undo).",
+     "PUT", "/makerworld/plan/arrange", {"order": S("array", "Les keys dans l'ordre voulu", items={"type": "string"}),
+                                         "pins": OBJ("{key: jour AAAA-MM-JJ, ou null pour le libérer}"),
+                                         "merge": S("array", "Des listes de keys à regrouper", items={"type": "array", "items": {"type": "string"}}),
+                                         "why": STR("Le nom du geste dans l'historique (d'office « Rangement »)")}, [], {"rw": True}),
     ("plan_undo", "Annuler", "Annule le dernier geste du planning.", "POST", "/makerworld/plan/undo", {}, [], {"rw": True}),
     ("plan_settings", "Réglages du planning",
      "Change les réglages du planning (plages horaires, écart entre impressions, jours particuliers…) : body = les champs à changer, comme dans la réponse de l'outil plan (settings).",
