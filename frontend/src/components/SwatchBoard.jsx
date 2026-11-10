@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import client from "../api/client";
 import { egg } from "../eggs";
 import { useIsAdmin } from "../store/auth";
@@ -86,8 +87,12 @@ function pack(board, groups) {
 // sur la tranche, pose dans le rail et qui depasse un poil dessous, l'intercalaire avec son etiquette comme les vrais.
 // Tout en millimetres dans un seul SVG qui prend la largeur ; l'echantillon et son ombrage sont dessines une fois
 // (<defs>) puis repris par <use> : la couleur seule change d'une case a l'autre.
-const PITCH = 20, RAILGAP = 8, ML = 14, MR = 14, MT = 30, ROW = 56, MB = 22;
-const SW = 18, SH = 31, BAR = 5, OVER = 4;                  // l'echantillon (tranche) ; le rail ; ce qui depasse dessous
+// (10/11/2026, revu) aux proportions de la vraie planche, en cases : les trous d'une meme rangee a 3,5 cases, les
+// rangees de trous en quinconce a mi-pas, un rail par rangee de trous (il passe au milieu des trous et s'y accroche),
+// l'echantillon deux cases de haut
+const PITCH = 20, RAILGAP = 8, ML = 18, MR = 18, ROW = 70, MB = 26, HOLE = 70, HW = 9, HH = 26;
+const SW = 18, SH = 38, BAR = 6, OVER = 5;                  // l'echantillon (tranche) ; le rail ; ce qui depasse dessous
+const MT = SH + 10;
 // l'echantillon : un prisme hexagonal torsade, couche sur la tranche. A chaque abscisse, l'hexagone a tourne : ses
 // sommets montent et descendent, ce qui fait le bord ondule en haut et en bas, et ses faces passent de l'ombre a la
 // lumiere en diagonale (le vrille de la piece)
@@ -159,6 +164,8 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
   const rails = railsOf(board.cols, board.rails);
   const W = ML + board.cols * PITCH + (board.rails - 1) * RAILGAP + MR, H = MT + (board.rows - 1) * ROW + BAR + OVER + MB;
   const dark = isDark(board.color);
+  const holeX = W / 2 - HOLE * Math.floor(W / 2 / HOLE);    // la colonne de trous la plus a gauche, symetrique
+  const hooks = (x0, x1) => { const out = []; for (let h = holeX; h <= W; h += HOLE) if (h > x0 + 4 && h < x1 - 4) out.push(h); return out; };
   const hole = dark ? "#d9d7d1" : "color-mix(in srgb, " + board.color + " 55%, #000)";
   const rail = "#141414", railHi = "#3a3a3a";
   const grads = [];
@@ -170,12 +177,61 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
       cells.push({ r, c, k, cell, x, yb, f: cell?.t === "s" ? byId.get(cell.fid) : null });
     }
   }
-  return <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", borderRadius: 14, filter: "drop-shadow(0 10px 18px rgba(0,0,0,.35))" }}
+  // la loupe au doigt (10/11/2026) : un appui maintenu ouvre une bulle au-dessus du doigt, qui grossit la planche la ou
+  // il est et dit ce qu'il y a dessous ; elle suit le doigt, et le lacher ouvre la case visee. La bulle reprend le dessin
+  // de la planche par <use> : rien n'est redessine.
+  const svgRef = useRef(null), wrap = useRef(null), press = useRef(null), lpRef = useRef(null), skip = useRef(0);
+  const [lp, setLp] = useState(null);
+  const show = (x, y) => {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const k = document.elementFromPoint(x, y)?.closest?.("[data-k]")?.getAttribute("data-k") || null;
+    const v = { x, y, ux: (x - r.left) * W / r.width, uy: (y - r.top) * W / r.width, sc: r.width / W, k };
+    lpRef.current = v; setLp(v);
+  };
+  const down = e => {
+    if (e.pointerType !== "touch") return;
+    const p = { x: e.clientX, y: e.clientY, on: false };
+    p.t = setTimeout(() => { p.on = true; show(p.x, p.y); try { navigator.vibrate?.(8); } catch { /* rien */ } }, 300);
+    press.current = p;
+  };
+  const move = e => {
+    const p = press.current;
+    if (!p) return;
+    if (p.on) show(e.clientX, e.clientY);
+    else if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) { clearTimeout(p.t); press.current = null; }
+  };
+  const up = (cancel = false) => {
+    const p = press.current;
+    press.current = null;
+    if (!p) return;
+    clearTimeout(p.t);
+    if (!p.on) return;
+    const k = lpRef.current?.k;
+    lpRef.current = null; setLp(null); skip.current = Date.now();
+    if (k && edit && !cancel) tap(k);                       // le systeme qui reprend le doigt n'ouvre rien
+  };
+  // la loupe ouverte, le doigt ne fait plus defiler la page
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return undefined;
+    const tm = e => { if (press.current?.on) e.preventDefault(); };
+    el.addEventListener("touchmove", tm, { passive: false });
+    return () => el.removeEventListener("touchmove", tm);
+  }, []);
+  const tapK = k => { if (Date.now() - skip.current > 600) tap(k); };
+  const Z = 3, LS = 150;
+  const lpCell = lp?.k ? board.cells[lp.k] : null, lpF = lpCell?.t === "s" ? byId.get(lpCell.fid) : null;
+  const lpTxt = !lp ? "" : lpCell?.t === "d" ? `🏷 ${lpCell.label}` : lpF ? `${fname(lpF)} · ${lpF.fila_type || lpF.material}` : lp.k ? "Case libre" : "";
+  return <div ref={wrap} onPointerDown={down} onPointerMove={move} onPointerUp={() => up()} onPointerCancel={() => up(true)} onContextMenu={e => { if (press.current) e.preventDefault(); }}
+    style={{ position: "relative", width: "100%", maxWidth: 900, margin: "0 auto", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}>
+  <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", borderRadius: 14, filter: "drop-shadow(0 10px 18px rgba(0,0,0,.35))" }}
     role="img" aria-label={`Planche ${board.name}`}>
     <defs>
-      <pattern id={`sk-${board.id}`} width="40" height="40" patternUnits="userSpaceOnUse" x={ML - 3} y={MT - 30}>
-        <rect x="8" y="3" width="5" height="15" rx="2.5" fill={hole}/>
-        <rect x="28" y="23" width="5" height="15" rx="2.5" fill={hole}/>
+      {/* les trous : centres sur la planche, la rangee du rail au milieu de sa barre, l'autre en quinconce a mi-pas */}
+      <pattern id={`sk-${board.id}`} width={HOLE} height={HOLE} patternUnits="userSpaceOnUse" x={holeX - HOLE * .75} y={MT + BAR / 2 - HOLE * .75}>
+        <rect x={HOLE * .25 - HW / 2} y={HOLE * .25 - HH / 2} width={HW} height={HH} rx={HW / 2} fill={hole}/>
+        <rect x={HOLE * .75 - HW / 2} y={HOLE * .75 - HH / 2} width={HW} height={HH} rx={HW / 2} fill={hole}/>
       </pattern>
       <path id="sw-out" d={GEO.outline}/>
       <g id="sw-shade">{GEO.polys.map((p, i) => <path key={i} d={p.d} fill={p.s > 0 ? "#fff" : "#000"} fillOpacity={Math.abs(p.s) * (p.s > 0 ? 0.6 : 0.65)}/>)}</g>
@@ -192,6 +248,7 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
         {fillOf(x.f).cs.map((col, i, a) => <stop key={i} offset={`${(i / Math.max(1, a.length - 1)) * 100}%`} stopColor={col}/>)}</linearGradient>)}
       <style>{`.sbc .sbhi{opacity:0;transition:opacity .12s}.sbc:hover .sbhi{opacity:1}`}</style>
     </defs>
+    <g id={`bc-${board.id}`}>
     {/* la planche et ses trous */}
     <rect x="0" y="0" width={W} height={H} rx="9" fill={board.color}/>
     <rect x="0" y="0" width={W} height={H} rx="9" fill={`url(#sk-${board.id})`}/>
@@ -202,6 +259,8 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
         <text x={ML - 9} y={yb + 4} fontSize="4" fontWeight="800" fill={dark ? "rgba(255,255,255,.35)" : "rgba(0,0,0,.4)"} textAnchor="middle">{r + 1}</text>
         {rails.map(rl => { const x0 = cellX(rl.start, rails), x1 = x0 + rl.n * PITCH;
           return <g key={rl.i}>
+            {/* ses attaches, dans les trous qu'il croise (derriere les echantillons) */}
+            {hooks(x0, x1).map(h => <rect key={h} x={h - HW / 2 - .8} y={yb - HH / 2 + BAR / 2 + 2} width={HW + 1.6} height={HH - 4} rx="2" fill="#0d0d0d"/>)}
             <rect x={x0 - 2.5} y={yb - 3} width={x1 - x0 + 5} height={BAR + 3} rx="1" fill="#0b0b0b"/>
             {Array.from({ length: rl.n + 1 }, (_, i) => <rect key={i} x={x0 + i * PITCH - .45} y={yb - 4} width=".9" height={BAR + 4} fill={rail}/>)}
           </g>; })}
@@ -212,9 +271,9 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
         : f ? { "data-tipcard": tipCard(`board:${board.id}:${k}`, () => <SwatchTip f={f} where={where(k)} tag={!f.swatch ? "Échantillon pas coché sur sa fiche" : null}/>) }
         : edit ? { "data-tip": `Case libre · ${where(k)}` } : {};
       const fo = f && fillOf(f);
-      return <g key={k} className="sbc" onClick={edit ? () => tap(k) : undefined} style={{ cursor: edit ? "pointer" : "default" }} opacity={dim ? 0.2 : 1} {...tip}>
-        <rect x={x + 1} y={yb - SH + 2} width={PITCH - 2} height={SH + 8} rx="2" fill="transparent"/>
-        <rect className="sbhi" x={x + 1} y={yb - SH + 2} width={PITCH - 2} height={SH + 8} rx="2" fill={dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.08)"}/>
+      return <g key={k} data-k={k} className="sbc" onClick={edit ? () => tapK(k) : undefined} style={{ cursor: edit ? "pointer" : "default" }} opacity={dim ? 0.2 : 1} {...tip}>
+        <rect x={x + 1} y={yb - SH + 6} width={PITCH - 2} height={SH + 4} rx="2" fill="transparent"/>
+        <rect className="sbhi" x={x + 1} y={yb - SH + 6} width={PITCH - 2} height={SH + 4} rx="2" fill={dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.08)"}/>
         {cell?.t === "s" && <g transform={`translate(${sx} ${sy})`}>
           {fo?.fx === "glow" && <use href="#sw-out" fill={fo.cs[0]} filter={`url(#swglow-${board.id})`} opacity=".85"/>}
           <use href="#sw-out" fill={!f ? "#94a3b8" : fo.kind === "grad" ? `url(#swg-${board.id}-${k.replace(":", "-")})` : fo.cs[0]}
@@ -226,8 +285,8 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
           {fo?.fx !== "matte" && fo?.fx !== "carbon" && <use href="#sw-ridge"/>}
           {(fo?.fx === "silk" || fo?.fx === "metal") && <use href="#sw-gloss"/>}
         </g>}
-        {cell?.t === "d" && <rect x={x + 4} y={yb - 17} width={PITCH - 8} height={17 + BAR} rx="1.2" fill="#101010" stroke="#2e2e2e" strokeWidth=".5"/>}
-        {holdK === k && <rect x={x + .6} y={yb - SH + 1.5} width={PITCH - 1.2} height={SH + 9} rx="2.5" fill="none" stroke="#F59E0B" strokeWidth="1.4"/>}
+        {cell?.t === "d" && <rect x={x + 4} y={yb - SH * .6} width={PITCH - 8} height={SH * .6 + BAR} rx="1.2" fill="#101010" stroke="#2e2e2e" strokeWidth=".5"/>}
+        {holdK === k && <rect x={x + .6} y={yb - SH + 5.5} width={PITCH - 1.2} height={SH + 5} rx="2.5" fill="none" stroke="#F59E0B" strokeWidth="1.4"/>}
       </g>; })}
     {Array.from({ length: board.rows }, (_, r) => { const yb = MT + r * ROW;
       return <g key={`rf${r}`} pointerEvents="none">
@@ -235,8 +294,8 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
           return <g key={rl.i}>
             <rect x={x0 - 1} y={yb} width={x1 - x0 + 2} height={BAR} rx=".8" fill={rail}/>
             <rect x={x0 - 1} y={yb} width={x1 - x0 + 2} height=".7" fill={railHi}/>
-            <rect x={x0 - 4} y={yb - 6} width="3.4" height={BAR + 10} rx="1" fill="#0d0d0d"/>
-            <rect x={x1 + .6} y={yb - 6} width="3.4" height={BAR + 10} rx="1" fill="#0d0d0d"/>
+            <rect x={x0 - 2.2} y={yb - 1.5} width="1.6" height={BAR + 3} rx=".6" fill="#0d0d0d"/>
+            <rect x={x1 + .6} y={yb - 1.5} width="1.6" height={BAR + 3} rx=".6" fill="#0d0d0d"/>
           </g>; })}
       </g>; })}
     {/* les etiquettes des intercalaires, sous le rail, comme les vraies */}
@@ -245,7 +304,19 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
         <rect x={x + 1} y={yb + BAR + 1.5} width={w} height="8.5" rx=".8" fill="#0b0b0b" stroke="#d4d4d4" strokeWidth=".35"/>
         <text x={x + 1 + w / 2} y={yb + BAR + 7.3} fontSize="4.3" fontWeight="700" fill="#fff" textAnchor="middle" fontFamily="system-ui, sans-serif">{cell.label}</text>
       </g>; })}
-  </svg>;
+    </g>
+  </svg>
+  {lp && createPortal(<div style={{ position: "fixed", zIndex: 10000, pointerEvents: "none", left: Math.max(6, Math.min(window.innerWidth - LS - 6, lp.x - LS / 2)),
+      top: Math.max(6, lp.y - LS - 46), display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+    <div style={{ width: LS, height: LS, borderRadius: "50%", overflow: "hidden", background: board.color, border: "3px solid #fff", boxShadow: "0 10px 26px rgba(0,0,0,.45)", position: "relative" }}>
+      <svg width={LS} height={LS} viewBox={`${lp.ux - LS / lp.sc / Z / 2} ${lp.uy - LS / lp.sc / Z / 2} ${LS / lp.sc / Z} ${LS / lp.sc / Z}`} style={{ display: "block" }}>
+        <use href={`#bc-${board.id}`}/></svg>
+      <span style={{ position: "absolute", left: "50%", top: "50%", width: 10, height: 10, marginLeft: -5, marginTop: -5, borderRadius: "50%", border: "2px solid #F59E0B" }}/>
+    </div>
+    {lpTxt && <span style={{ maxWidth: 220, padding: "3px 10px", borderRadius: 12, background: "rgba(15,23,42,.92)", color: "#fff", fontSize: 12, fontWeight: 800,
+      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lpTxt}</span>}
+  </div>, document.body)}
+  </div>;
 }
 
 function SwatchTip({ f, where, tag }) {
