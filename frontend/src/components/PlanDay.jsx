@@ -13,6 +13,7 @@ import { isExternal, slotLabel } from "../utils/ams";
 import { FilamentSheetFromSpool } from "./LazySheets";
 import { tipCard } from "./TipHost";
 import { PrintTipCard } from "./CalendarViews";
+import { pdJobs } from "../utils/planSnap";
 
 // Le planning des impressions (05/11/2026) : les briques du calendrier. La journee en frise (heures de fonctionnement,
 // de lancement, impressions faites et prevues), ses travaux prevus a ranger, les consignes, les conseils.
@@ -200,6 +201,18 @@ export function PlanTipCard({ j }) {
       {unretained(j) && line("○", "Modèle pas retenu dans « À faire »")}
       {j.reasons?.length > 0 && line("💬", j.reasons[0], "#94a3b8")}
     </div>
+    {/* (10/11/2026) les autres plateaux et exemplaires du meme objet (meme modele, meme profil), et quand ils passent */}
+    {(() => { const sib = pdJobs().filter(x => x.key !== j.key && x.design_id === j.design_id && String(x.iid || "") === String(j.iid || ""))
+        .sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+      if (!sib.length) return null;
+      return <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,.1)" }}>
+        <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: "#94a3b8" }}>Le reste de cet objet</div>
+        {sib.slice(0, 6).map(x => <div key={x.key} style={{ display: "flex", gap: 6, fontSize: 11.5, fontWeight: 600, color: "#e2e8f0" }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, marginTop: 4, flexShrink: 0, background: TONES[toneOf(x)].c }}/>
+          <span style={{ flex: 1, minWidth: 0 }}>{plateTxt(x)}{x.qty > 1 ? ` · ex. ${x.copy}/${x.qty}` : ""}</span>
+          <span style={{ color: "#94a3b8", whiteSpace: "nowrap" }}>{x.start ? `${wday(x.start)} ${hhmm(x.start)}` : "pas encore placé"}</span></div>)}
+        {sib.length > 6 && <div style={{ fontSize: 11, color: "#94a3b8", paddingLeft: 14 }}>+ {sib.length - 6} autre{sib.length - 6 > 1 ? "s" : ""}</div>}
+      </div>; })()}
   </div>;
 }
 export const dueTxt = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });

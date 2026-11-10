@@ -11,9 +11,12 @@ export const pdStored = () => {
   try { const o = JSON.parse(localStorage.getItem(pdKey()) || "null"); return o && Date.now() - (o.at || 0) < PD_FRESH_MS && o.pd?.jobs ? o.pd : null; }
   catch { return null; }
 };
-let pdSaveT = null;
+let pdSaveT = null, pdLast = [];
+// les plateaux du dernier planning lu, en memoire : la carte au survol d'un plateau y trouve les autres du meme objet
+export const pdJobs = () => pdLast;
 export const pdStore = pd => {
   if (!pd?.jobs) return;
+  pdLast = pd.jobs;
   const k = pdKey();
   clearTimeout(pdSaveT);
   pdSaveT = setTimeout(() => {
