@@ -314,7 +314,11 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
       return <g key={k} data-k={k} className="sbc" onClick={edit ? () => tapK(k) : undefined} style={{ cursor: edit ? "pointer" : "default" }} opacity={dim ? 0.2 : 1} {...tip}>
         <rect x={x + 1} y={yb - SH + 6} width={PITCH - 2} height={SH + 4} rx="2" fill="transparent"/>
         <rect className="sbhi" x={x + 1} y={yb - SH + 6} width={PITCH - 2} height={SH + 4} rx="2" fill={dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.08)"}/>
-        {cell?.t === "s" && <g transform={`translate(${sx} ${sy})`}><SampleArt f={f} fo={fo} bid={board.id} k={k}/></g>}
+        {/* (10/11/2026) un filament sans echantillon (encore a imprimer) : sa place, en pointille fantome a sa couleur ;
+            coche « echantillon » sur sa fiche, il s'y dessine en vrai */}
+        {cell?.t === "s" && <g transform={`translate(${sx} ${sy})`}>{f && !f.swatch
+          ? <use href="#sw-out" fill={fo.cs[0]} fillOpacity=".16" stroke={fo.cs[0]} strokeOpacity=".75" strokeWidth=".7" strokeDasharray="1.6 1.2"/>
+          : <SampleArt f={f} fo={fo} bid={board.id} k={k}/>}</g>}
         {cell?.t === "d" && <rect x={x + 4} y={yb - SH * .6} width={PITCH - 8} height={SH * .6 + BAR} rx="1.2" fill="#101010" stroke="#2e2e2e" strokeWidth=".5"/>}
         {holdK === k && <rect x={x + .6} y={yb - SH + 5.5} width={PITCH - 1.2} height={SH + 5} rx="2.5" fill="none" stroke="#F59E0B" strokeWidth="1.4"/>}
       </g>; })}
@@ -537,6 +541,11 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   const [cfg, setCfg] = useState(null);
   const [prop, setProp] = useState(null);           // { bid, cells } : le rangement automatique propose, pas encore garde
   const [busy, setBusy] = useState(false);
+  // les filaments sans echantillon « ignores » dans les points d'attention (10/11/2026) : pas de place fantome pour eux,
+  // seuls ceux encore a faire en ont une
+  const [ign, setIgn] = useState(() => new Set());
+  useEffect(() => { client.get("/attention/dismissed").then(({ data }) => setIgn(new Set((data?.dismissed || [])
+    .filter(d => d.category === "fil_no_swatch" && !d.expired && d.entity_id != null).map(d => d.entity_id)))).catch(() => {}); }, [friend]);
   useEffect(() => { client.get("/filaments/boards").then(r => { setBoards(r.data.boards || []); setCur(c => c || r.data.boards?.[0]?.id || null); }).catch(() => setBoards([])); }, [friend]);
 
   const byId = useMemo(() => new Map(filaments.map(f => [f.id, f])), [filaments]);
@@ -546,7 +555,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     for (const b of boards || []) for (const [k, c] of Object.entries(b.cells)) if (c.t === "s") m.set(c.fid, { b, k }); return m; }, [boards]);
   const board = (boards || []).find(b => b.id === cur) || boards?.[0];
   const unplaced = filaments.filter(f => f.swatch && !placed.has(f.id));
-  const waiting = filaments.filter(f => !f.swatch && f.active_spool_count > 0).length;
+  const waiting = filaments.filter(f => !f.swatch && !ign.has(f.id) && !placed.has(f.id)).length;   // sans echantillon ni place fantome
 
   const save = async next => {
     const prev = boards;
@@ -613,7 +622,9 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   const addBoard = () => { const nb = newBoard((boards?.length || 0) + 1); save([...(boards || []), nb]); setCur(nb.id); setCfg(nb); };
   const auto = async () => {
     const others = new Set([...placed.entries()].filter(([, p]) => p.b.id !== board.id).map(([fid]) => fid));
-    const mine = filaments.filter(f => f.swatch && !others.has(f.id));
+    // (10/11/2026) aussi les echantillons encore a faire (sans echantillon, pas ignores dans les points d'attention) :
+    // leur place est gardee, en fantome
+    const mine = filaments.filter(f => (f.swatch || !ign.has(f.id)) && !others.has(f.id));
     if (!mine.length) { showAlert("Aucun échantillon à ranger sur cette planche."); return; }
     const secs = sectionsOf(board, filaments), hue = (a, b) => compareHue(a.color || "", b.color || "");
     const groups = [...new Set([...secs.map(s => s.label), "Autres", "Indispo"])].map(label => {
@@ -623,9 +634,8 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
       if (sec?.brand) parts = parts.flatMap(p => { const by = {}; p.forEach(f => { (by[f.manufacturer || "?"] ||= []).push(f); });
         return Object.keys(by).sort((a, b) => a.localeCompare(b)).map(m => by[m]); });
       parts = parts.map(p => p.sort(hue)).filter(p => p.length);
-      const todo = label === "Indispo" ? 0 : filaments.filter(f => !f.swatch && f.active_spool_count > 0 && sectionIn(f, secs) === label).length;
       const mg = marginOf(board);
-      return { label, items: parts.flat(), parts, gap: sec?.gap || 0, margin: Math.max(mg.min, Math.ceil((items.length + todo) * mg.pct / 100)) + todo };
+      return { label, items: parts.flat(), parts, gap: sec?.gap || 0, margin: Math.max(mg.min, Math.ceil(items.length * mg.pct / 100)) };
     }).filter(g => g.items.length);
     setBusy(true);
     const cells = pack(board, groups);
