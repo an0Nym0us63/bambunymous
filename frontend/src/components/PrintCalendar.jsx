@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { egg } from "../eggs";
-import { useCanMw, useAuth } from "../store/auth";
+import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
@@ -13,6 +13,7 @@ import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, po
 import { PlanDashboard, Legend, dayEnd, hhmm, dayInfo, toneColor, PlanTipCard } from "./PlanDay";
 import { PrintTipCard } from "./CalendarViews";
 import { tipCard } from "./TipHost";
+import { PD_FRESH_MS, pdStored, pdStore } from "../utils/planSnap";
 import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained, isFinal, setFilColors } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -120,23 +121,7 @@ function mosaic(n, w, h, min, max = 64) {
 // puis se relisent en fond (avant : un ecran vide le temps des deux lectures)
 const CACHES = {};
 const cacheOf = () => { const k = currentFriend()?.id || "me"; return (CACHES[k] = CACHES[k] || { pd: null, days: {} }); };
-// et d'une ouverture de l'appli a l'autre (06/11/2026) : le dernier planning garde dans ce navigateur, par compte et par
-// BambuNymous visite, s'affiche aussitot ; le frais le remplace en une seconde. Efface a la deconnexion (bn_tiles_snap*).
-const PD_FRESH_MS = 30 * 60000;
-const pdKey = () => { try { return `bn_tiles_snap_plan:${useAuth.getState().username || ""}:${currentFriend()?.id || "me"}`; } catch { return null; } };
-const pdStored = () => {
-  // (10/11/2026) seulement s'il est recent : un planning de plusieurs jours, montre le temps de la synchro, deroutait
-  try { const o = JSON.parse(localStorage.getItem(pdKey()) || "null"); return o && Date.now() - (o.at || 0) < PD_FRESH_MS && o.pd?.jobs ? o.pd : null; }
-  catch { return null; }
-};
-let pdSaveT = null;
-const pdStore = pd => {
-  const k = pdKey();
-  clearTimeout(pdSaveT);
-  pdSaveT = setTimeout(() => {
-    try { const v = JSON.stringify({ at: Date.now(), pd }); if (v.length < 600000) localStorage.setItem(k, v); } catch { /* plein ou indisponible */ }
-  }, 1500);
-};
+// et d'une ouverture de l'appli a l'autre : le dernier planning garde dans ce navigateur (utils/planSnap)
 
 // onOpenPrint (06/11/2026) : la page des impressions ouvre la fiche d'une impression passee par-dessus le calendrier
 // (sans changer d'onglet) ; sans lui, on y va par ?id=

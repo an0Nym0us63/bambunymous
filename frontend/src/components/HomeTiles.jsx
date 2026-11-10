@@ -34,6 +34,7 @@ import { hhmm as planHm } from "./PlanDay";
 import { PlanZoom, planTileBody } from "./PlanHome";
 import { FitBox } from "./FitThumb";
 import { ACH_HOME, achExpand } from "../utils/achSlim";
+import { pdStore } from "../utils/planSnap";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
 //  - connait sa place reelle (largeur et hauteur en pixels, mesurees) et s'agence
@@ -778,7 +779,7 @@ export function useTilesData(status = null, want = null) {
         const t = new Date(), day = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
         put("plan", Promise.all([get("/makerworld/plan", { tz: -t.getTimezoneOffset() }),
           get("/prints/kpis/daily", { date_from: day, date_to: day, tz: -t.getTimezoneOffset(), detail: true }).catch(() => [])])
-          .then(([pl, k]) => ({ ...pl, today_items: ((k || []).find(x => x.date === day) || {}).items || [] })));
+          .then(([pl, k]) => { pdStore(pl); return { ...pl, today_items: ((k || []).find(x => x.date === day) || {}).items || [] }; }));
       },
       // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
       rate: () => put("rate", get("/makerworld/to-rate")),

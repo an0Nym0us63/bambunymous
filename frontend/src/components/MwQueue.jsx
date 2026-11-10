@@ -22,6 +22,7 @@ import Model3D from "./Model3D";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import { moneyVal } from "../utils/money";
 import { FSheet, fBtn } from "./FicheKit";
+import { pdStore } from "../utils/planSnap";
 
 // « 8 nov. » : la date d'un « repartir a zero » (enregistree en UTC)
 const sinceTxt = s => new Date(String(s).endsWith("Z") ? s : `${s}Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
@@ -211,7 +212,7 @@ export default function MwQueue() {
   const [planJob, setPlanJob] = useState(null);       // celle d'un de ses plateaux
   useEffect(() => {
     let alive = true;
-    client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(({ data }) => { if (alive) setPd(data); }).catch(() => {});
+    client.get("/makerworld/plan", { params: { tz: -new Date().getTimezoneOffset() } }).then(({ data }) => { pdStore(data); if (alive) setPd(data); }).catch(() => {});
     return () => { alive = false; };
   }, [reload]);
   setFilColors(pd?.fcolors);
