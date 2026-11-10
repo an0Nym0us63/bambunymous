@@ -56,6 +56,16 @@ def _lines(text: str, font: str, max_w: float, max_h: float):
     return best
 
 
+def _fill(c, rgb) -> None:
+    """(10/11/2026) un gris (noir compris) en encre noire seule (CMYK K) : en RGB, l'imprimante le compose avec les
+    couleurs et un noir sort grisatre ; un noir presque pur (#111) passe en noir franc"""
+    r, g, b = rgb
+    if abs(r - g) < 0.02 and abs(g - b) < 0.02:
+        c.setFillColorCMYK(0, 0, 0, 1.0 if r < 0.1 else 1.0 - r)
+    else:
+        c.setFillColorRGB(r, g, b)
+
+
 def render(items: list, skip: int = 0) -> bytes:
     """items : [{text, bg, fg, n}] (n : combien de fois) ; skip : etiquettes deja utilisees au debut de la premiere
     planche (une planche entamee)."""
@@ -87,10 +97,10 @@ def render(items: list, skip: int = 0) -> bytes:
         y = (PAGE_H - TOP - LABEL_H - r * (LABEL_H + GAP)) * mm
         text, bg, fg = cell
         if bg != (1, 1, 1):
-            c.setFillColorRGB(*bg)
+            _fill(c, bg)
             c.rect(x, y, LABEL_W * mm, LABEL_H * mm, stroke=0, fill=1)
         pt, ls = _lines(text, font, (LABEL_W - 2 * pad) * mm, (LABEL_H - 2 * pad) * mm)
-        c.setFillColorRGB(*fg)
+        _fill(c, fg)
         c.setFont(font, pt)
         lh = pt * 1.15
         y0 = y + LABEL_H * mm / 2 + (len(ls) * lh) / 2 - pt * 0.85
