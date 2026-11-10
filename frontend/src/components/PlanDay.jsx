@@ -22,7 +22,8 @@ export const jobName = j => `${j.title}${j.plates_total > 1 ? ` · plateau ${j.p
 // le plateau qui termine un objet : « 🏁 Objet terminé » (« 1 sur 2 » quand il en faut plusieurs)
 // deux niveaux (06/11/2026) : 🏁 un exemplaire termine (il en reste), 🏆 le modele entierement fini (le dernier exemplaire)
 export const isFinal = j => !!j.completes && j.completes >= (j.qty || 1);
-export const finIc = (j, sep = "") => j.completes ? `${isFinal(j) ? "🏆" : "🏁"}${sep}` : "";
+// (10/11/2026) pas de 🏆 sur un modele d'un seul plateau : il se termine forcement, le signe ne disait plus rien
+export const finIc = (j, sep = "") => j.completes && multiStep(j) ? `${isFinal(j) ? "🏆" : "🏁"}${sep}` : "";
 export const doneTxt = j => !j.completes ? null : isFinal(j) ? `🏆 Fini${j.qty > 1 ? ` · les ${j.qty} exemplaires` : ""}` : `🏁 Exemplaire ${j.completes}/${j.qty}`;
 // les couleurs : le modele fini, franc ; un exemplaire, pale
 export const finBorder = j => isFinal(j) ? "2.5px solid #059669" : "1.5px solid #10B981";
@@ -34,7 +35,7 @@ const GOLD = "#059669";
 // la charte des plateaux prevus (10/11/2026) : une couleur par sens, et l'ordinaire en bleu discret (tout etait vert : la
 // fin d'un objet ne se voyait plus). Un liseré a gauche de la couleur, le fond teinte ; la fin d'un objet, pleine et cernee.
 export const TONES = {
-  final: { c: "#059669", t: "Termine l'objet (tous ses exemplaires)", ic: "🏆" },
+  final: { c: "#059669", t: "Termine un objet en plusieurs plateaux (tous ses exemplaires)", ic: "🏆" },
   copy: { c: "#0D9488", t: "Termine un exemplaire", ic: "🏁" },
   locked: { c: "#6366F1", t: "Figé, jour et heure", ic: "🔒" },
   merged: { c: "#D97706", t: "Plateaux regroupés en une impression", ic: "🧩" },
@@ -42,7 +43,11 @@ export const TONES = {
   unret: { c: "#94A3B8", t: "Modèle pas retenu dans « À faire »", ic: "○" },
   long: { c: "#EF4444", t: "Trop long pour la plage où il est posé", ic: "⚠" },
 };
-export const toneOf = j => j.too_long ? "long" : isFinal(j) ? "final" : j.completes ? "copy" : j.locked ? "locked" : unretained(j) ? "unret" : j.merged ? "merged" : "plain";
+// (10/11/2026) « termine l'objet » seulement pour un objet en plusieurs etapes (plusieurs plateaux ou exemplaires) : un
+// modele d'un seul plateau se termine forcement, et tout le calendrier repassait au vert
+export const multiStep = j => (j.plates_total || 1) > 1 || (j.qty || 1) > 1 || (j.merged_plates?.length || 0) > 1;
+export const toneOf = j => j.too_long ? "long" : j.completes && multiStep(j) ? (isFinal(j) ? "final" : "copy") : j.locked ? "locked" : unretained(j) ? "unret" : j.merged ? "merged" : "plain";
+export const toneBadge = j => toneOf(j) === "final" ? "🏆 objet fini" : toneOf(j) === "copy" ? `🏁 ex. ${j.completes}/${j.qty}` : null;
 export const toneColor = j => TONES[toneOf(j)].c;
 export const toneStyle = (j, base = "var(--surface)") => {
   const k = toneOf(j), c = TONES[k].c, soft = k === "plain" || k === "unret";
@@ -313,7 +318,7 @@ export function Legend() {
       <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#6366F1", marginBottom: 5 }}>Les couleurs</div>
       {Object.entries(TONES).map(([k, v]) => <div key={k} style={{ display: "flex", gap: 9, alignItems: "center", padding: "3px 0" }}>
         <span style={{ width: 34, height: 16, borderRadius: 5, flexShrink: 0, boxSizing: "border-box", ...toneStyle({ too_long: k === "long", completes: k === "final" || k === "copy" ? 1 : 0,
-          qty: k === "copy" ? 2 : 1, locked: k === "locked", retained: k === "unret" ? false : true, merged: k === "merged" ? ["a"] : null }), boxShadow: "none" }}/>
+          qty: k === "copy" ? 2 : 1, plates_total: 2, locked: k === "locked", retained: k === "unret" ? false : true, merged: k === "merged" ? ["a"] : null }), boxShadow: "none" }}/>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text2)", lineHeight: 1.4 }}>{v.ic} {v.t}</span></div>)}
     </div>
     {LEGEND.map(([t, rows]) => <div key={t}>

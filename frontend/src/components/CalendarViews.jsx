@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
-import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, toneColor, toneStyle, dayInfo, DayMarks } from "./PlanDay";
+import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, toneColor, toneStyle, toneBadge, dayInfo, DayMarks } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
@@ -195,6 +195,9 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
                   whiteSpace: big && one ? "normal" : "nowrap" }}>{plan && planIcons(e.j) ? `${planIcons(e.j)} ` : ""}{title}</span>
                 {big && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, opacity: .85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {plan ? `${hhmm(e.j.start)} → ${hhmm(e.j.end)} · ${plateTxt(e.j)}` : `${e.it.start?.slice(11, 16)} · ${hm(e.it.seconds)}`}</span>}
+                {/* (10/11/2026) la fin d'un objet en plusieurs plateaux : une pastille sous l'heure, dans le fil (en coin, elle cachait le texte) */}
+                {big && h >= 50 && plan && toneBadge(e.j) && <span style={{ display: "inline-block", marginTop: 3, padding: "0 7px", borderRadius: 7, fontSize: 9.5, fontWeight: 900,
+                  lineHeight: "15px", color: "#fff", background: toneColor(e.j), whiteSpace: "nowrap" }}>{toneBadge(e.j)}</span>}
                 {big && one && plan && e.j.load?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: "#EA580C" }}>🧵 {e.j.load.join(", ")}</span>}
                 {big && one && plan && e.j.completes && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#047857" }}>{doneTxt(e.j)}</span>}
                 {big && one && plan && e.j.low_info?.length > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 900, color: "#DC2626", whiteSpace: "nowrap", overflow: "hidden",
@@ -202,10 +205,7 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
               </span>
               {plan && e.j.low_info?.length > 0 && <span data-tip={`📉 ${e.j.low_info.map(x => `${x.name} sous le seuil (il en restera ${x.left} g)`).join(" · ")}`}
                 style={{ position: "absolute", top: 2, right: 2, padding: "0 4px", borderRadius: 6, background: "#FEE2E2", border: "1px solid #FCA5A5", fontSize: 10, lineHeight: "14px" }}>📉</span>}
-              {/* (10/11/2026) la fin d'un objet se lit d'un coup d'oeil : une etiquette dans le coin */}
-              {plan && e.j.completes && h >= 26 && <span style={{ position: "absolute", bottom: 3, right: 4, padding: "0 6px", borderRadius: 7, fontSize: 9.5, fontWeight: 900,
-                lineHeight: "15px", color: "#fff", background: toneColor(e.j), whiteSpace: "nowrap", boxShadow: "0 1px 4px rgba(0,0,0,.18)" }}>
-                {isFinal(e.j) ? "🏆 objet fini" : `🏁 ex. ${e.j.completes}/${e.j.qty}`}</span>}
+
             </button>;
           })}
           {over?.d === d && <span style={{ position: "absolute", left: 0, right: 0, top: over.m / 60 * hourPx, height: 0, borderTop: "2px dashed #6366F1", zIndex: 4, pointerEvents: "none" }}>
