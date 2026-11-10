@@ -48,8 +48,10 @@ const sectionsOf = (board, filaments) => (board.sections?.length ? board.section
 // bloc, sans ecart entre eux) ; et « par marque » coupe chaque bloc par marque (dans l'ordre alphabetique)
 const rootOf = (s, t) => { let r = t; for (let i = 0; i < 6 && s.with?.[r] && s.types.includes(s.with[r]) && s.with[r] !== t; i++) r = s.with[r]; return r; };
 const blocksOf = s => { const out = new Map(); for (const t of s.types) { const r = rootOf(s, t); if (!out.has(r)) out.set(r, []); out.get(r).push(t); } return [...out.values()]; };
-const sectionIn = (f, secs) => (!(f.active_spool_count > 0) ? "Indispo" : secs.find(s => s.types.includes(typeOf(f)))?.label || "Autres");
-export function sectionOf(f) { return !(f.active_spool_count > 0) ? "Indispo" : guessSection(typeOf(f)); }
+// (10/11/2026) dispo : une bobine active, ou en commande / en livraison
+const dispo = f => f.active_spool_count > 0 || f.ordered_spool_count > 0 || f.shipping_spool_count > 0;
+const sectionIn = (f, secs) => (!dispo(f) ? "Indispo" : secs.find(s => s.types.includes(typeOf(f)))?.label || "Autres");
+export function sectionOf(f) { return !dispo(f) ? "Indispo" : guessSection(typeOf(f)); }
 
 const key = (r, c) => `${r}:${c}`;
 const fname = f => f.translated_name || f.name;
@@ -384,8 +386,9 @@ function SwatchTip({ f, where, tag, bid, k }) {
       <div style={{ fontSize: 13, fontWeight: 900, color: "#f8fafc", lineHeight: 1.25 }}>{fname(f)}</div>
       <div style={{ fontSize: 11.5, fontWeight: 700, color: "#94a3b8" }}>{f.manufacturer} · {f.fila_type || f.material}</div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: "#e2e8f0" }}>📍 {where}</div>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: f.active_spool_count > 0 ? "#86efac" : "#fca5a5" }}>
-        {f.active_spool_count > 0 ? `🧵 ${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""} active${f.active_spool_count > 1 ? "s" : ""}` : "Plus de bobine active"}</div>
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: dispo(f) ? "#86efac" : "#fca5a5" }}>
+        {f.active_spool_count > 0 ? `🧵 ${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""} active${f.active_spool_count > 1 ? "s" : ""}`
+          : dispo(f) ? `📦 ${(f.ordered_spool_count || 0) + (f.shipping_spool_count || 0)} en commande` : "Plus de bobine active"}</div>
       {tag && <div style={{ fontSize: 11, fontWeight: 800, color: "#fdba74" }}>{tag}</div>}
     </div>
   </div>;
@@ -555,7 +558,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     for (const b of boards || []) for (const [k, c] of Object.entries(b.cells)) if (c.t === "s") m.set(c.fid, { b, k }); return m; }, [boards]);
   const board = (boards || []).find(b => b.id === cur) || boards?.[0];
   const unplaced = filaments.filter(f => f.swatch && !placed.has(f.id));
-  const waiting = filaments.filter(f => !f.swatch && f.active_spool_count > 0 && !ign.has(f.id) && !placed.has(f.id)).length;   // sans echantillon ni place fantome
+  const waiting = filaments.filter(f => !f.swatch && dispo(f) && !ign.has(f.id) && !placed.has(f.id)).length;   // sans echantillon ni place fantome
 
   const save = async next => {
     const prev = boards;
@@ -646,7 +649,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     const others = new Set([...placed.entries()].filter(([, p]) => p.b.id !== board.id).map(([fid]) => fid));
     // (10/11/2026) aussi les echantillons encore a faire : sans echantillon mais avec une bobine active, et pas ignores
     // dans les points d'attention ; leur place est gardee, en fantome
-    const mine = filaments.filter(f => (f.swatch || (f.active_spool_count > 0 && !ign.has(f.id))) && !others.has(f.id));
+    const mine = filaments.filter(f => (f.swatch || (dispo(f) && !ign.has(f.id))) && !others.has(f.id));
     if (!mine.length) { showAlert("Aucun échantillon à ranger sur cette planche."); return; }
     const secs = sectionsOf(board, filaments), hue = (a, b) => compareHue(a.color || "", b.color || "");
     const groups = [...new Set([...secs.map(s => s.label), "Autres", "Indispo"])].map(label => {
