@@ -23,11 +23,13 @@ def _hex(v, dflt):
 
 
 def _font():
-    """DejaVu Sans Bold si elle est la (accents, symboles), sinon Helvetica-Bold."""
+    """(10/11/2026) Comfortaa Bold (arrondie, sympa et bien lisible petite ; paquet fonts-comfortaa de l'image), sinon
+    DejaVu Sans Bold (accents, symboles), sinon Helvetica-Bold."""
     import os
+    import glob
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    for p in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",):
+    for p in [*glob.glob("/usr/share/fonts/**/Comfortaa-Bold.ttf", recursive=True), "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
         if os.path.exists(p):
             try:
                 pdfmetrics.registerFont(TTFont("LblBold", p))

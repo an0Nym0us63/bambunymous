@@ -600,7 +600,9 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   // decaler (10/11/2026) : cette case et tout ce qui la suit, dans l'ordre de lecture (une ligne continue sur la
   // suivante), avancent ou reculent de n cases : la place d'un echantillon oublie, sans tout redeplacer a la main
   const shiftFrom = async (bid, k) => {
-    const n = await showChoice(`Décaler à partir de ${where(boards.find(x => x.id === bid), k)}`, [
+    const bb = boards.find(x => x.id === bid), toNext = bb.cols - Number(k.split(":")[1]);
+    const n = await showChoice(`Décaler à partir de ${where(bb, k)}`, [
+      ...(Number(k.split(":")[1]) > 0 ? [{ value: toNext, label: "↵ Au début de la ligne suivante", icon: "↵", hint: `${toNext} case${toNext > 1 ? "s" : ""} plus loin` }] : []),
       ...[1, 2, 3, 5].map(x => ({ value: x, label: `→ ${x} case${x > 1 ? "s" : ""} plus loin`, icon: "⇥" })),
       ...[1, 2, 3].map(x => ({ value: -x, label: `← ${x} case${x > 1 ? "s" : ""} plus tôt`, icon: "⇤" }))]);
     if (!n) return;
