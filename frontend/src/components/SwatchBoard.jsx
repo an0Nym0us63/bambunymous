@@ -50,6 +50,9 @@ const newBoard = (n, m = BOARD_MODELS[0]) => ({ id: `p${Date.now().toString(36)}
 // echantillons par teinte, puis sa marge (au moins 2 cases, 20 %, plus une case par filament qui attend son
 // echantillon) ; ce qui reste de la planche s'ajoute aux marges, a proportion, pour qu'aucune case ne reste a part.
 // Une section qui passe a la ligne suivante y reprend avec son intercalaire ; jamais un intercalaire seul en bout de ligne.
+// (10/11/2026) la marge se regle par planche : au moins « margin » cases, « marginPct » %, et « spread » (d'office)
+// repartit ce qui reste de la planche dans les marges ; sans, le reste est laisse a la fin
+const marginOf = b => ({ min: b.margin ?? 2, pct: b.marginPct ?? 20, spread: b.spread !== false });
 function pack(board, groups) {
   const W = board.cols, cap = board.rows * board.cols;
   const lay = extra => {
@@ -72,7 +75,7 @@ function pack(board, groups) {
   if (!lay(base)) return null;
   const used = groups.reduce((a, g) => a + 1 + g.items.length + g.margin, 0);
   const free = Math.max(0, cap - used), tot = groups.reduce((a, g) => a + g.items.length, 0) || 1;
-  const extra = groups.map(g => Math.floor(free * g.items.length / tot));
+  const extra = groups.map(g => (marginOf(board).spread ? Math.floor(free * g.items.length / tot) : 0));
   for (let guard = 0; guard < 400; guard++) {
     const out = lay(extra);
     if (out) return out;
@@ -177,7 +180,9 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
     for (let m = -Math.ceil(W / HX) * 2; m <= Math.ceil(W / HX) * 2; m++) {
       if ((m + j) % 2) continue;
       const x = W / 2 + m * HX / 2;
-      if (x >= HMX && x <= W - HMX) holes.push([x, y]);
+      // (10/11/2026) un trou que coupe un rail laissait deux picots, dessus et dessous : il n'est pas dessine
+      const cut = Array.from({ length: board.rows }, (_, r) => MT + r * ROW).some(yb => y - HH / 2 < yb + BAR + 1 && y + HH / 2 > yb - 1);
+      if (!cut && x >= HMX && x <= W - HMX) holes.push([x, y]);
     }
   }
   // les pieces du support d'une rangee : embout gauche, jonctions, embout droit
@@ -322,10 +327,10 @@ function BoardSVG({ board, byId, edit, tap, where, dimOf, holdK }) {
           </g>; })}
       </g>; })}
     {/* les etiquettes des intercalaires, sous le rail, comme les vraies */}
-    {cells.filter(x => x.cell?.t === "d" && x.cell.label).map(({ k, cell, x, yb }) => { const w = Math.max(18, cell.label.length * 2.45 + 7);
+    {cells.filter(x => x.cell?.t === "d" && x.cell.label).map(({ k, cell, x, yb }) => { const w = Math.max(26, cell.label.length * 4.4 + 10);
       return <g key={`l${k}`} pointerEvents="none">
-        <rect x={x + 1} y={yb + BAR + 1.5} width={w} height="8.5" rx=".8" fill="#0b0b0b" stroke="#d4d4d4" strokeWidth=".35"/>
-        <text x={x + 1 + w / 2} y={yb + BAR + 7.3} fontSize="4.3" fontWeight="700" fill="#fff" textAnchor="middle" fontFamily="system-ui, sans-serif">{cell.label}</text>
+        <rect x={x + 1} y={yb + BAR + 1.5} width={w} height="13" rx="1.4" fill="#0b0b0b" stroke="#e5e5e5" strokeWidth=".6"/>
+        <text x={x + 1 + w / 2} y={yb + BAR + 10.9} fontSize="8" fontWeight="800" fill="#fff" textAnchor="middle" fontFamily="system-ui, sans-serif">{cell.label}</text>
       </g>; })}
     </g>
   </svg>
@@ -409,8 +414,8 @@ function BoardSettings({ board, onSave, onDelete, onClose }) {
   const set = (k, v) => setB(x => ({ ...x, [k]: v }));
   const pickModel = id => { const m = BOARD_MODELS.find(x => x.id === id); setB(x => ({ ...x, model: id, ...(m?.rows ? { rows: m.rows, cols: m.cols, rails: m.rails } : {}) })); };
   const num = (k, min, max) => <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, fontWeight: 800, color: "var(--muted)", flex: "1 1 90px" }}>
-    {{ rows: "Lignes", cols: "Cases par ligne", rails: "Rails par ligne" }[k]}
-    <input type="number" min={min} max={max} value={b[k]} onChange={e => set(k, Math.max(min, Math.min(max, parseInt(e.target.value) || min)))}
+    {{ rows: "Lignes", cols: "Cases par ligne", rails: "Rails par ligne", margin: "Marge : au moins (cases)", marginPct: "Marge : en % de la section" }[k]}
+    <input type="number" min={min} max={max} value={k === "margin" ? marginOf(b).min : k === "marginPct" ? marginOf(b).pct : b[k]} onChange={e => set(k, Math.max(min, Math.min(max, parseInt(e.target.value) || min)))}
       style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", fontSize: 14, color: "var(--text)", outline: "none" }}/></label>;
   const lost = Object.keys(board.cells).filter(k => { const [r, c] = k.split(":").map(Number); return r >= b.rows || c >= b.cols; }).length;
   return <FSheet onClose={onClose} bottom={<>
@@ -429,6 +434,13 @@ function BoardSettings({ board, onSave, onDelete, onClose }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{num("rows", 1, 60)}{num("cols", 1, 80)}{num("rails", 1, b.cols)}</div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
         Un modèle propose un découpage ; ajuste les lignes et les cases à tes rails (un intercalaire prend une case).</div>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>Le rangement automatique</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{num("margin", 0, 20)}{num("marginPct", 0, 100)}</div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 700, color: "var(--text2)", cursor: "pointer" }}>
+        <input type="checkbox" checked={marginOf(b).spread} onChange={e => set("spread", e.target.checked)}/>
+        Répartir les cases en trop dans les marges (sinon, elles restent libres à la fin de la planche)</label>
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
+        Après chaque section, la plus grande des deux marges, plus une case par filament qui attend encore son échantillon.</div>
       {lost > 0 && <div style={{ fontSize: 12, fontWeight: 800, color: "#DC2626" }}>⚠ {lost} case{lost > 1 ? "s" : ""} occupée{lost > 1 ? "s" : ""} sortent de la planche : elles seront retirées.</div>}
       <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)" }}>La couleur</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -451,6 +463,7 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   const [pick, setPick] = useState(null);           // { bid, k } : la case ou poser un echantillon
   const [lab, setLab] = useState(null);             // { bid, k, init } : l'intercalaire a nommer
   const [cfg, setCfg] = useState(null);
+  const [prop, setProp] = useState(null);           // { bid, cells } : le rangement automatique propose, pas encore garde
   const [busy, setBusy] = useState(false);
   useEffect(() => { client.get("/filaments/boards").then(r => { setBoards(r.data.boards || []); setCur(c => c || r.data.boards?.[0]?.id || null); }).catch(() => setBoards([])); }, [friend]);
 
@@ -506,19 +519,20 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     const others = new Set([...placed.entries()].filter(([, p]) => p.b.id !== board.id).map(([fid]) => fid));
     const mine = filaments.filter(f => f.swatch && !others.has(f.id));
     if (!mine.length) { showAlert("Aucun échantillon à ranger sur cette planche."); return; }
-    if (Object.keys(board.cells).length && !(await showConfirm(`Ranger « ${board.name} » de zéro ? Ce qui y est posé est replacé par sous-type, par teinte, avec de la marge au bout de chaque section.`))) return;
     const groups = SECTIONS.map(label => {
       const items = mine.filter(f => sectionOf(f) === label).sort((a, b) => compareHue(a.color || "", b.color || ""));
       const todo = label === "Indispo" ? 0 : filaments.filter(f => !f.swatch && f.active_spool_count > 0 && sectionOf(f) === label).length;
-      return { label, items, margin: Math.max(2, Math.ceil((items.length + todo) * 0.2)) + todo };
+      const mg = marginOf(board);
+      return { label, items, margin: Math.max(mg.min, Math.ceil((items.length + todo) * mg.pct / 100)) + todo };
     }).filter(g => g.items.length);
     setBusy(true);
     const cells = pack(board, groups);
     setBusy(false);
     if (!cells) { const need = groups.reduce((a, g) => a + 1 + g.items.length + g.margin, 0);
       showAlert(`Ça ne tient pas : il faut environ ${need} cases, la planche en a ${board.rows * board.cols}. Agrandis-la ou ajoute une planche.`); return; }
-    save(boards.map(b => b.id === board.id ? { ...b, cells } : b));
+    setHold(null); setProp({ bid: board.id, cells });
   };
+  const keepProp = () => { save(boards.map(b => b.id === prop.bid ? { ...b, cells: prop.cells } : b)); setProp(null); };
   const printDividers = async () => {
     const n = {};
     for (const c of Object.values(board.cells)) if (c.t === "d" && c.label) n[c.label] = (n[c.label] || 0) + 1;
@@ -565,8 +579,15 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
         ↔ Touche la case où poser {hold.cell.t === "d" ? `l'intercalaire « ${hold.cell.label} »` : fname(byId.get(hold.cell.fid) || { name: "l'échantillon" })}
         {hold.from ? " (une case occupée échange avec lui)" : ""}
         <button type="button" onClick={() => setHold(null)} style={{ marginLeft: "auto", border: "none", background: "transparent", color: "var(--muted)", fontWeight: 900, cursor: "pointer" }}>Annuler</button></div>}
-      {/* la planche dessinee */}
-      <BoardSVG board={board} byId={byId} edit={edit} tap={k => tap(board.id, k)} where={k => where(board, k)}
+      {prop?.bid === board.id && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: 12,
+        background: "color-mix(in srgb, #7C3AED 13%, var(--surface2))", border: "1px solid color-mix(in srgb, #7C3AED 45%, var(--border))", fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>
+        ✨ Proposition de rangement : rien n'est encore changé
+        <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <button type="button" onClick={() => setProp(null)} style={{ height: 30, padding: "0 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontWeight: 800, cursor: "pointer" }}>Annuler</button>
+          <button type="button" onClick={keepProp} style={{ height: 30, padding: "0 14px", borderRadius: 10, border: "none", background: "#7C3AED", color: "#fff", fontWeight: 900, cursor: "pointer" }}>Garder</button>
+        </span></div>}
+      {/* la planche dessinee (ou la proposition du rangement automatique, qu'on regarde avant de la garder) */}
+      <BoardSVG board={prop?.bid === board.id ? { ...board, cells: prop.cells } : board} byId={byId} edit={edit && prop?.bid !== board.id} tap={k => tap(board.id, k)} where={k => where(board, k)}
         dimOf={c => filtered && (c?.t !== "s" || !vis.has(c.fid))} holdK={hold?.from?.bid === board.id ? hold.from.k : null}/>
     </>}
     {/* ce qui n'est nulle part : un toucher le prend en main, la case touchee ensuite le recoit */}

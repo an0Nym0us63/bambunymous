@@ -604,8 +604,15 @@ def _boards_clean(body: dict) -> dict:
                     continue
                 seen.add(fid)
                 cells[f"{r}:{c}"] = {"t": "s", "fid": fid}
+        # la marge du rangement automatique (10/11/2026) : au moins N cases, N %, et repartir le reste ou non
+        try:
+            margin = max(0, min(20, int(b.get("margin", 2))))
+            margin_pct = max(0, min(100, int(b.get("marginPct", 20))))
+        except (TypeError, ValueError):
+            margin, margin_pct = 2, 20
         out.append({"id": bid, "name": str(b.get("name") or f"Planche {i + 1}")[:40], "model": str(b.get("model") or "")[:30],
-                    "color": color, "rows": rows, "cols": cols, "rails": rails, "cells": cells})
+                    "color": color, "rows": rows, "cols": cols, "rails": rails, "cells": cells,
+                    "margin": margin, "marginPct": margin_pct, "spread": b.get("spread") is not False})
     return {"boards": out}
 
 
