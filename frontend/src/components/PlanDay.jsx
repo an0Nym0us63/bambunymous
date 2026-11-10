@@ -11,6 +11,8 @@ import { ArrowLeftRight } from "lucide-react";
 import { usePrinter } from "../store/printer";
 import { isExternal, slotLabel } from "../utils/ams";
 import { FilamentSheetFromSpool } from "./LazySheets";
+import { tipCard } from "./TipHost";
+import { PrintTipCard } from "./CalendarViews";
 
 // Le planning des impressions (05/11/2026) : les briques du calendrier. La journee en frise (heures de fonctionnement,
 // de lancement, impressions faites et prevues), ses travaux prevus a ranger, les consignes, les conseils.
@@ -34,14 +36,15 @@ export const finBg = (j, base = "var(--surface)") => isFinal(j)
 const GOLD = "#059669";
 // la charte des plateaux prevus (10/11/2026) : une couleur par sens, et l'ordinaire en bleu discret (tout etait vert : la
 // fin d'un objet ne se voyait plus). Un liseré a gauche de la couleur, le fond teinte ; la fin d'un objet, pleine et cernee.
+// (10/11/2026) une seule forme pour tous : bord plein, seule la couleur change de sens (le bleu en pointilles faisait brouillon)
 export const TONES = {
-  final: { c: "#059669", t: "Termine un objet en plusieurs plateaux (tous ses exemplaires)", ic: "🏆" },
-  copy: { c: "#0D9488", t: "Termine un exemplaire", ic: "🏁" },
-  locked: { c: "#6366F1", t: "Figé, jour et heure", ic: "🔒" },
-  merged: { c: "#D97706", t: "Plateaux regroupés en une impression", ic: "🧩" },
-  plain: { c: "#0EA5E9", t: "Plateau prévu, libre (bord en pointillés)", ic: "┆" },
-  unret: { c: "#94A3B8", t: "Modèle pas retenu dans « À faire »", ic: "○" },
-  long: { c: "#EF4444", t: "Trop long pour la plage où il est posé", ic: "⚠" },
+  final: { c: "#059669", t: "Termine un objet en plusieurs plateaux (tous ses exemplaires)", l: "Objet fini", ic: "🏆" },
+  copy: { c: "#0D9488", t: "Termine un exemplaire", l: "Exemplaire fini", ic: "🏁" },
+  locked: { c: "#6366F1", t: "Figé, jour et heure", l: "Figé", ic: "🔒" },
+  merged: { c: "#D97706", t: "Plateaux regroupés en une impression", l: "Regroupés", ic: "🧩" },
+  plain: { c: "#0EA5E9", t: "Plateau prévu", l: "Prévu", ic: "▮" },
+  unret: { c: "#94A3B8", t: "Modèle pas retenu dans « À faire »", l: "Pas retenu", ic: "○" },
+  long: { c: "#EF4444", t: "Trop long pour la plage où il est posé", l: "Trop long", ic: "⚠" },
 };
 // (10/11/2026) « termine l'objet » seulement pour un objet en plusieurs etapes (plusieurs plateaux ou exemplaires) : un
 // modele d'un seul plateau se termine forcement, et tout le calendrier repassait au vert
@@ -50,11 +53,11 @@ export const toneOf = j => j.too_long ? "long" : j.completes && multiStep(j) ? (
 export const toneBadge = j => toneOf(j) === "final" ? "🏆 objet fini" : toneOf(j) === "copy" ? `🏁 ex. ${j.completes}/${j.qty}` : null;
 export const toneColor = j => TONES[toneOf(j)].c;
 export const toneStyle = (j, base = "var(--surface)") => {
-  const k = toneOf(j), c = TONES[k].c, soft = k === "plain" || k === "unret";
-  return { border: `${k === "final" ? 2.5 : soft ? 1.5 : 2}px ${soft ? "dashed" : "solid"} ${soft ? `color-mix(in srgb, ${c} 60%, var(--border))` : c}`,
+  const k = toneOf(j), c = TONES[k].c, fin = k === "final";
+  return { border: fin ? `2px solid ${c}` : `1px solid color-mix(in srgb, ${c} 45%, var(--border))`,
     borderLeft: `5px solid ${c}`,
-    background: k === "final" ? `linear-gradient(135deg, color-mix(in srgb, ${c} 32%, ${base}), color-mix(in srgb, ${c} 14%, ${base}))`
-      : `color-mix(in srgb, ${c} ${soft ? 7 : 13}%, ${base})`,
+    background: fin ? `linear-gradient(135deg, color-mix(in srgb, ${c} 32%, ${base}), color-mix(in srgb, ${c} 14%, ${base}))`
+      : `color-mix(in srgb, ${c} ${k === "unret" ? 8 : 14}%, ${base})`,
     boxShadow: k === "final" ? `0 0 0 2px color-mix(in srgb, ${c} 28%, transparent), 0 4px 12px -4px color-mix(in srgb, ${c} 55%, transparent)` : "none" };
 };
 const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? +m[1] * 60 + +m[2] : null; };
@@ -135,13 +138,12 @@ export function DayStrip({ day, done = [], jobs = [], settings, now, live = null
       {awayIv.map(([a, b], i) => <span key={`a${i}`} data-tip="Absent : rien ne se lance" style={{ position: "absolute", top: 0, bottom: 0, left: pct(a), width: pct(b - a),
         background: "repeating-linear-gradient(-45deg, color-mix(in srgb, #F59E0B 30%, transparent) 0 3px, transparent 3px 7px)" }}/>)}
       {done.map((it, i) => { const a = minOf(it.start, day), b = Math.min(1440, a + (it.seconds || 0) / 60);
-        return <span key={`d${i}`} data-tip={`${it.title || it.name} · ${hm(it.seconds)}`} style={{ position: "absolute", top: 2, bottom: 2, left: pct(a), width: pct(Math.max(4, b - a)),
+        return <span key={`d${i}`} data-tipcard={tipCard(`strip:d${it.id}`, () => <PrintTipCard it={it}/>)} style={{ position: "absolute", top: 2, bottom: 2, left: pct(a), width: pct(Math.max(4, b - a)),
           borderRadius: 4, background: "linear-gradient(90deg, #8B5CF6, #EC4899)" }}/>; })}
       {jobs.map(j => { const a = minOf(j.start, day), b = minOf(j.end, day);
-        const c = j.fils?.[0]?.color || "#22C55E";
-        return <span key={j.key} data-tip={`${jobName(j)} · ${hhmm(j.start)} → ${hhmm(j.end)}`} style={{ position: "absolute", top: 2, bottom: 2, left: pct(a), width: pct(Math.max(4, b - a)),
-          borderRadius: 4, border: `1.5px dashed ${j.too_long ? "#EF4444" : "#22C55E"}`, boxSizing: "border-box",
-          background: `repeating-linear-gradient(135deg, color-mix(in srgb, ${c} 55%, transparent) 0 4px, transparent 4px 8px)` }}/>; })}
+        const c = toneColor(j);
+        return <span key={j.key} data-tipcard={tipCard(`strip:${j.key}:${day}`, () => <PlanTipCard j={j}/>)} style={{ position: "absolute", top: 2, bottom: 2, left: pct(a), width: pct(Math.max(4, b - a)),
+          borderRadius: 4, boxSizing: "border-box", borderLeft: `3px solid ${c}`, background: `color-mix(in srgb, ${c} 45%, transparent)` }}/>; })}
       {/* l'impression en cours : ce qu'il lui reste, jusqu'a sa fin estimee (05/11/2026) */}
       {live?.end && live.now && live.now.slice(0, 10) <= day && live.end.slice(0, 10) >= day && (() => {
         const a = live.now.slice(0, 10) < day ? 0 : minOf(live.now, day), b = live.end.slice(0, 10) > day ? 1440 : minOf(live.end, day);
@@ -168,6 +170,38 @@ const Dot = ({ f }) => <span data-tip={f.name} style={{ width: 11, height: 11, b
 // en clair (« Plateau 3/7 · Couvercle »), ses heures, ses filaments, ce qu'il faut charger, pourquoi il est la ; les
 // boutons en bas, sur toute la largeur, pour que le texte respire. On le range en le glissant (ordinateur) ou avec ses
 // boutons (telephone).
+// la fiche au survol d'un plateau prevu (10/11/2026) : sa vignette, son sens (la couleur du calendrier), ses heures,
+// ses filaments, ce qu'il faut charger ou changer, pourquoi il est a cette heure ; au lieu d'une ligne de texte
+const wday = s => new Date(s).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+export function PlanTipCard({ j }) {
+  const t = TONES[toneOf(j)], same = j.start?.slice(0, 10) === j.end?.slice(0, 10);
+  const line = (ic, txt, c = "#cbd5e1") => <div style={{ display: "flex", gap: 6, fontSize: 11.5, fontWeight: 600, color: c, lineHeight: 1.4 }}>
+    <span style={{ flexShrink: 0, width: 16, textAlign: "center" }}>{ic}</span><span style={{ minWidth: 0 }}>{txt}</span></div>;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 8, width: 280, maxWidth: "100%" }}>
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <PlateThumb j={j} size={66}/>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: "#f8fafc", lineHeight: 1.25, overflowWrap: "anywhere" }}>{j.title}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: "#94a3b8", marginTop: 2 }}>{plateTxt(j)}{j.qty > 1 ? ` · exemplaire ${j.copy}/${j.qty}` : ""}</div>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 900,
+          color: "#fff", background: t.c }}>{t.ic} {t.l}</span>
+      </div>
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,.1)" }}>
+      {line("🕒", `${same ? "" : `${wday(j.start)} `}${hhmm(j.start)} → ${same ? "" : `${wday(j.end)} `}${hhmm(j.end)} · ${hm(j.seconds)}`, "#f8fafc")}
+      {j.fils?.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 10px", paddingLeft: 22 }}>{j.fils.map((f, i) =>
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#e2e8f0" }}>
+          <Dot f={f}/>{f.name}{f.g ? <span style={{ color: "#94a3b8" }}>{Math.round(f.g)} g</span> : null}</span>)}</div>}
+      {j.load?.length > 0 && line("🧵", `À charger : ${j.load.join(", ")}`, "#fdba74")}
+      {j.bed_change && line("🔲", bedTxt(j.bed_change).replace(/^🔲 /, ""), "#fdba74")}
+      {j.merged_plates?.length > 1 && line("🧩", `Plateaux ${j.merged_plates.join(", ")} en une impression`)}
+      {j.low_info?.length > 0 && line("📉", j.low_info.map(x => `${x.name} : il en restera ${x.left} g`).join(" · "), "#fca5a5")}
+      {j.too_long && line("⚠", "Trop long pour la plage où il est posé", "#fca5a5")}
+      {unretained(j) && line("○", "Modèle pas retenu dans « À faire »")}
+      {j.reasons?.length > 0 && line("💬", j.reasons[0], "#94a3b8")}
+    </div>
+  </div>;
+}
 export const dueTxt = d => new Date(`${d}T12:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 // (09/11/2026) la couleur que va prendre un plateau d'un seul filament (une variante de couleur d'un echantillon : toutes
 // partagent la vignette grise de MakerWorld) : sa bobine choisie, sinon rien
@@ -297,8 +331,7 @@ export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_
   j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.merged ? "🧩" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
 export const LEGEND = [
   ["Les impressions", [["▮", "Bloc plein, de la couleur de son état : une impression faite (réussie, échouée, annulée) ou en cours"],
-    ["┆", "Bloc hachuré, bord en pointillés : un plateau prévu par le planning, libre"],
-    ["▯", "Bord plein : un plateau prévu figé (jour et heure), ou qui termine un objet"],
+    ["▯", "Bloc teinté, liseré à gauche : un plateau prévu par le planning ; sa couleur dit ce qu'il est (voir « Les couleurs »)"],
     ["○", "Gris : un modèle pas retenu dans « À faire » (profil par défaut), prévu après les retenus"]]],
   ["Figer", [["📌", "Jour figé : il reste ce jour-là, l'heure peut bouger"], ["🔒", "Jour et heure figés : rien ne le déplace"]]],
   ["Priorité", [["🔥", "Urgent : devant tous les autres retenus"], ["⬆", "Haute"], ["⬇", "Basse"], ["⏬", "Très basse"]]],

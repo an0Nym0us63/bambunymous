@@ -10,7 +10,9 @@ import { currentFriend } from "../store/friend";
 import { usePlanActs, sheetRef } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
 import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner } from "./PlanPanels";
-import { PlanDashboard, Legend, dayEnd, hhmm, dayInfo } from "./PlanDay";
+import { PlanDashboard, Legend, dayEnd, hhmm, dayInfo, toneColor, PlanTipCard } from "./PlanDay";
+import { PrintTipCard } from "./CalendarViews";
+import { tipCard } from "./TipHost";
 import { OPT_MODES, DAY_KIND, dayKindOf, DayStrip, onDay, JobCard, PlanSettings, PlanAdvice, PlanDeadlines, ColorDay, ManualDone, PlateThumb, NowNextTiles, jobName, dueTxt, doneTxt, plateTxt, UNRET, unretained, isFinal, setFilColors } from "./PlanDay";
 
 // Le calendrier des impressions (04/11/2026) : le mois, chaque jour avec l'etagere de ses impressions (une vignette
@@ -368,15 +370,16 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
               color: "#16A34A" }}>{hm((pd?.days?.[k]?.seconds) || 0)}</span>}
             {wide && !p.length && x?.duration > 0 && cellW >= 74 && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 9.5, fontWeight: 800, color: "var(--text2)" }}>{hm(x.duration)}</span>}
             {/* un jour avec du prevu : la mosaique, ce qui est fait d'abord (liseré de son etat), puis les plateaux prevus
-                (pointilles verts ; dores quand ils terminent un objet) */}
+                (10/11/2026 : bord plein de la couleur du calendrier, la fiche au survol) */}
             {mos && <span style={{ position: "absolute", left: wide ? 5 : 3, right: wide ? 5 : 3, top, bottom: wide ? 7 : 5, display: "flex", flexWrap: "wrap",
               alignContent: "flex-end", gap: 3, overflow: "hidden" }}>
               {[...shelf.map(it => ({ done: it })), ...p.map(j => ({ j }))].slice(0, mos.shown).map(({ done, j }, i) => {
-                const c = done ? (ST[done.status] || ST.SUCCESS)[0] : j.too_long ? "#EF4444" : unretained(j) ? UNRET : j.completes ? "#059669" : "#22C55E";
+                const c = done ? (ST[done.status] || ST.SUCCESS)[0] : toneColor(j);
                 const img = done ? apiThumb(apiUrl(`/prints/${done.id}/image`), 96) : null;
-                return <span key={done ? `d${done.id}` : j.key} style={{ width: mos.size, height: mos.size, flexShrink: 0, borderRadius: wide ? 7 : 4, overflow: "hidden",
+                return <span key={done ? `d${done.id}` : j.key}
+                  data-tipcard={tipCard(done ? `mo:d${done.id}` : `mo:${j.key}`, () => done ? <PrintTipCard it={done}/> : <PlanTipCard j={j}/>)} style={{ width: mos.size, height: mos.size, flexShrink: 0, borderRadius: wide ? 7 : 4, overflow: "hidden",
                   boxSizing: "border-box", background: "#fff", position: "relative",
-                  border: done ? `2px solid ${c}` : `${j.completes ? 2 : 1.5}px ${j.completes ? "solid" : "dashed"} ${c}` }}>
+                  border: `2px solid ${c}` }}>
                   {done ? <img src={img} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
                     : j.thumb ? <MwImg src={j.thumb} w={Math.max(64, mos.size * 2)} style={{ width: "100%", height: "100%", objectFit: "contain" }}/>
                     : j.cover ? <img src={thumbSrc(j.cover, 96)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}/> : null}
@@ -410,7 +413,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "4px 4px 2px", fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>
       {["SUCCESS", "FAILED", "CANCELLED", "IN_PROGRESS"].map(s => <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
         <span style={{ width: 9, height: 3, borderRadius: 2, background: ST[s][0] }}/>{ST[s][1]}</span>)}
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 12, height: 10, borderRadius: 3, border: "1.5px dashed #22C55E" }}/>plateau prévu</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 12, height: 10, borderRadius: 3, boxSizing: "border-box", border: "1px solid #0EA5E9", borderLeft: "4px solid #0EA5E9",
+        background: "color-mix(in srgb, #0EA5E9 14%, transparent)" }}/>plateau prévu</span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ padding: "0 5px", borderRadius: 8, background: "#D1FAE5", color: "#065F46", fontWeight: 900 }}>🏁</span>objet terminé</span>
       <span>· le remplissage : les heures machine du jour</span>
     </div>

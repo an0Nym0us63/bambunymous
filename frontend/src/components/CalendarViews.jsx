@@ -3,6 +3,8 @@ import { apiUrl, apiThumb } from "../api/client";
 import MwImg, { thumbSrc } from "./MwImg";
 import { spans, hhmm, jobName, doneTxt, plateTxt, DayStrip, onDay, UNRET, unretained, endDrift, planIcons, isFinal, toneColor, toneStyle, toneBadge, dayInfo, DayMarks } from "./PlanDay";
 import { ST, iso, DAYS } from "./PrintCalendar";
+import { tipCard } from "./TipHost";
+import { PlanTipCard } from "./PlanDay";
 
 // Les vues Semaine et Jour du calendrier (05/11/2026) : une grille horaire ou ce qui est imprime, ce qui imprime et
 // les plateaux prevus sont poses a leur vraie heure ; les heures de fonctionnement en fond, les heures de lancement
@@ -47,6 +49,22 @@ export function dayEvents(day, days, jobs, live = null) {
     out.push({ kind: "plan", key: j.key + day, a, b, j, color: toneColor(j) });
   }
   return out.sort((x, y) => x.a - y.a);
+}
+
+// la fiche au survol d'une impression faite ou en cours (10/11/2026) : son image, son etat, quand, combien de temps
+export function PrintTipCard({ it, live = null }) {
+  const [c, l] = ST[it.status] || ST.SUCCESS;
+  const run = it.status === "IN_PROGRESS";
+  return <div style={{ display: "flex", gap: 10, alignItems: "flex-start", width: 260, maxWidth: "100%" }}>
+    <img src={apiThumb(apiUrl(`/prints/${it.id}/image`), 132)} alt="" style={{ width: 66, height: 66, borderRadius: 10, objectFit: "cover", background: "#fff", flexShrink: 0 }}
+      onError={x => { x.currentTarget.style.visibility = "hidden"; }}/>
+    <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ fontSize: 13, fontWeight: 900, color: "#f8fafc", lineHeight: 1.25, overflowWrap: "anywhere" }}>{it.title || it.name}</div>
+      <span style={{ alignSelf: "flex-start", padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 900, color: "#fff", background: c }}>{l}</span>
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: "#e2e8f0" }}>🕒 {it.start ? `${dayName(it.start.slice(0, 10))} · ${it.start.slice(11, 16)}` : ""}{it.seconds ? ` · ${hm(it.seconds)}` : ""}</div>
+      {run && live?.end && <div style={{ fontSize: 11.5, fontWeight: 700, color: "#93c5fd" }}>⏳ fin vers {hhmm(live.end)}</div>}
+    </div>
+  </div>;
 }
 
 // une vignette : celle de l'impression, ou celle du plateau prevu
@@ -182,7 +200,7 @@ export function TimeGrid({ dates, days, jobs, settings, now, live, hourPx = 30, 
             return <button key={e.key} type="button" onClick={ev => { ev.stopPropagation(); plan ? onOpenJob(e.j) : onOpenPrint(e.it); }}
               draggable={!!(edit && onDropAt && plan && !e.j.locked && !unretained(e.j))}
               onDragStart={plan ? ev => { ev.dataTransfer.setData("text/bn-job", e.j.key); ev.dataTransfer.effectAllowed = "move"; } : undefined}
-              data-tip={`${plan ? jobName(e.j) : title} · ${String(Math.floor(e.a / 60)).padStart(2, "0")}:${String(e.a % 60).padStart(2, "0")}`}
+              data-tipcard={tipCard(`cal:${e.key}`, () => plan ? <PlanTipCard j={e.j}/> : <PrintTipCard it={e.it} live={live}/>)}
               style={{ position: "absolute", left: 4, right: 3, top, height: h, zIndex: 1, overflow: "hidden", cursor: "pointer", textAlign: "left", font: "inherit",
                 display: "flex", alignItems: big ? "flex-start" : "center", gap: 6, padding: big ? "4px 6px" : "0 6px", borderRadius: 8, boxSizing: "border-box",
                 // la charte des plateaux prevus (10/11/2026) : une couleur par sens, la fin d'un objet ressort
@@ -242,6 +260,7 @@ export function WeekAgenda({ dates, days, jobs, settings, now, live, pick, onPic
         {ev.map(e => {
           const plan = e.kind === "plan";
           return <button key={e.key} type="button" onClick={() => plan ? onOpenJob(e.j) : onOpenPrint(e.it)}
+            data-tipcard={tipCard(`ag:${e.key}`, () => plan ? <PlanTipCard j={e.j}/> : <PrintTipCard it={e.it} live={live}/>)}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: 5, borderRadius: 11, cursor: "pointer", textAlign: "left", font: "inherit",
               ...(plan ? toneStyle(e.j, "var(--surface2)") : { border: "1px solid var(--border)", background: "var(--surface2)" }) }}>
             <span style={{ width: 44, flexShrink: 0, fontSize: 12, fontWeight: 900, color: e.color, textAlign: "center" }}>
