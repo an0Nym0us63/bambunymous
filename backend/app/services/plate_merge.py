@@ -49,7 +49,14 @@ def _profile_3mf(did, iid):
 
 def profile_info(did, iid) -> dict | None:
     """Ce qu'il faut savoir du profil : surface du plateau, mode, degagements, et la taille de chacun de ses plateaux."""
-    key = (str(did), str(iid), MY["model"])
+    # (10/11/2026) la date des tailles mesurees dans la cle : la vue 3D calculee apres coup est vue tout de suite
+    try:
+        from .mw_3d import _root as _r3
+        mf0 = _r3() / str(iid) / "plates.json"
+        stamp = mf0.stat().st_mtime if mf0.is_file() else 0
+    except Exception:
+        stamp = 0
+    key = (str(did), str(iid), MY["model"], stamp)
     if key in _PROF:
         return _PROF[key]
     out = None
