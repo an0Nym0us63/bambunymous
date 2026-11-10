@@ -420,13 +420,15 @@ async def _ams_stock() -> dict:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.filament import Spool
-    ids = set()
+    ids, port = set(), {}
     try:
         from ..core.mqtt import get_state
         for a in get_state().ams_list or []:
             for t in a.trays or []:
                 if getattr(t, "spool_id", None):
                     ids.add(int(t.spool_id))
+                    # l'entree du Filament Track Switch ou est branche son AMS (« A » / « B », vide sans aiguillage)
+                    port[int(t.spool_id)] = getattr(a, "switch_port", "") or ""
     except Exception:
         logger.exception("[FILE] lecture de l'AMS")
     if not ids:
@@ -439,6 +441,7 @@ async def _ams_stock() -> dict:
         e = out.setdefault(int(fid), {"g": 0.0, "spools": []})
         e["g"] += _num(rem)
         e["spools"].append(int(sid))
+        e.setdefault("port", port.get(int(sid), ""))
     return out
 
 

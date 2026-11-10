@@ -831,6 +831,9 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
     # de route ; on dit vers quelle heure (au prorata de la duree), pour preparer la suivante. Une bobine chargee
     # ensuite : on ne sait pas laquelle, on la suppose assez pleine
     ams_g = {fid: float(v.get("g") or 0) for fid, v in (d.get("_ams") or {}).items()}
+    # l'entree du Filament Track Switch de chaque filament charge (10/11/2026, « A » / « B » ; inconnue pour une place
+    # libre) : celle qu'on charge prend l'entree de la bobine qu'elle remplace
+    port = {fid: v.get("port") or "" for fid, v in (d.get("_ams") or {}).items()}
     # les plateaux d'impression (06/11/2026) : le premier de l'ordre de preference qui convient aux filaments (apres un
     # TPU passe sur le PEI texture, le PLA suivant revient sur le SuperTack prefere) ; un changement compte comme une bobine
     from . import plates as PL
@@ -916,6 +919,12 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
             out = [x for x in have if x not in mine]
             if not out:
                 break
+            # un plateau de deux couleurs (10/11/2026) : elles alternent a chaque couche, autant les mettre une sur chaque
+            # entree de l'aiguillage ; celle a charger prend une place de l'autre entree que celle deja chargee
+            if len(mine) == 2 and len(need) == 1:
+                keep = next((x for x in mine if x != need[0]["filament_id"]), None)
+                other = [x for x in out if port.get(keep) and port.get(x) and port.get(x) != port.get(keep)]
+                out = other or out
             v = max(out, key=lambda x: (next_use(x, here), -have.index(x)))
             have.remove(v)
             ams_g.pop(v, None)
@@ -925,6 +934,8 @@ def place(jobs: list, d: dict, now: datetime, busy_until: datetime | None, loade
         # des bobines sorties ; aligne sur « load » (None : une place libre)
         fr = max(0, len(need) - len(unload_ids))
         swap_out = [None] * fr + list(unload_ids[:len(need) - fr])
+        for f, o in zip(need, swap_out):
+            port[f["filament_id"]] = port.get(o, "") if o else ""
         if ext_load is not None:
             swap_out.append(ext_out)
         # le TPU en dernier (comme dans la liste a charger) : ce qu'il remplace dehors ou dans l'AMS HT
