@@ -567,7 +567,26 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
   const where = (b, k) => { const [r, c] = k.split(":").map(Number); return `${b.name} · ligne ${r + 1} · case ${c + 1}`; };
 
   // poser ce qu'on tient : dans une case libre, ou a la place de ce qui y est (qui part la d'ou on venait)
+  // (10/11/2026) deplacer une case et tout ce qui la suit sans trou (un bloc), d'un coup : les cases d'arrivee doivent
+  // etre libres (ou liberees par le bloc lui-meme)
+  const blockOf = (b, k) => { const W = b.cols, cap = b.rows * W, [r, c] = k.split(":").map(Number), out = [];
+    for (let i = r * W + c; i < cap && b.cells[key(Math.floor(i / W), i % W)]; i++) out.push(key(Math.floor(i / W), i % W));
+    return out; };
+  const dropBlock = (bid, k) => {
+    const h = hold; setHold(null);
+    const next = boards.map(b => ({ ...b, cells: { ...b.cells } }));
+    const fb = next.find(b => b.id === h.from.bid), tb = next.find(b => b.id === bid);
+    const cells = h.block.map(x => fb.cells[x]);
+    h.block.forEach(x => { delete fb.cells[x]; });
+    const W = tb.cols, [r, c] = k.split(":").map(Number), p = r * W + c;
+    const dest = cells.map((_, i) => key(Math.floor((p + i) / W), (p + i) % W));
+    if (p + cells.length > tb.rows * W || dest.some(x => tb.cells[x])) {
+      showAlert(`Pas la place : il faut ${cells.length} cases libres à la suite à partir de là.`); return; }
+    dest.forEach((x, i) => { tb.cells[x] = cells[i]; });
+    save(next);
+  };
   const drop = (bid, k) => {
+    if (hold.block) { dropBlock(bid, k); return; }
     const h = hold; setHold(null);
     const next = boards.map(b => ({ ...b, cells: { ...b.cells } }));
     const tb = next.find(b => b.id === bid), old = tb.cells[k];
@@ -606,10 +625,13 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
     const f = c.t === "s" ? byId.get(c.fid) : null;
     const v = await showChoice(c.t === "d" ? `Intercalaire « ${c.label} »` : f ? fname(f) : "Échantillon", [
       { value: "move", label: "Déplacer", icon: "↔", hint: "Puis touche la case où le poser" },
+      ...(blockOf(b, k).length > 1 ? [{ value: "moveb", label: `Déplacer avec la suite (${blockOf(b, k).length} cases)`, icon: "⇉",
+        hint: "Elle et tout ce qui la suit sans trou ; puis touche la case où poser le début" }] : []),
       c.t === "d" ? { value: "rename", label: "Renommer", icon: "✏" } : { value: "swap", label: "Remplacer", icon: "🔁" },
       { value: "shift", label: "Décaler d'ici", icon: "⇥", hint: "Cette case et tout ce qui suit avancent ou reculent" },
       { value: "del", label: "Retirer", icon: "✕", tone: "danger" }]);
     if (v === "shift") shiftFrom(bid, k);
+    else if (v === "moveb") setHold({ cell: c, from: { bid, k }, block: blockOf(b, k) });
     else if (v === "move") setHold({ cell: c, from: { bid, k } });
     else if (v === "rename") setLab({ bid, k, init: c.label });
     else if (v === "swap") setPick({ bid, k });
@@ -688,8 +710,9 @@ export default function SwatchBoard({ filaments, visible, compareHue }) {
       </div>
       {hold && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 12, background: "color-mix(in srgb, #F59E0B 14%, var(--surface2))",
         border: "1px solid color-mix(in srgb, #F59E0B 45%, var(--border))", fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>
-        ↔ Touche la case où poser {hold.cell.t === "d" ? `l'intercalaire « ${hold.cell.label} »` : fname(byId.get(hold.cell.fid) || { name: "l'échantillon" })}
-        {hold.from ? " (une case occupée échange avec lui)" : ""}
+        {hold.block ? <>⇉ Touche la case où poser le début du bloc ({hold.block.length} cases, il faut autant de cases libres à la suite)</>
+          : <>↔ Touche la case où poser {hold.cell.t === "d" ? `l'intercalaire « ${hold.cell.label} »` : fname(byId.get(hold.cell.fid) || { name: "l'échantillon" })}
+        {hold.from ? " (une case occupée échange avec lui)" : ""}</>}
         <button type="button" onClick={() => setHold(null)} style={{ marginLeft: "auto", border: "none", background: "transparent", color: "var(--muted)", fontWeight: 900, cursor: "pointer" }}>Annuler</button></div>}
       {prop?.bid === board.id && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: 12,
         background: "color-mix(in srgb, #7C3AED 13%, var(--surface2))", border: "1px solid color-mix(in srgb, #7C3AED 45%, var(--border))", fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>
