@@ -2002,6 +2002,9 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   // le prix reel (total_cost) et, entre parentheses, le prix normal (filament au tarif catalogue + electricite)
   const totalCost = prints.reduce((s, x) => s + (x.total_cost || 0), 0);
   const totalNormal = prints.reduce((s, x) => s + (x.total_cost_filament_normal || 0) + (x.electric_cost || 0), 0);
+  // (10/11/2026) le detail comme sur la fiche d'une impression : le filament (ce qui n'est pas l'electricite, pour que
+  // les lignes fassent le total) et l'electricite
+  const totalElec = prints.reduce((s, x) => s + (x.electric_cost || 0), 0), totalFil = totalCost - totalElec, totalFilN = totalNormal - totalElec;
   const filsMap = {};
   prints.forEach(x => (x.filament_usage || []).forEach(f => {
     const key = f.spool_id || f.color_hex || f.filament_name || "?";
@@ -2208,12 +2211,15 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {costOpen && (
         <div style={{ padding: "10px 12px", borderRadius: 16, border: "1px solid color-mix(in srgb, #16A34A 22%, var(--border))", display: "flex",
           flexDirection: "column", gap: 7, fontSize: 12.5, background: "radial-gradient(80% 60% at 100% 0%, #16A34A18, transparent 70%), var(--surface2)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
-              background: "color-mix(in srgb, #16A34A 16%, transparent)", flexShrink: 0 }}>💶</span>
-            <span style={{ flex: 1, fontWeight: 800, color: "var(--muted)", fontSize: 12 }}>Total</span>
-            <span style={{ fontWeight: 900, fontSize: 15, ...v2grad("#16A34A", "#4ADE80") }}>{eur2(totalCost)}</span>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 60 }}>({eur2(totalNormal)})</span></div>
+          {[["🧵", "Filament", eur2(totalFil), eur2(totalFilN), "#F97316", "#FDBA74"], ["⚡", "Électricité", eur2(totalElec), null, "#EAB308", "#FDE047"],
+            ["💶", "Total", eur2(totalCost), eur2(totalNormal), "#16A34A", "#4ADE80"]].map(([ic, l, v, s, c1, c2]) => (
+            <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: l === "Total" ? "6px 0 0" : 0,
+              borderTop: l === "Total" ? "1px dashed var(--border)" : "none" }}>
+              <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
+                background: `color-mix(in srgb, ${c1} 16%, transparent)`, flexShrink: 0 }}>{ic}</span>
+              <span style={{ flex: 1, fontWeight: 800, color: "var(--muted)", fontSize: 12 }}>{l}</span>
+              <span style={{ fontWeight: 900, fontSize: l === "Total" ? 15 : 13.5, ...v2grad(c1, c2) }}>{v}</span>
+              {s ? <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 60 }}>({s})</span> : <span style={{ minWidth: 60 }}/>}</div>))}
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
             <span style={{ fontWeight: 800, color: "#16a34a" }}>{nbItems} élément{nbItems > 1 ? "s" : ""}</span>
             {nbItems > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalCost / nbItems)}/u ({eur2(totalNormal / nbItems)}/u)</span>}
