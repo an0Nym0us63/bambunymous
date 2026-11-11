@@ -1738,8 +1738,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       <div style={{ padding: "0 4px" }}><ObjectRest designId={p.design_id}/></div>
     </div>);
   const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateSet.has(String(p.design_id));
-  // (09/11/2026) MakerWorld et les categories : sur ordinateur dans la colonne de gauche, sous les chiffres (elle restait
-  // vide) ; sur telephone, en bas de la fiche
+  // MakerWorld : sous les filaments (11/11/2026) ; les categories dans la colonne de gauche, sous les chiffres
   const side = <>
     {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]} rateElsewhere/>}
     {!p.design_id && p.source_3mf && <OwnSourceCard designId={`p${p.id}`} prints={[p]}/>}
@@ -1768,6 +1767,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {/* les filaments ont deja leur titre repliable (et « Restituer ») */}
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
+      {/* (11/11/2026) MakerWorld revient a droite, sous les filaments */}
+      {side}
       {p.status_note && <div style={{ position: "relative", padding: "12px 14px 12px 18px", borderRadius: 16, overflow: "hidden",
         background: "linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border: "1px solid var(--border)" }}>
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderRadius: 4, background: "linear-gradient(#A855F7, #EC4899)" }}/>
@@ -1799,10 +1800,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
             </div>
             {wide ? (
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)", gap: 18, padding: 18 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}{side}{labels}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}{labels}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 34 }}>{sections}</div>
               </div>
-            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}{side}{labels}</div></>}
+            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}{labels}</div></>}
           </div>
           {/* les actions, toujours a portee du pouce */}
           {isAdmin && <div style={{ flexShrink: 0, display: "flex", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
@@ -2321,8 +2322,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {listOpen && (grid ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>{prints.map(card)}</div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{prints.map(row)}</div>)}
     </div>);
-  // (09/11/2026) MakerWorld et les categories : sur ordinateur dans la colonne de gauche, sous les chiffres ; sur
-  // telephone, en bas de la fiche
+  // MakerWorld : sous les filaments (11/11/2026) ; les categories dans la colonne de gauche, sous les chiffres
   const side = <>
       {cards.map(({ d, prof, list }) => <MakerWorldCard key={`${d}:${prof || ""}`} designId={d} profile={prof} rateElsewhere group prints={list}
         others={prints.filter(x => !list.includes(x))} onLinked={loadPrints}
@@ -2344,6 +2344,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       <MediaGallery kind="group" id={groupId} title={name || ""} refreshKey={prints.map(x => `${x.id}:${x.updated_at || ""}`).join(",")} onChanged={() => { loadPrints(); onUpdated?.(); }}/>
       {printsBlock}
       {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
+      {/* (11/11/2026) MakerWorld revient a droite, sous les filaments */}
+      {side}
     </div>);
   return (
     <>
@@ -2364,10 +2366,10 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
             </div>
             {wide ? (
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)", gap: 18, padding: 18 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}{side}{labels}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}{labels}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 34 }}>{sections}</div>
               </div>
-            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}{side}{labels}</div></>}
+            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}{labels}</div></>}
           </div>
           {isAdmin && <div style={{ flexShrink: 0, display: "flex", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
             borderTop: "1px solid var(--border)", background: "color-mix(in srgb, var(--sheet-bg) 94%, transparent)", backdropFilter: "blur(8px)" }}>
