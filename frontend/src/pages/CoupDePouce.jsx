@@ -136,7 +136,7 @@ export default function CoupDePouce() {
                 <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>{hint}</div>
               </div>
             </div>
-            <Stepper value={qty[k]} onChange={v => { setQty(q => ({ ...q, [k]: v })); setErr(""); setResult(null); }}/>
+            <Stepper max={1e9} value={qty[k]} onChange={v => { setQty(q => ({ ...q, [k]: v })); setErr(""); setResult(null); }}/>
           </div>); })}
         <div style={{ ...field, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

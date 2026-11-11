@@ -6248,7 +6248,7 @@ async def _loupe_mark(username: str, aid: str) -> None:
 
 async def add_family_spins(username: str, n: int) -> dict:
     """Des tours de roue en plus pour un compte de la famille (l'administrateur)."""
-    n = max(1, min(int(n or 1), 100))
+    n = max(1, int(n or 1))
     async with _FAMW_LOCK:
         me = await famwheel(username)
         me = {**me, "spins": int(me.get("spins") or 0) + n}
@@ -7663,7 +7663,7 @@ async def settle(since: str) -> list:
 
 async def add_spins(n: int) -> dict:
     """Ajoute des tours de roue (essais de l'administrateur)."""
-    n = max(1, min(int(n or 1), 100))
+    n = max(1, int(n or 1))
     async with _lock():
         st = await _state_get()
         if st is None:
@@ -7678,7 +7678,7 @@ async def add_spins(n: int) -> dict:
 async def add_keys(n: int, why: str = "Coup de pouce") -> dict:
     """Des cles en plus pour la maison (le coup de pouce de l'administrateur, 28/10/2026) : memes ecritures
     qu'un gain a la roue (solde, total gagne, journal, record)."""
-    n = max(1, min(int(n or 1), 100))
+    n = max(1, int(n or 1))
     async with _lock():
         st = await _state_get()
         if st is None:
@@ -7695,7 +7695,7 @@ async def add_keys(n: int, why: str = "Coup de pouce") -> dict:
 
 async def add_tickets(n: int) -> dict:
     """Des tickets de palier en plus pour la maison (coup de pouce, 28/10/2026)."""
-    n = max(1, min(int(n or 1), 100))
+    n = max(1, int(n or 1))
     async with _lock():
         st = await _state_get()
         if st is None:
