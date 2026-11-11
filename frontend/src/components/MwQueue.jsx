@@ -490,7 +490,10 @@ export default function MwQueue() {
           // les modeles de la liste qui s'en servent (dans les limites « Jusqu'ici » / « Choisir » des comptes), le plus
           // gourmand d'abord ; toucher un modele ouvre sa fiche
           const pk = q.picked ? new Set(q.picked.ids) : null, cut = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
-          const list = q.models.map((r, i) => ({ r, i, g: (r.filaments || []).filter(x => x.chosen?.filament_id === filFor.filament_id).reduce((s, x) => s + (Number(x.g) || 0), 0) }))
+          // (11/11/2026) ce qui reste a imprimer de chaque modele (ses plateaux pas encore faits), comme le total
+          const gOf = r => r.left?.by_fil ? (r.left.by_fil[String(filFor.filament_id)] || 0)
+            : (r.filaments || []).filter(x => x.chosen?.filament_id === filFor.filament_id).reduce((s, x) => s + (Number(x.g) || 0), 0);
+          const list = q.models.map((r, i) => ({ r, i, g: gOf(r) }))
             .filter(x => x.g > 0 && (pk ? pk.has(x.r.design_id) : cut < 0 || x.i <= cut)).sort((a, b) => b.g - a.g);
           return createPortal(<FSheet onClose={() => setFilFor(null)} z={1300} bottom={<button onClick={() => setFilFor(null)} style={{ ...fBtn, flex: 1 }}>Fermer</button>}>
             <div style={{ padding:"52px 16px 18px", display:"flex", flexDirection:"column", gap:10 }}>

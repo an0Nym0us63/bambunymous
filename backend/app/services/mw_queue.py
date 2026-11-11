@@ -916,11 +916,16 @@ def _live_print():
 def _aggregate(models: list, stock_of: dict) -> dict:
     need, unmatched = {}, {}
     for r in models:
-        for fid, g in r["_need"].items():
+        # ce qui reste a imprimer (11/11/2026), plus tout le modele
+        for fid, g in r.get("_left_need", r["_need"]).items():
+            if g <= 0.05:
+                continue
             t = need.setdefault(fid, {"need_g": 0.0, "models": 0})
             t["need_g"] += g
             t["models"] += 1
-        for k, x in r["_miss"].items():
+        for k, x in r.get("_left_miss", r["_miss"]).items():
+            if x["g"] <= 0.05:
+                continue
             u = unmatched.setdefault(k, {"type": x["type"], "color": x["color"], "need_g": 0.0, "models": 0})
             u["need_g"] += x["g"]
             u["models"] += 1
@@ -1113,7 +1118,7 @@ async def _compute(fresh: bool = False) -> dict:
         row = {"design_id": rid, "mw_id": did, "multi": multi, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
                "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []), "coll_ids": where_ids.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
-               "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_inprog": m.get("in_progress") or 0,
+               "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_pl": {}, "_inprog": m.get("in_progress") or 0,
                "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown",
                "default_instance": next((p.get("instance_id") for p in profiles if p.get("default")), None)}
         # le profil retenu n'existe plus sur MakerWorld (06/11/2026 : retire ou remplace par son createur) ; la liste prend
@@ -1171,6 +1176,10 @@ async def _compute(fresh: bool = False) -> dict:
                 fid = pick["filament_id"] if pick else None
                 fid_at[(pn, k)] = fid
                 groups[(k, fid)] = groups.get((k, fid), 0.0) + g * qty
+                # (11/11/2026) le besoin de chaque plateau, pour UN exemplaire : ce qui reste a imprimer s'en deduit
+                # une fois les plateaux faits connus (filaments de « A faire », comme le planning)
+                pe = row["_pl"].setdefault(pn, {})
+                pe[fid if fid else ("?", k)] = pe.get(fid if fid else ("?", k), 0.0) + g
             for (k, fid), g in groups.items():
                 it = by_key[k]
                 pick = next((p for p in resolved.values() if p and p["filament_id"] == fid), None) if fid else None
@@ -1317,4 +1326,27 @@ async def _compute(fresh: bool = False) -> dict:
         r["left"] = {"seconds": round((r["seconds"] or 0) * fs) if r["seconds"] else None,
                      "weight_g": round(r["weight_g"] * fw, 1), "cost": round(c * fw, 2) if r["cost"] is not None else None}
         r["_left_cost"] = c * fw
+        # (11/11/2026) les filaments qui restent a imprimer : chaque plateau pour ses exemplaires pas encore faits (la
+        # liste « Filament pour tout imprimer » comptait tout le modele, plateaux faits et modeles finis compris : elle
+        # ne disait pas la meme chose que le planning) ; sans plateaux connus, en part du poids
+        per = r.pop("_pl", None) or {}
+        if pls and per and all(pn is not None for pn in per):
+            rem = {p["index"]: max(0, q - (p.get("printed") or 0)) for p in pls}
+            ln, lm = {}, {}
+            for pn, e in per.items():
+                n = rem.get(pn, q)
+                if not n:
+                    continue
+                for f, g in e.items():
+                    if isinstance(f, tuple):
+                        lm[f[1]] = lm.get(f[1], 0.0) + g * n
+                    else:
+                        ln[f] = ln.get(f, 0.0) + g * n
+            r["_left_need"] = ln
+            r["_left_miss"] = {k: {**x, "g": lm.get(k, 0.0)} for k, x in r["_miss"].items()}
+        else:
+            r["_left_need"] = {f: g * fw for f, g in r["_need"].items()}
+            r["_left_miss"] = {k: {**x, "g": x["g"] * fw} for k, x in r["_miss"].items()}
+        # par filament, pour la fiche d'un filament (les modeles qui s'en servent encore)
+        r["left"]["by_fil"] = {str(f): round(g, 1) for f, g in r["_left_need"].items() if g > 0.05}
     return {"collections": [{"id": c, "title": colls[c]} for c in chosen], "models": models, "stock_of": stock_of}
