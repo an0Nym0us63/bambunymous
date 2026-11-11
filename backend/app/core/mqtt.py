@@ -20,7 +20,22 @@ _MATCH_MODE_CACHE: dict = {}  # même clé → "rfid"/"auto"/"notfound" (persist
 _SPOOL_INFO_CACHE: dict = {}  # même clé → dict spool_info
 _LOGGED_TRAYS: dict = {}      # (ams, case) → ce qu'on en a ecrit au journal (on ne le reecrit que s'il change)
 _LOGGED_RACK: dict = {}
-_DRYING_AMS: set = set()      # ams_id actuellement en séchage (détection de transition)
+_DRYING_AMS: dict = {}        # ams_id en séchage -> {t0, dated} (détection de transition, durée du cycle)
+# (11/11/2026) une bobine n'est datee « sechee » qu'une fois le cycle alle assez loin : les trois quarts de la duree
+# reglee (au moins une heure), ou 4 h si l'AMS ne dit pas sa duree. Un sechage arrete au bout d'une heure ne compte pas
+DRY_MIN_SHARE = 0.75
+DRY_MIN_H = 1.0
+DRY_DEFAULT_H = 4.0
+
+
+def dry_enough(dur_h, left_min, since_s) -> bool:
+    """Le cycle a-t-il assez dure pour compter ? dur_h : duree reglee (h, 0 inconnue) ; left_min : temps restant (min) ;
+    since_s : depuis quand on le voit secher (s, un redemarrage le remet a zero : la duree reglee prime)."""
+    if dur_h and dur_h > 0:
+        need = max(DRY_MIN_H, DRY_MIN_SHARE * dur_h) * 60
+        done = max(dur_h * 60 - (left_min or 0), since_s / 60)
+        return done >= min(need, dur_h * 60)
+    return since_s >= DRY_DEFAULT_H * 3600
 
 def _persist_last_dried(spool_ids: list):
     """Pose last_dried_at = maintenant sur les bobines données (thread dédié)."""
@@ -938,19 +953,27 @@ class MQTTManager:
                     ams.trays.append(t)
                 _new_ams = [a for a in _new_ams if a.id != ams.id] + [ams]
 
-                # ── Séchage : à la TRANSITION "pas séchage -> séchage" de cet AMS,
-                # on date les bobines qui y sont (last_dried_at). On ne persiste
-                # qu'une fois par cycle grâce au cache _DRYING_AMS.
+                # ── Séchage : au debut d'un cycle, le journal des succes ; les bobines qui y sont (last_dried_at) ne
+                # sont datees qu'une fois le cycle alle assez loin (11/11/2026, dry_enough : avant, des le debut ; un
+                # sechage arrete au bout d'une heure les comptait seches). Une fois par cycle (_DRYING_AMS).
                 _is_drying = (getattr(ams, "dry_time", 0) or 0) > 0
                 _was_drying = ams.id in _DRYING_AMS
                 if _is_drying and not _was_drying:
-                    _DRYING_AMS.add(ams.id)
+                    import time as _dtm
+                    _DRYING_AMS[ams.id] = {"t0": _dtm.time(), "dated": False}
                     try:        # journal des succes : un cycle, sa duree reglee (h) ou restante (min)
                         from ..services import ach_log as _alog
                         _alog.dry(ams.id, (getattr(ams, "dry_duration", 0) or 0)
                                   or (getattr(ams, "dry_time", 0) or 0) / 60)
                     except Exception:
                         pass
+                _cyc = _DRYING_AMS.get(ams.id) if _is_drying else None
+                if _cyc and not _cyc["dated"]:
+                    import time as _dtm
+                    if not dry_enough(getattr(ams, "dry_duration", 0) or 0, getattr(ams, "dry_time", 0) or 0, _dtm.time() - _cyc["t0"]):
+                        _cyc = None
+                if _cyc and not _cyc["dated"]:
+                    _cyc["dated"] = True
                     _sids = [t.spool_id for t in ams.trays if getattr(t, "spool_id", None)]
                     # ... et celles simplement POSEES dans cet AMS (emplacement vide).
                     try:
@@ -963,8 +986,8 @@ class MQTTManager:
                         import threading as _dth
                         _dth.Thread(target=_persist_last_dried, args=(list(_sids),),
                                     daemon=True).start()
-                elif not _is_drying and _was_drying:
-                    _DRYING_AMS.discard(ams.id)
+                if not _is_drying and _was_drying:
+                    _DRYING_AMS.pop(ams.id, None)
 
             state.ams_list = _new_ams
 

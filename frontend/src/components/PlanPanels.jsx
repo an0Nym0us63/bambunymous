@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
+import client from "../api/client";
+import { egg } from "../eggs";
+import { toast } from "../store/toast";
 import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor, UsedFils, ObjectRest } from "./PlanDay";
 import Lightbox from "./Lightbox";
 import { useStackZ } from "../utils/zstack";
@@ -121,6 +124,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           {j.bed_change && <span style={{ fontSize: 11, fontWeight: 900, color: "#0369A1" }}>{bedTxt(j.bed_change)}</span>}
           {j.bed_warn && <span style={{ fontSize: 11, fontWeight: 800, color: "#B45309" }}>🔲 {j.bed_warn}</span>}
           {(j.runout || []).map(r => <span key={r.name} style={{ fontSize: 11, fontWeight: 900, color: "#B45309" }}>🔄 <FilLink id={r.id} label={r.name}/>{runoutTxt(r).slice(3 + r.name.length)}</span>)}
+          {(j.dry || []).map((d, i) => <span key={`dry${i}`} style={{ fontSize: 11, fontWeight: 900, color: d.mode === "none" ? "#DC2626" : "#EA580C" }}>{d.txt}</span>)}
           <StockTags j={j}/>
         </span>
         {(j.reasons || []).map((r, i) => <span key={i} style={{ fontSize: 11.5, color: "var(--muted)" }}>↪ {r}</span>)}
@@ -682,6 +686,52 @@ export function LowStockBanner({ jobs, now, onOpen, inPopup = false }) {
     </button>)}
     {alerts.length > 3 && <button type="button" onClick={() => setAll(v => !v)} style={{ alignSelf: "flex-start", border: "none", background: "none", padding: 0, cursor: "pointer",
       fontSize: 12, fontWeight: 800, color: "#DC2626" }}>{all ? "Moins" : `+ ${alerts.length - 3} autre${alerts.length > 4 ? "s" : ""}`}</button>}
+  </div>;
+}
+
+// les sechages du planning (11/11/2026) : avant une impression qui se sert de la bobine (dans le HT pour le TPU et les
+// techniques, posee dans un AMS libre de meme nature, ou sur place), et un AMS de meme nature qui ne sert pas
+export function DryList({ items, edit, onOpen, jobs, now }) {
+  const [done, setDone] = useState({});
+  if (!items?.length) return <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>Rien à sécher dans les trois prochains jours.</div>;
+  const pose = async it => {
+    try {
+      await client.put(`/printer/ams/${it.unit}/${it.tray}/drying`, { spool_id: it.spool });
+      setDone(d => ({ ...d, [`${it.unit}:${it.tray}`]: true }));
+      egg("planning_sechage_pose");
+      toast(`♨ Posée dans ${it.unit_label} : lance le séchage à ${it.t} °C`, "ok", 4000);
+    } catch (e) { toast(e.response?.data?.detail || e.message, "error", 5000); }
+  };
+  const C = "#EA580C";
+  return <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
+      Le plus tard possible avant l'impression, quand tu es là (heures de lancement, créneaux de chargement), et si possible pendant que les
+      autres AMS impriment. Température et durée : celles du profil Bambu du filament (ou une valeur usuelle). Rien n'est lancé tout seul :
+      l'AMS date lui-même les bobines une fois le séchage assez avancé.</div>
+    {items.map((it, i) => { const j = it.for_key && (jobs || []).find(x => x.key === it.for_key);
+      const c = it.mode === "none" ? "#DC2626" : C;
+      return <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 12,
+        border: `1px solid color-mix(in srgb, ${c} 35%, var(--border))`, background: `color-mix(in srgb, ${c} 7%, var(--surface))` }}>
+        <span style={{ fontSize: 17 }}>{it.mode === "none" ? "⚠" : "♨"}</span>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: c }}>
+            {it.kind === "opportunity" ? `${it.unit_label} · ${it.family}` : <FilLink id={it.fid} label={it.name}/>}
+            {it.start ? ` · ${when(it.start, now)} → ${hhmm(it.end)}` : ""}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>{(t => t.charAt(0).toUpperCase() + t.slice(1))(
+            (it.txt || "").replace(/^♨ /, "").replace(it.kind !== "opportunity" && it.name ? `${it.name} ` : "", "").replace(/^: /, ""))}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+            {it.kind === "opportunity" ? `À sécher : ${(it.old || []).join(", ")} · ` : it.why ? `${it.why} · ` : ""}réglage : {it.src}</span>
+          <span style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+            {edit && it.mode === "posed" && it.tray != null && (done[`${it.unit}:${it.tray}`]
+              ? <span style={{ fontSize: 11.5, fontWeight: 900, color: "#16A34A" }}>✓ posée</span>
+              : <button type="button" onClick={() => pose(it)} data-tip={`Dire à BambuNymous que cette bobine est posée dans ${it.unit_label} slot ${it.tray + 1} (sans l'insérer) : elle sera datée quand le séchage aura assez duré`}
+                style={{ padding: "4px 10px", borderRadius: 10, border: `1px solid color-mix(in srgb, ${C} 45%, var(--border))`, background: "var(--surface)",
+                  color: C, fontSize: 11.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>📥 C'est posé</button>)}
+            {j && onOpen && <button type="button" onClick={() => onOpen(j)} style={{ padding: "4px 10px", borderRadius: 10, border: "1px solid var(--border)",
+              background: "var(--surface)", color: "var(--text2)", fontSize: 11.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Le plateau</button>}
+          </span>
+        </span>
+      </div>; })}
   </div>;
 }
 

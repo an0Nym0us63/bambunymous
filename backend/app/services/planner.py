@@ -48,7 +48,8 @@ KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
 DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": [], "load_win": [],
-            "dur_mode": "off", "dur_pct": 0, "plates": [], "away": [], "we": None}
+            "dur_mode": "off", "dur_pct": 0, "plates": [], "away": [], "we": None, "dry": None}
+# dry (11/11/2026) : les sechages du planning, voir services/dry_plan.py ({mode, fresh}) ; None : les reglages par defaut
 # away (06/11/2026) : des absences de quelques heures, [{date, from, to}] ; rien ne se lance pendant, elles s'effacent une
 # fois passees. we : d'autres horaires le week-end (et les jours feries, au choix) : {on, run, launch, holidays}
 # les plateaux d'impression possedes (06/11/2026) : [{kind, n, name, avoid: [matieres ou sous-types]}] ; vide, le
@@ -254,6 +255,9 @@ async def set_settings(body: dict) -> dict:
                 raise PlanError("Un créneau de chargement d'au moins 15 minutes")
             out.append({"from": w["from"], "to": w["to"]})
         d["load_win"] = out
+    if "dry" in body:
+        from . import dry_plan as DP
+        d["dry"] = DP.clean_settings(body.get("dry"))
     if body.get("opt_mode") in MODES:
         d["opt_mode"] = body["opt_mode"]
     # les nouveaux plateaux (un modele retenu, un exemplaire de plus) : en fin de file, ou places selon un mode
@@ -1726,7 +1730,11 @@ async def _plan_key(tz) -> tuple:
         from ..core.mqtt import get_state
         s = get_state()
         st = (s.status, s.job_id, int(s.progress or 0) // 2, s.remaining_minutes,
-              tuple((a.id, t.id, t.spool_id, t.empty) for a in (s.ams_list or []) for t in a.trays or []))
+              tuple((a.id, t.id, t.spool_id, t.empty) for a in (s.ams_list or []) for t in a.trays or []),
+              # le sechage (11/11/2026) : un AMS qui commence ou finit de secher, une bobine posee
+              tuple((a.id, (a.dry_time or 0) > 0) for a in (s.ams_list or [])))
+        from . import drying_slots as _DS
+        st = st + (json.dumps(_DS.current(), sort_keys=True, default=str),)
     except Exception:
         st = None
     return (hash(raw), q, st, datetime.now().strftime("%Y%m%d%H%M"), tz)
@@ -1894,6 +1902,8 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
     r = await asyncio.to_thread(place, jobs, d, now, busy, loaded, _slots())
     mark_complete(r["jobs"])
     await _load_spots(r["jobs"])
+    # les sechages (11/11/2026) : avant les impressions qui s'en servent, pendant que d'autres impriment
+    drying = await _dry(r["jobs"], d, now)
     # avance ou retard : chaque debut, compare a celui du dernier rangement
     p0 = d["plan0"]
     # (06/11/2026) depuis quand : l'heure du dernier rangement, pour dire « par rapport a quoi »
@@ -1992,13 +2002,14 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
         _ADVICE.update(at=datetime.now().isoformat(timespec="seconds"), items=adv + madv)
     else:
         adv, madv = list(_ADVICE["items"]), []
-    return {"settings": {k: d[k] for k in DEFAULTS}, "now": now.isoformat(timespec="minutes"), "timing_ms": tm,
+    from . import dry_plan as DP
+    return {"settings": {**{k: d[k] for k in DEFAULTS}, "dry": DP.clean_settings(d.get("dry"))}, "now": now.isoformat(timespec="minutes"), "timing_ms": tm,
             "busy_until": busy.isoformat(timespec="minutes") if busy else None,
             "live": ({"name": live[1], "design_id": live[2], "remaining_min": live[0], **(await _live_print(d))} if live else None),
             "dur": d.get("_dur"), "summary": plan_metrics(r, d, now), "bed_now": d.get("_bed_now"), "fcolors": d.get("_fcol") or {},
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
             "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": adv + madv, "advice_at": _ADVICE["at"],
-            "status": status,
+            "status": status, "drying": drying,
             "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
                                                 "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
@@ -2710,6 +2721,30 @@ async def _load_spots(jobs: list) -> None:
             j["out_spots"] = ospots
 
 
+async def _dry(jobs: list, d: dict, now: datetime) -> list:
+    """Le plan de sechage (11/11/2026, services/dry_plan.py) : chaque plateau porte les siens (« dry », des index dans
+    la liste rendue), et la liste part avec le planning. On est la pour poser une bobine aux heures de lancement (jours
+    particuliers et absences compris) et dans les creneaux de chargement."""
+    from . import dry_plan as DP
+    rules = Rules(d)
+    lnch = rules._launch_iv(now, 6)
+
+    def present(t):
+        return (lnch is None or any(a <= t <= b for a, b in lnch)) and rules.in_load(t)
+    try:
+        out = await DP.annotate(jobs, d, now, present)
+    except Exception:
+        logger.exception("[PLANNING] sechages")
+        return []
+    for it in out["items"]:
+        it["txt"] = DP.text(it, now)
+    for j in jobs:
+        ix = out["by_job"].get(j["key"])
+        if ix:
+            j["dry"] = [out["items"][i] for i in ix]
+    return out["items"]
+
+
 def _spot_txt(sp) -> str:
     return f" (📍 {sp['where']})" if sp and sp.get("where") else ""
 
@@ -2817,6 +2852,24 @@ async def tick(cfg, r: dict | None = None) -> int:
                                f"Prépare une autre bobine de {ro['name']} pour {_day_fr(at, today)} à {_fmt(at)}.",
                                click=N.app_link(cfg, f"/filaments?id={ro['id']}" if ro.get("id") else "/prints?tab=calendar"), priority=3)
                 sent += 1
+        # un sechage a lancer (11/11/2026) : un peu avant l'heure, quoi poser ou, a quelle temperature, combien de temps
+        from . import dry_plan as DP
+        for it in r.get("drying") or []:
+            if not it.get("start"):
+                continue
+            at = datetime.fromisoformat(it["start"])
+            k = f"dry|{it.get('spool') or it.get('unit')}|{it['start'][:13]}"
+            if at - nowt > timedelta(minutes=mins) or at < nowt - timedelta(minutes=30) or d["notified"].get(k):
+                continue
+            d["notified"][k] = 1
+            changed = True
+            title = (f"♨ Séchage à {_fmt(at)} : {it['unit_label']}" if it["kind"] == "opportunity"
+                     else f"♨ Séchage à {_fmt(at)} : {it.get('name')}")
+            body = DP.text(it, nowt).replace("♨ ", "", 1)
+            if it.get("short"):
+                body += "\nPas le temps de tout faire avant l'impression : lance-le tout de suite, ou décale le plateau."
+            await N.notify("plan_load", title, body, click=N.app_link(cfg, "/prints?tab=calendar&pop=drying"), priority=3)
+            sent += 1
     if changed:
         await _save(d)
     st, j = r.get("status"), (r.get("jobs") or [None])[0]
@@ -2829,7 +2882,7 @@ async def tick(cfg, r: dict | None = None) -> int:
         return 0
     ks = {x["key"] for x in r["jobs"]}
     d["notified"] = {k: v for k, v in d["notified"].items() if k in ks or k.startswith("due:") or (k.startswith("load:") and k[5:] in ks) or (k.startswith("soon:") and k[5:] in ks)
-                   or (k.startswith("runout|") and k.split("|")[1] in ks)}
+                   or (k.startswith("runout|") and k.split("|")[1] in ks) or (k.startswith("dry|") and k.rsplit("|", 1)[1] >= r["now"][:10])}
     d["notified"][j["key"]] = step
     await _save(d)
     name = _title(j)

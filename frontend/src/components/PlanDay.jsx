@@ -313,7 +313,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || j.bed_change || j.bed_warn || j.merged || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || j.dry?.length > 0 || j.bed_change || j.bed_warn || j.merged || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
       {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {j.locked && tag(`🔒 figé à ${hhmm(j.start)}`, "#4F46E5", "Figé à ce jour et cette heure : optimiser, journée couleur, au mieux ou plus tard ne le déplacent pas")}
@@ -330,6 +330,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {!j.bed_change && j.bed_warn && tag(`🔲 ${j.bed_warn}`, "#B45309", "Paramètres › Imprimante › Plateaux d'impression")}
       {j.unload?.length > 0 && tag(<>↩ À retirer : <FilLinks labels={j.unload} ids={j.unload_ids}/></>, "#64748B", "Celle qui resservira le plus tard (ou plus du tout) : on la sort pour faire la place")}
       {(j.runout || []).map(r => <React.Fragment key={r.name}>{tag(<>🔄 <FilLink id={r.id} label={r.name}/>{runoutTxt(r).slice(3 + r.name.length)}</>, "#B45309", "La bobine chargée ne suffit pas : prépare-en une autre de ce filament pour cette heure-là")}</React.Fragment>)}
+      {(j.dry || []).map((d, i) => <React.Fragment key={`dry${i}`}>{tag(d.txt, d.mode === "none" ? "#DC2626" : "#EA580C", `À sécher avant ce plateau (${d.why || "délai dépassé"}) · réglage : ${d.src}`)}</React.Fragment>)}
     </div>}
     {/* decale par la tache de fond (pas par un rangement) : d'ou il vient, quand, pourquoi */}
     {j.moved && <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.35, color: "#0EA5E9" }}>
@@ -364,7 +365,7 @@ export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x =>
 // les signes d'un plateau prevu (06/11/2026), les memes partout dans le calendrier ; LEGEND les explique
 export const PRIO_IC = { 2: "🔥", 1: "⬆", "-1": "⬇", "-2": "⏬" };
 export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_IC[j.prio_m] || "", finIc(j), unretained(j) ? "○" : "",
-  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.merged ? "🧩" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : ""].filter(Boolean).join("");
+  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.merged ? "🧩" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : "", j.dry?.length ? "♨" : ""].filter(Boolean).join("");
 export const LEGEND = [
   ["Les impressions", [["▮", "Bloc plein, de la couleur de son état : une impression faite (réussie, échouée, annulée) ou en cours"],
     ["▯", "Bloc teinté, liseré à gauche : un plateau prévu par le planning ; sa couleur dit ce qu'il est (voir « Les couleurs »)"],
@@ -373,6 +374,7 @@ export const LEGEND = [
   ["Priorité", [["🔥", "Urgent : devant tous les autres retenus"], ["⬆", "Haute"], ["⬇", "Basse"], ["⏬", "Très basse"]]],
   ["Filaments", [["🧵", "Une bobine à charger avant de le lancer"], ["↩", "La bobine à retirer pour faire la place"],
     ["🔄", "La bobine chargée se videra pendant l'impression : en préparer une autre"],
+    ["♨", "Une bobine à sécher avant ce plateau : où, quand, à quelle température (liste ♨ séchages)"],
     ["🔲", "Changer de plateau d'impression avant de lancer (celui que demande le profil, ou un qui va au filament)"], ["🚚", "Compte sur une commande pas encore reçue"],
     ["📉", "Un filament passera sous le seuil (un quart de bobine)"]]],
   ["Le reste", [["🏆", "Avec ce plateau, le modèle est entièrement fini (tous ses exemplaires)"], ["🏁", "Avec ce plateau, un exemplaire est complet (il en reste d'autres)"], ["🎯", "Date limite (rouge : il finira après)"],
@@ -874,6 +876,9 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
   const [durPct, setDurPct] = useState(String(s?.dur_pct ?? 0));
   const [away, setAway] = useState(s?.away || []);
   const [we, setWe] = useState(s?.we || null);
+  // le sechage avant impression (11/11/2026) : off, sensibles (pas le PLA), tout ; et les jours au-dela desquels secher
+  const [dry, setDry] = useState(s?.dry || { mode: "sensitive", fresh: {} });
+  const [newFam, setNewFam] = useState("");
   const [busy, setBusy] = useState(false);
   const range = (v, set, def, offTxt, onTxt) => <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -884,7 +889,7 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
       de <input type="time" value={v.from} onChange={e => set({ ...v, from: e.target.value })} style={tin}/>
       à <input type="time" value={v.to} onChange={e => set({ ...v, to: e.target.value })} style={tin}/></div>}
   </div>;
-  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin, dur_mode: durMode, dur_pct: parseInt(durPct) || 0, away, we }); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin, dur_mode: durMode, dur_pct: parseInt(durPct) || 0, away, we, dry }); } finally { setBusy(false); } };
   const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
@@ -967,6 +972,30 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
       <DaysOff list={daysOff} set={setDaysOff}/>
       <div style={hint}><b>Absent</b> : rien ne se lance (une impression lancée avant finit quand même). <b>Peu dispo</b> : une seule heure de
         lancement, la première de ta plage ; le planning y lance un long qui couvre la journée, et un long la veille au soir.</div>
+    </div>
+    <div>
+      <div style={lab}>♨ Séchage avant impression</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {[["off", "Pas de séchage"], ["sensitive", "Sensibles (sans le PLA)"], ["all", "Tout, PLA compris"]].map(([k, l]) =>
+          <button key={k} type="button" onClick={() => setDry({ ...dry, mode: k })} style={{ ...seg, ...(dry.mode === k ? segOn : {}) }}>{l}</button>)}
+      </div>
+      {dry.mode !== "off" && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+        {Object.entries(dry.fresh || {}).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([k, n]) =>
+          <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 9px", borderRadius: 10, border: "1px solid var(--border)",
+            background: "var(--surface2)", fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>{k}
+            <input inputMode="numeric" value={n} onChange={e => setDry({ ...dry, fresh: { ...dry.fresh, [k]: e.target.value.replace(/\D/g, "").slice(0, 3) } })}
+              style={{ ...tin, width: 42, padding: "3px 5px" }}/> j
+            <button type="button" aria-label={`Retirer ${k}`} onClick={() => { const f = { ...dry.fresh }; delete f[k]; setDry({ ...dry, fresh: f }); }}
+              style={{ border: "none", background: "none", cursor: "pointer", color: "var(--muted)", fontSize: 13, padding: "0 2px" }}>✕</button></span>)}
+        <span style={{ display: "inline-flex", gap: 4 }}>
+          <input value={newFam} placeholder="PA, PC…" onChange={e => setNewFam(e.target.value.toUpperCase().slice(0, 10))} style={{ ...tin, width: 74, padding: "3px 6px" }}/>
+          <button type="button" disabled={!newFam.trim()} onClick={() => { setDry({ ...dry, fresh: { ...dry.fresh, [newFam.trim()]: 7 } }); setNewFam(""); }}
+            style={{ ...seg, padding: "4px 10px" }}>+ Matière</button></span>
+      </div>}
+      <div style={hint}>Avant une impression, le planning propose de sécher une bobine séchée il y a plus de ces jours-là (sinon, au délai général
+        de Paramètres › Séchage). Le TPU et les filaments techniques vont dans l'AMS HT, où ils restent pour imprimer ; les autres se posent sans être
+        insérés dans un AMS libre dont les bobines supportent la même température, de préférence pendant que les autres impriment. Un AMS de même
+        nature qui ne sert pas pendant quelques heures est proposé au séchage aussi.</div>
     </div>
     <div>
       <div style={lab}>✨ Mode d'optimisation proposé</div>

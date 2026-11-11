@@ -6,7 +6,7 @@ import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw, useCanMwHome } from "../store/auth";
 import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors, platePics } from "./PlanDay";
-import { JobSheet, LowStockBanner, BlockedList } from "./PlanPanels";
+import { JobSheet, LowStockBanner, BlockedList, DryList } from "./PlanPanels";
 import { sheetRef } from "./planActs";
 import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
 import Lightbox from "./Lightbox";
@@ -278,6 +278,7 @@ export function PlanZoom({ p: p0 }) {
       <Agenda jobs={(p.jobs || []).filter(j => j.day === d)} now={p.now} max={40} onOpen={setSel}/>
     </div>)}
     {(p.jobs || []).some(j => j.low_info?.length) && <>{sec("Sous le seuil")}<LowStockBanner jobs={p.jobs} now={p.now} inPopup onOpen={setSel}/></>}
+    {(p.drying || []).length > 0 && <>{sec("Séchages à prévoir")}<DryList items={(p.drying || []).slice(0, 4)} edit={edit} jobs={p.jobs} now={p.now} onOpen={setSel}/></>}
     {(p.blocked || []).length > 0 && <>{sec("Non planifiables")}<BlockedList items={p.blocked} onOpen={setSel}/></>}
     <button type="button" onClick={() => nav("/prints?tab=calendar")} style={{ alignSelf: "flex-start", padding: "9px 16px", borderRadius: 12, border: "none", cursor: "pointer",
       background: `linear-gradient(135deg, ${C}, #8B5CF6)`, color: "#fff", fontSize: 13, fontWeight: 900, boxShadow: `0 8px 18px -10px ${C}` }}>📅 Ouvrir le calendrier</button>
