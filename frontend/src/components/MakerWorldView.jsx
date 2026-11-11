@@ -282,7 +282,9 @@ export default function MakerWorldView({ onSearch }) {
   const pageUrl = view === "discover" ? "/makerworld/discover" : view === "search" ? "/makerworld/search" : LIST_TABS.includes(tab) ? `/makerworld/collection/${tab}`
     : coll ? `/makerworld/collections/${coll.id}` : null;
   const pageKey = view === "discover" ? `disc:${dk}` : view === "search" ? `search:${sq}` : LIST_TABS.includes(tab) ? tab : coll ? `coll:${coll.id}` : null;
-  const hasMore = !!data?.items && (PUBLIC_TABS.includes(tab) ? data.total > data.items.length
+  // (11/11/2026) une page qui n'apporte rien (vide, que des doublons) arrete la suite (stalled) : « total > affiches »
+  // seul relancait la meme page en boucle (une recherche a 487 / 1509, offset=487 sans fin)
+  const hasMore = !!data?.items && (PUBLIC_TABS.includes(tab) ? data.total > data.items.length && !data.stalled
     : (LIST_TABS.includes(tab) || coll || (tab === "following" && view !== "search" && view !== "discover")) ? !!data.has_more : false);
   const loadMore = () => {
     if (!more && tab === "following" && view !== "search" && view !== "discover" && data?.next_before) {
@@ -302,23 +304,27 @@ export default function MakerWorldView({ onSearch }) {
     }
     if (more || !pageUrl) return;
     setMore(true);
+    const off = data.next_offset ?? data.items.length;
     client.get(pageUrl, { params: { ...(view === "search" ? { q: sq } : view === "discover" ? { key: dk, ...(data.seed ? { seed: data.seed } : {}) } : {}),
-      offset: data.next_offset ?? data.items.length } })
+      offset: off } })
       .then(({ data: d }) => setData(prev => {
         const seen = new Set(prev.items.map(y => y.design_id));
-        const next = { ...prev, has_more: d.has_more, total: d.total ?? prev.total,
-          next_offset: d.next_offset,
-          items: [...prev.items, ...(d.items || []).filter(x => !seen.has(x.design_id))] };
-        if (!(d.items || []).length) next.has_more = false;
+        const fresh = (d.items || []).filter(x => !seen.has(x.design_id));
+        // l'offset avance de ce que la page a rendu, doublons compris (sinon une page de doublons se redemandait)
+        const next = { ...prev, has_more: d.has_more, total: d.total ?? prev.total, failed: false,
+          next_offset: d.next_offset ?? off + (d.items || []).length,
+          items: [...prev.items, ...fresh] };
+        if (!(d.items || []).length) { next.has_more = false; next.stalled = true; }
         const patched = mwPatch(pageKey, next);
         if (pageKey) CACHE.set(pageKey, patched);
         return patched;
       }))
-      .catch(() => {}).finally(() => setMore(false));
+      // une erreur n'est plus redemandee en boucle : « Réessayer » a la main
+      .catch(() => setData(prev => prev && { ...prev, failed: true })).finally(() => setMore(false));
   };
   useEffect(() => {
     const el = sentinel.current;
-    if (!el || !hasMore || more) return;
+    if (!el || !hasMore || more || data?.failed) return;
     // Defilement infini : observateur + controle au defilement (la page
     // defile dans un conteneur, et certains navigateurs integres retardent
     // l'observateur).
@@ -694,11 +700,13 @@ export default function MakerWorldView({ onSearch }) {
                   {more ? <span className="mw-spin"/> : (
                     <button onClick={loadMore} style={{ padding:"9px 18px", borderRadius:20, fontSize:12.5, fontWeight:800,
                       cursor:"pointer", background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>
-                      Plus de modèles{data.total ? ` (${data.items.length} / ${data.total})` : ""}
+                      {data.failed ? "↻ Réessayer · " : ""}Plus de modèles{data.total ? ` (${data.items.length} / ${data.total})` : ""}
                       {tab === "following" && data.start ? ` · avant le ${new Date(data.start + "Z").toLocaleDateString("fr-FR", { day:"numeric", month:"short" })}` : ""}</button>
                   )}
                 </div>
               )}
+              {data.stalled && data.total > data.items.length && <div style={{ textAlign:"center", padding:"12px 0", fontSize:12, fontWeight:700, color:"var(--muted)" }}>
+                MakerWorld n'en donne pas plus ({data.items.length} / {data.total}) : affine la recherche pour voir les autres</div>}
             </>)}
         </div>
         <HiddenMark egg="small_world" e="🌍" side="right"/>
