@@ -49,6 +49,9 @@ class AMS:
     # 6 chauffe hors controle), sous-phase (bits 22-23 : 1 chauffe, 2 deshumidification),
     # ventilateurs (bits 18-19, 20-21), et ce qui empeche de secher (dry_sf_reason).
     dry_status: int = -1
+    # le modele (info, bits 0-3, cf. DevFilaSystem) : 1 AMS d'origine, 2 AMS lite, 3 AMS 2 Pro, 4 AMS HT ; 0 inconnu.
+    # Seuls l'AMS 2 Pro et le HT savent secher (l'AMS d'origine envoie aussi « info », sans chauffage).
+    ams_type: int = 0
     dry_sub_status: int = 0
     dry_fan1: int = 0
     dry_fan2: int = 0

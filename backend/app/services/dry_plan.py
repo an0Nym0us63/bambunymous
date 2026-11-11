@@ -446,8 +446,9 @@ def _units_now() -> list:
         for t in a.trays or []:
             trays.append({"tray": t.id, "sid": int(t.spool_id) if getattr(t, "spool_id", None) else None,
                           "empty": bool(t.empty), "posed": DS.spool_at(a.id, t.id) or DS.spool_at(a.id, t.id, "suite")})
-        # un AMS qui seche : le HT, l'AMS 2 Pro (il decrit son sechage dans « info ») ; l'AMS d'origine et l'AMS lite non
-        out.append({"id": a.id, "label": ams_label(a.id), "ht": ht, "can": ht or getattr(a, "dry_status", -1) >= 0,
+        # un AMS qui seche : le HT, l'AMS 2 Pro (son modele dans « info », bits 0-3 : 3 ou 4) ; l'AMS d'origine (1) et
+        # l'AMS lite (2) non, meme s'ils envoient « info » eux aussi
+        out.append({"id": a.id, "label": ams_label(a.id), "ht": ht, "can": ht or getattr(a, "ams_type", 0) in (3, 4),
                     "drying": (getattr(a, "dry_time", 0) or 0) > 0, "trays": trays})
     return out
 

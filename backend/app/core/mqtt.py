@@ -779,6 +779,7 @@ class MQTTManager:
                 if ams_raw.get("info") not in (None, ""):
                     try:
                         _inf = int(str(ams_raw.get("info")), 16)
+                        ams.ams_type = _inf & 0xF
                         ams.dry_status = (_inf >> 4) & 0xF
                         ams.dry_fan1 = (_inf >> 18) & 0x3
                         ams.dry_fan2 = (_inf >> 20) & 0x3
