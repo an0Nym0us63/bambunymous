@@ -2530,10 +2530,11 @@ function WheelZoom({ a, cells, spins, go }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{soon.map(([ic, c, t], i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 9,
         padding: "7px 10px", borderRadius: 10, background: "var(--surface2)", fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>
         <span style={{ color: c, display: "inline-flex" }}>{ic}</span>{t}</div>)}</div></>}
-    <H2>Jusqu'ici</H2>
+    {/* (11/11/2026) les cumuls : le compte principal seul (le serveur ne les donne pas aux autres) */}
+    {k.earned != null && <><H2>Jusqu'ici</H2>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
       {card("Clés gagnées", k.earned, "#d97706")}{card("Clés dépensées", a.keys_spent)}{card("Tours joués", w.played)}{card("Tickets utilisés", a.tickets_used, "#db2777")}
-    </div>
+    </div></>}
     {k.log?.length > 0 && <><H2>Journal des clés</H2>
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{k.log.slice(0, 10).map((l, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "center",
         fontSize: 12.5, padding: "5px 8px", borderRadius: 8, background: i % 2 ? "transparent" : "var(--surface2)", minWidth: 0 }}>

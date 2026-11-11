@@ -8020,6 +8020,42 @@ async def export_csv() -> str:
 
 
 # ── Secrets : ce qu'un autre compte en voit ──────────────────────────────────
+# (11/11/2026) ce que la maison a fait de ses cles et de ses tickets ne regarde qu'elle : pour tout autre compte (un
+# copain, la famille, un autre administrateur), ni ou ils sont passes, ni combien.
+SPEND_IDS = {"keys_spent", "tickets_used", "reveals", "keys_earned", "tickets_won"}
+
+
+def _secret_shown(a: dict, rv: int, it: dict) -> dict:
+    """Un secret pas encore gagne, montre a l'etape rv (comme dans view)."""
+    return {**it, "emoji": "❔" if rv < 2 else a["emoji"], "name": "Succès secret" if rv < 3 else a["name"],
+            "hint": hint_of(a) if rv >= 4 else None, "reveal": rv, "sub": None if rv < 1 else a.get("sub"),
+            "desc": "Continue d'imprimer : il se dévoilera tout seul." if rv < 1 else "Descriptif à révéler (🔑)" if rv < 5 else it.get("desc")}
+
+
+def hide_spending(v: dict) -> dict:
+    """La vue pour un autre compte que le principal : sans les cumuls de cles et de tickets (ni leurs succes), sans les
+    paliers passes au ticket ni les secrets devoiles a la cle (seulement ce que les copains offrent), sans le journal."""
+    if not isinstance(v, dict) or not isinstance(v.get("items"), list):
+        return v
+    items = []
+    for it in v["items"]:
+        if it.get("id") in SPEND_IDS:
+            continue
+        it = {**it, "tickets": 0, "ticket_uses": [], "key_use": None,
+              "tiers": [{**t, "ticket": False} for t in it.get("tiers") or []]}
+        rf = it.pop("rv_free", 0) or 0
+        if it.get("secret") and (it.get("level") if it.get("level") is not None else -1) < 0 and (it.get("reveal") or 0) > rf \
+                and it.get("id") in BY_ID:
+            it = _secret_shown(BY_ID[it["id"]], rf, it)
+        items.append(it)
+    keys = v.get("keys")
+    if isinstance(keys, dict):
+        keys = {k: x for k, x in keys.items() if k not in ("log", "earned")}
+    rec = lambda l: [r for r in (l or []) if isinstance(r, dict) and r.get("id") not in SPEND_IDS]
+    return {**v, "items": items, "keys": keys, "tickets_used": 0, "keys_spent": 0,
+            "recent": rec(v.get("recent")), "recent_all": rec(v.get("recent_all"))}
+
+
 def mask_secrets(v: dict, keep=()) -> dict:
     """Medailles uniques gagnees : la medaille, le titre et la date restent ;
     ce qui l'a valu et son histoire sont caches, sauf pour celles de `keep`
@@ -8106,6 +8142,9 @@ async def _view(fresh: bool) -> dict:
                 "id": a["id"], "cat": a["cat"], "emoji": "❔" if secret and rv < 2 else a["emoji"],
                 "name": "Succès secret" if secret and rv < 3 else a["name"],
                 "hint": hint_of(a) if secret and rv >= 4 else None, "reveal": rv,
+                # ce que les copains offrent (sans cle) : ce que voient les autres comptes (hide_spending)
+                "rv_free": min(rv, FREE_FROM_FRIENDS if any(a["id"] in ids for ids in (st.get("friend_uniques") or {}).values()) else 0)
+                if secret else 0,
                 # etapes offertes par des copains qui l'ont deja (grace a…)
                 "gift_from": _gift_from(st, a["id"]) if secret else [],
                 "desc": ("Continue d'imprimer : il se dévoilera tout seul." if rv < 1 else "Descriptif à révéler (🔑)")

@@ -556,7 +556,7 @@ async def achievements_spend_key(aid: str, _: str = Depends(require_main)):
 
 
 @router.get("/export")
-async def achievements_export(_: str = Depends(require_admin)):
+async def achievements_export(_: str = Depends(require_main)):
     """Tableau CSV des paliers et de ma progression (revue des seuils)."""
     from fastapi.responses import Response
     from ....services import achievements as A
@@ -590,6 +590,7 @@ async def achievements_view(request: Request, fresh: bool = False, slim: int = 0
                 others = [x for x in fam["secrets"] if x != username]
                 v = A.family_roster(A.family_finds_view(v, by, others), by, others)
             return _json({**v, "me": me}, slim, view)
+        v = A.hide_spending(v)                    # (11/11/2026) les cles et tickets de la maison ne regardent qu'elle
         u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
         house_ids = {it["id"] for it in v["items"] if it["level"] >= 0 and it["id"] in A.FAMILY_IDS}
         if not (u is not None and u.secrets_visible):
@@ -605,6 +606,7 @@ async def achievements_view(request: Request, fresh: bool = False, slim: int = 0
             v = A.family_roster(v, await A._eggs_by(), [x for x in fam["secrets"] if x != username],
                                 house=me["house"] or "La maison", house_ids=house_ids)
         return _json({**v, "me": me}, slim, view)
+    v = A.hide_spending(v)
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if u is not None and u.secrets_visible:
         return _json(v, slim, view)                           # droit « voit mes succes secrets » : tout, revelations comprises
