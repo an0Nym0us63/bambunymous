@@ -1759,6 +1759,53 @@ function CategoriesModal({ onClose }) {
 
 
 // ── Étiquettes filaments (PDF) ─────────────────────────────────────────────
+// (11/11/2026) une planche entamee : la planche entiere a l'ecran (des QR factices), on touche la case ou commencer, ou
+// on donne sa ligne et sa colonne ; le PDF commence la. La case suivante est retenue sur l'appareil apres chaque PDF.
+const QR_FAKE = [1,0,1,1,0,1,0, 0,1,0,0,1,1,1, 1,1,0,1,0,0,1, 0,0,1,1,1,0,0, 1,0,1,0,0,1,1, 0,1,1,0,1,0,1, 1,1,0,1,0,1,0];
+function FakeQr({ c = "#0f172a" }) {
+  return <svg viewBox="0 0 7 7" style={{ width: "100%", height: "auto", display: "block" }} shapeRendering="crispEdges">
+    {QR_FAKE.map((on, i) => on ? <rect key={i} x={i % 7} y={Math.floor(i / 7)} width="1" height="1" fill={c}/> : null)}
+    {[[0, 0], [4.5, 0], [0, 4.5]].map(([x, y], i) => <rect key={"f" + i} x={x + 0.25} y={y + 0.25} width="2" height="2" fill="#fff" stroke={c} strokeWidth="0.5"/>)}
+  </svg>;
+}
+const sheetSkipGet = key => { try { return Math.max(0, parseInt(localStorage.getItem(key) || "0") || 0); } catch { return 0; } };
+const sheetSkipSet = (key, v) => { try { localStorage.setItem(key, String(v)); } catch { /* indisponible */ } };
+// cols x rows ; ratio : largeur/hauteur d'une etiquette ; cell(i) : ce que montre la i-ieme etiquette imprimee
+function SheetStart({ cols, rows, skip, setSkip, count, ratio, cell, maxWidth = 360, gap = "4%" }) {
+  const per = cols * rows, sk = Math.max(0, Math.min(per - 1, skip)), row = Math.floor(sk / cols) + 1, col = sk % cols + 1;
+  const inp = { background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 8px", fontSize: 13,
+    color: "var(--text)", outline: "none", width: 56, textAlign: "right" };
+  const go = (r, c) => setSkip((Math.max(1, Math.min(rows, r)) - 1) * cols + Math.max(1, Math.min(cols, c)) - 1);
+  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>
+      <span>Commencer à</span>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>ligne
+        <input type="number" min={1} max={rows} value={row} onChange={e => go(parseInt(e.target.value) || 1, col)} style={inp}/></label>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>colonne
+        <input type="number" min={1} max={cols} value={col} onChange={e => go(row, parseInt(e.target.value) || 1)} style={inp}/></label>
+      {sk > 0 && <button type="button" onClick={() => setSkip(0)} style={{ background: "none", border: "none", color: "#60a5fa", cursor: "pointer", fontSize: 12, fontWeight: 700, padding: 0 }}>
+        Planche neuve</button>}
+      <span style={{ marginLeft: "auto" }}>{sk ? `${sk} déjà utilisée${sk > 1 ? "s" : ""} · ` : ""}{per - sk} libre{per - sk > 1 ? "s" : ""} sur cette planche</span>
+    </div>
+    <div style={{ padding: 8, borderRadius: 10, background: "#fff", border: "1px solid var(--border)", maxWidth, width: "100%", boxSizing: "border-box" }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: gap, rowGap: 3 }}>
+        {Array.from({ length: per }, (_, k) => {
+          const used = k < sk, here = k === sk, mine = !used && k - sk < count;
+          return <button type="button" key={k} onClick={() => setSkip(k)} data-tip={`Ligne ${Math.floor(k / cols) + 1}, colonne ${k % cols + 1}${used ? " · déjà utilisée" : ""}`}
+            aria-label={`Commencer ligne ${Math.floor(k / cols) + 1}, colonne ${k % cols + 1}`}
+            style={{ aspectRatio: String(ratio), padding: 1, borderRadius: 2, cursor: "pointer", overflow: "hidden", display: "flex", alignItems: "center",
+              justifyContent: "center", minWidth: 0, background: used ? "repeating-linear-gradient(-45deg, #e2e8f0 0 2px, transparent 2px 4px)" : "transparent",
+              border: here ? "1.5px solid #F97316" : mine ? "0.5px solid #cbd5e1" : "0.5px dashed #e2e8f0",
+              boxShadow: here ? "0 0 0 2px #F9731633" : "none", opacity: used ? 0.55 : 1 }}>
+            {mine ? cell(k - sk) : null}
+          </button>;
+        })}
+      </div>
+    </div>
+    <span style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600 }}>Touche la case où commencer : les hachurées sont sautées (déjà décollées).</span>
+  </div>;
+}
+
 // (09/11/2026) une planche d'etiquettes libres, au format du modele Word (20 x 10 mm, 8 colonnes, 160 par A4) : des
 // textes, chacun sa couleur de fond, de texte et son nombre ; « commencer a » saute les etiquettes deja utilisees
 const CL_KEY = "bn_custom_labels";
@@ -1766,15 +1813,16 @@ const CL_PER = 160, CL_COLS = 8;
 const CL_EMPTY = { text: "", bg: "#ffffff", fg: "#000000", n: 1 };
 function CustomLabelsCard({ card, cardTitle }) {
   const [rows, setRows] = useState(() => { try { return JSON.parse(localStorage.getItem(CL_KEY) || "null") || [CL_EMPTY]; } catch { return [CL_EMPTY]; } });
-  const [skip, setSkip] = useState(0);
+  const [skip, setSkip] = useState(() => sheetSkipGet(CL_KEY + "_skip"));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  useEffect(() => sheetSkipSet(CL_KEY + "_skip", skip), [skip]);
   useEffect(() => { try { localStorage.setItem(CL_KEY, JSON.stringify(rows)); } catch { /* indisponible */ } }, [rows]);
   const set = (i, k, v) => setRows(rs => rs.map((r, j) => j === i ? { ...r, [k]: v } : r));
   const items = rows.filter(r => r.text.trim()).map(r => ({ ...r, n: Math.max(1, parseInt(r.n) || 1) }));
   const total = items.reduce((a, r) => a + r.n, 0), sk = Math.max(0, Math.min(CL_PER - 1, parseInt(skip) || 0));
   const pages = total ? Math.ceil((sk + total) / CL_PER) : 0;
-  const cells = [...Array(sk).fill(null), ...items.flatMap(r => Array(r.n).fill(r))].slice(0, CL_PER);
+  const flat = items.flatMap(r => Array(r.n).fill(r));
   const download = async () => {
     setBusy(true); setErr(null);
     try {
@@ -1788,6 +1836,8 @@ function CustomLabelsCard({ card, cardTitle }) {
         a.href = url; a.download = fileName; a.dispatchEvent(new MouseEvent("click")); setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
       egg("planche_etiquettes");
+      if (sk > 0) egg("planche_entamee");
+      setSkip((sk + total) % CL_PER);                 // la fois suivante reprend ou celle-ci s'arrete
     } catch { setErr("Génération impossible"); } finally { setBusy(false); }
   };
   const inp = { background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 9px", fontSize: 13, color: "var(--text)", outline: "none" };
@@ -1819,27 +1869,25 @@ function CustomLabelsCard({ card, cardTitle }) {
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
         <button type="button" onClick={() => setRows(rs => [...rs, { ...CL_EMPTY, bg: rs[rs.length - 1]?.bg || "#ffffff", fg: rs[rs.length - 1]?.fg || "#000000" }])}
           style={{ ...inp, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>＋ Une étiquette</button>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>Commencer à
-          <input type="number" min={1} max={CL_PER} value={sk + 1} onChange={e => setSkip(Math.max(0, (parseInt(e.target.value) || 1) - 1))} style={{ ...inp, width: 58, textAlign: "right" }}/></label>
         <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>{total} étiquette{total > 1 ? "s" : ""}{pages ? ` · ${pages} planche${pages > 1 ? "s" : ""}` : ""}</span>
         <button type="button" onClick={download} disabled={busy || !total} style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer",
           background: total ? "#3b82f6" : "var(--surface2)", color: total ? "white" : "var(--muted)", fontSize: 12, fontWeight: 800 }}>{busy ? "…" : "📄 Planche en PDF"}</button>
       </div>
       {err && <p style={{ fontSize: 12, color: "#ef4444", margin: "8px 0 0" }}>{err}</p>}
-      {/* la premiere planche, a l'echelle : les cases deja utilisees en hachures */}
-      {total > 0 && <div style={{ marginTop: 10, padding: 8, borderRadius: 10, background: "#fff", border: "1px solid var(--border)", maxWidth: 360 }}>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${CL_COLS}, 1fr)`, columnGap: "2%", rowGap: 4 }}>
-          {Array.from({ length: Math.min(CL_PER, Math.ceil(Math.max(cells.length, 8) / CL_COLS) * CL_COLS) }, (_, k) => { const c = cells[k];
-            return <div key={k} style={{ aspectRatio: "2 / 1", borderRadius: 1.5, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 5.5, fontWeight: 900, lineHeight: 1, textAlign: "center",
-              ...(c ? { background: c.bg, color: c.fg, border: c.bg.toLowerCase() === "#ffffff" ? "0.5px solid #e2e8f0" : "none" }
-                : k < sk ? { background: "repeating-linear-gradient(-45deg, #e2e8f0 0 2px, transparent 2px 4px)" } : { border: "0.5px dashed #e2e8f0" }) }}>{c?.text}</div>; })}
-        </div>
-      </div>}
+      {/* la premiere planche entiere, a l'echelle : on touche la case ou commencer */}
+      <div style={{ marginTop: 10 }}>
+        <SheetStart cols={CL_COLS} rows={CL_PER / CL_COLS} skip={sk} setSkip={setSkip} count={total} ratio={2} gap="2%"
+          cell={i => { const c = flat[i]; return <span style={{ width: "100%", height: "100%", borderRadius: 1.5, display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: 5.5, fontWeight: 900, lineHeight: 1, textAlign: "center", overflow: "hidden", background: c.bg, color: c.fg }}>{c.text}</span>; }}/>
+      </div>
     </div>
   );
 }
 
+// la planche des QR, comme le serveur la pose (12 x 18,75 mm, 3 mm d'ecart, 10 mm de marge sur A4) : 12 x 12
+const QR_W = 12, QR_H = 18.75, QR_GAP = 3, QR_MARG = 10;
+const QR_COLS = Math.floor((210 - 2 * QR_MARG + QR_GAP) / (QR_W + QR_GAP)), QR_ROWS = Math.floor((297 - 2 * QR_MARG + QR_GAP) / (QR_H + QR_GAP));
+const QR_PER = QR_COLS * QR_ROWS, QR_SKIP_KEY = "bn_qr_labels_skip";
 function LabelsCard({ card, cardTitle }) {
   const [open, setOpen] = React.useState(false);
   const [fils, setFils] = React.useState([]);
@@ -1847,6 +1895,9 @@ function LabelsCard({ card, cardTitle }) {
   const [q, setQ] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  const [skip, setSkip] = React.useState(() => sheetSkipGet(QR_SKIP_KEY));
+  React.useEffect(() => sheetSkipSet(QR_SKIP_KEY, skip), [skip]);
+  const [startOpen, setStartOpen] = React.useState(false);
 
   // Filaments en place dans l'AMS : ce sont eux qu'on peut imprimer tout de
   // suite, la bobine est deja chargee. Lu a l'ouverture ; une imprimante
@@ -1926,8 +1977,11 @@ function LabelsCard({ card, cardTitle }) {
       // responseType blob : sans ca axios renvoie une chaine et le PDF est corrompu
       // NB : le routeur a le prefixe /filaments ET la route est declaree
       // "/filaments/labels/pdf" -> le doublon est normal (cf. /filaments/filaments).
-      const r = await client.post("/filaments/filaments/labels/pdf", { ids: ids || null },
+      const sk = Math.max(0, Math.min(QR_PER - 1, skip)), n = (ids || fils).length;
+      const r = await client.post("/filaments/filaments/labels/pdf", { ids: ids || null, skip: sk },
         { responseType: "blob" });
+      if (sk > 0) egg("planche_entamee");
+      setSkip((sk + n) % QR_PER);                     // la fois suivante : la case qui suit la derniere imprimee
       const blob = new Blob([r.data], { type: "application/pdf" });
       const fileName = "etiquettes-filaments.pdf";
 
@@ -2066,6 +2120,18 @@ function LabelsCard({ card, cardTitle }) {
               )}
             </div>
 
+            <div style={{ padding:"10px 16px 0", borderTop:"1px solid var(--border)" }}>
+              <button type="button" onClick={() => setStartOpen(o => !o)} style={{ background:"none", border:"none", padding:0, cursor:"pointer",
+                fontSize:12.5, fontWeight:800, color:"var(--text)", display:"flex", alignItems:"center", gap:6, width:"100%", flexWrap:"wrap", textAlign:"left" }}>
+                <span>✂ Planche entamée</span>
+                <span style={{ color:"var(--muted)", fontWeight:700 }}>· ligne {Math.floor(Math.min(skip, QR_PER - 1) / QR_COLS) + 1}, colonne {Math.min(skip, QR_PER - 1) % QR_COLS + 1}</span>
+                <span style={{ marginLeft:"auto", color:"var(--muted)" }}>{startOpen ? "▴" : "▾"}</span>
+              </button>
+              {startOpen && <div style={{ marginTop:8, maxHeight:"34vh", overflowY:"auto" }}>
+                <SheetStart cols={QR_COLS} rows={QR_ROWS} skip={skip} setSkip={setSkip} count={sel.size} ratio={QR_W / QR_H} maxWidth={380} gap="4%"
+                  cell={() => <span style={{ width:"100%" }}><FakeQr/></span>}/>
+              </div>}
+            </div>
             <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
               <button type="button" onClick={() => setOpen(false)}
                 style={{ ...btn("var(--surface2)"), color:"var(--muted)", flex:1 }}>Annuler</button>

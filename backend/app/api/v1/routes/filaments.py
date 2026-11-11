@@ -346,6 +346,8 @@ async def filament_labels_pdf(
     cols = int((W - 2*MARG + GAP) // (CELL_W + GAP))
     rows = int((H - 2*MARG + GAP) // (CELL_H + GAP))
     per_page = max(1, cols * rows)
+    # (11/11/2026) une planche entamee : les `skip` premieres cases de la premiere planche sont deja prises
+    skip = max(0, min(per_page - 1, int(body.get("skip") or 0)))
 
     # Plus grande police (<= PT_MAX) qui fait tenir `text` dans la largeur ;
     # tronque avec une ellipse si meme a la police mini ca deborde.
@@ -418,7 +420,8 @@ async def filament_labels_pdf(
     c.setTitle("BambuNymous — étiquettes filaments")
 
     for i, f in enumerate(fils):
-        if i and i % per_page == 0:
+        i += skip
+        if i > skip and i % per_page == 0:
             c.showPage()
         k = i % per_page
         col, row = k % cols, k // cols
