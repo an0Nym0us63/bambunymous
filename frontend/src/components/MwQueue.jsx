@@ -157,9 +157,9 @@ export default function MwQueue() {
   // le tri : a chaque ouverture, l'ordre du planning (06/11/2026 ; avant, celui de la liste) ; le choix ne se garde pas
   const [sortBy, setSortBy] = useState("plan");
   const [model, setModel] = useState(null);
-  const [filFor, setFilFor] = useState(null);       // (08/11/2026) « Filaments pour tout imprimer » : les modeles d'un filament
+  const [filFor, setFilFor] = useState(null);       // (08/11/2026) « Filaments pour le reste » : les modeles d'un filament
   const [tab, setTab] = useUrlTab("afaire", "models", ["models", "filaments"]);
-  useTrackDetail(`À faire · ${tab === "filaments" ? "Filaments pour tout imprimer" : "Modèles"}`);
+  useTrackDetail(`À faire · ${tab === "filaments" ? "Filaments pour le reste" : "Modèles"}`);
   const [sorting, setSorting] = useState(false);   // mode « Réorganiser »
   const [view3d, setView3d] = useState(null);       // un modele en 3D, aux couleurs des filaments retenus
   // « Jusqu'ici » : les stats ne portent que sur le debut de la file (garde dans ce navigateur).
@@ -434,9 +434,9 @@ export default function MwQueue() {
           </div>
         </div>
 
-        {/* Modeles / Filaments pour tout imprimer */}
+        {/* Modeles / Filaments pour le reste */}
         <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
-          {[["models", `Modèles (${t.models})`, "📋", "#3B82F6"], ["filaments", "Filaments pour tout imprimer", "🧵", "#EC4899"]].map(([k, l, ic, c]) => (
+          {[["models", `Modèles (${t.models})`, "📋", "#3B82F6"], ["filaments", "Filaments pour le reste", "🧵", "#EC4899"]].map(([k, l, ic, c]) => (
             <button key={k} onClick={() => setTab(k)} style={{ flex:1, minWidth:0, padding:"8px 6px", borderRadius:12, fontSize:"clamp(11px, 3.2vw, 12.5px)", fontWeight:800,
               cursor:"pointer", border:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:5, whiteSpace:"nowrap", overflow:"hidden",
               background: tab === k ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
