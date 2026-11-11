@@ -52,9 +52,8 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
   const [armed, setArmed] = useState(null);        // la tuile dont la corbeille attend sa confirmation
   const [allKids, setAllKids] = useState(false);
   const [lib, setLib] = useState(false);           // la mediatheque (08/11/2026)
-  // (11/11/2026) repliee d'office (un groupe de 9 impressions prenait tout l'ecran) ; ouverte ou non, retenu par appareil
-  const [unf, setUnf] = useState(() => { try { return localStorage.getItem("bn-gal-open") === "1"; } catch { return false; } });
-  const fold = v => { setUnf(v); try { localStorage.setItem("bn-gal-open", v ? "1" : "0"); } catch { /* navigation privee */ } };
+  // (11/11/2026) toujours repliee a l'ouverture de la fiche (un groupe de 9 impressions prenait tout l'ecran)
+  const [unf, fold] = useState(false);
   const admin = useIsAdmin() && !currentFriend();
   const group = kind === "group";
   const load = () => client.get(group ? `/prints/groups/${id}/media` : `/prints/${id}/media`).then(r => setD(r.data)).catch(() => setD(d0 => d0 || { photos: [], prints: [], failed: true }));
@@ -115,7 +114,7 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
   const per = { photos: photosOf, "3d": d3Of, tech: techOf };
   const count = k => ents.reduce((n, e) => n + per[k](e).length, 0);
   const n = { photos: count("photos"), "3d": count("3d"), tech: count("tech") };
-  const cur = tab || TABS.find(([k]) => n[k])?.[0] || "photos";
+  const cur = tab || "photos";                  // toujours « Photos » d'abord, meme vide (11/11/2026)
   const rows = ents.map(e => ({ e, items: per[cur](e) })).filter(r => r.items.length);
   const kids = rows.filter(r => !r.e.own), shownKids = allKids ? kids : kids.slice(0, KIDS);
   const shown = [...rows.filter(r => r.e.own), ...shownKids];
