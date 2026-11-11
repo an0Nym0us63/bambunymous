@@ -747,7 +747,8 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
         if body.parent_type == "print":
             src = await db.get(Print, body.parent_id)
             nb_items = src.number_of_items if src else 1
-            cost_fab = body.cost_fabrication or (src.total_cost or 0)
+            # (11/11/2026) la part d'UN objet : un print x4 en donne quatre
+            cost_fab = body.cost_fabrication or ((src.total_cost or 0) / max(1, nb_items or 1) if src else 0)
         else:
             src = await db.get(PGroup, body.parent_id)
             nb_items = src.number_of_items if src else 1

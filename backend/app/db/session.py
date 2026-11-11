@@ -173,6 +173,7 @@ async def init_db():
     await _unescape_names()
     await _migrate_activity_kind()
     await _migrate_print_job_id_unique()
+    await _fix_object_cost_per_item()
     await _purge_activity_log()
     await _normalize_print_dates()
     await _repair_print_durations()
@@ -428,6 +429,30 @@ async def _migrate_object_status():
 
 
 LABEL_FROM_SWATCH_DONE = "MIGRATION_LABEL_FROM_SWATCH"
+
+
+async def _fix_object_cost_per_item():
+    """UNE SEULE FOIS (11/11/2026) : un objet ne d'un print x N portait le cout plein du print (N fois compte). On lui
+    redonne sa part, comme le fait desormais la repercussion des couts (prints._propagate_object_costs)."""
+    from sqlalchemy import text as _text
+    k = "MIGRATION_OBJECT_COST_PER_ITEM"
+    try:
+        async with engine.begin() as conn:
+            if (await conn.execute(_text("SELECT value FROM settings WHERE key = :k"), {"k": k})).first() is not None:
+                return
+            sub = "(SELECT {x} FROM prints p WHERE p.id = objects.parent_id)"
+            n = sub.format(x="MAX(1, COALESCE(p.number_of_items, 1))")
+            fab = sub.format(x="COALESCE(p.total_cost_filament, 0) + COALESCE(p.electric_cost, 0)")
+            normal = sub.format(x="COALESCE(p.total_cost_filament_normal, 0) + COALESCE(p.electric_cost, 0)")
+            res = await conn.execute(_text(
+                f"UPDATE objects SET cost_fabrication = ROUND({fab} * 1.0 / {n}, 4), "
+                f"normal_cost_unit = ROUND({normal} * 1.0 / {n}, 4), "
+                f"cost_total = ROUND({fab} * 1.0 / {n}, 4) + COALESCE(cost_accessory, 0) "
+                f"WHERE parent_type = 'print' AND {n} > 1"))
+            await conn.execute(_text("INSERT INTO settings (key, value) VALUES (:k, '1')"), {"k": k})
+            print(f"[migration] cout par objet : {res.rowcount or 0} objet(s) ramene(s) a leur part")
+    except Exception as e:
+        print(f"[migration] cout par objet ignoree : {e}")
 
 
 async def _migrate_label_printed():

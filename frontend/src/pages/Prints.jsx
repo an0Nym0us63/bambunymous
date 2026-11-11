@@ -1591,8 +1591,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       { icon: "✏️", label: "Éditer", hint: "Nom, date, état, quantité…", tone: "#3B82F6", onClick: () => setEditMode(true) },
       { icon: "📣", label: "Partager", hint: "Telegram, WhatsApp…", tone: "#229ED9", onClick: () => setSharing(true) },
       objQ && objQ.remaining > 0 ? { icon: "📦", label: "Créer des objets", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
-        onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) }
-        : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, tone: "#22C55E", onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) } : null,
+        onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine / Math.max(1, localNb || 1) }) }
+        : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, tone: "#22C55E", onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine / Math.max(1, localNb || 1) }) } : null,
       groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, tone: "#A78BFA", onClick: handleUngroup },
       isAdmin && (p.group_stats_excluded
         ? { icon: "📊", label: "Hors classements des stats", hint: "Imposé par son groupe", tone: "#64748B", disabled: true }

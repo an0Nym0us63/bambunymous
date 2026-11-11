@@ -2470,6 +2470,9 @@ async def update_print(print_id: int, body: dict, _: str = Depends(get_current_u
                 if k == "translated_name":
                     p.translated_by = "manuel" if str(v or "").strip() else None
         p.updated_at = datetime.utcnow()
+        if "number_of_items" in body:              # la part de chaque objet en depend (11/11/2026)
+            await db.flush()
+            await _propagate_object_costs(db, "print", print_id)
         await db.commit()
     return {"ok": True}
 
@@ -3084,7 +3087,8 @@ async def _propagate_object_costs(db, parent_type: str, parent_id: int):
     """Repercute le cout courant d'un print/groupe sur les objets qui en derivent.
 
     Meme formule qu'a la creation (objects.create_objects / ObjectCreateSheet) :
-      - objet depuis un PRINT  : cout = filament + electricite du print (cout plein) ;
+      - objet depuis un PRINT  : cout = (filament + electricite du print) / number_of_items (11/11/2026 : un print
+        x4 donne 4 objets, chacun son quart ; c'etait le cout plein, quatre fois) ;
       - objet depuis un GROUPE : cout = somme des total_cost des membres / number_of_items.
     normal_cost_unit est peuple au passage (cout au prix normal catalogue). Le cout
     accessoire propre a chaque objet est conserve.
@@ -3094,8 +3098,9 @@ async def _propagate_object_costs(db, parent_type: str, parent_id: int):
         pr = await db.get(Print, parent_id)
         if not pr:
             return
-        fab    = (pr.total_cost_filament or 0) + (pr.electric_cost or 0)
-        normal = (pr.total_cost_filament_normal or 0) + (pr.electric_cost or 0)
+        nb = max(1, pr.number_of_items or 1)
+        fab    = ((pr.total_cost_filament or 0) + (pr.electric_cost or 0)) / nb
+        normal = ((pr.total_cost_filament_normal or 0) + (pr.electric_cost or 0)) / nb
     elif parent_type == "group":
         g = await db.get(Group, parent_id)
         if not g:
