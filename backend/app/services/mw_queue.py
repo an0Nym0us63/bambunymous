@@ -52,9 +52,24 @@ def _snap_path():
 
 def _snap_get():
     try:
-        return json.loads(_snap_path().read_text(encoding="utf-8"))
+        p = _snap_path()
+        # trop vieux (serveur arrete longtemps, ou instantane plus enregistre) : des plateaux faits depuis y seraient
+        # encore a faire ; mieux vaut attendre le calcul frais
+        if time.time() - p.stat().st_mtime > 12 * 3600:
+            return None
+        out = json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
+    # les filaments de chaque ligne (« _fids », un ensemble : les variantes de couleur s'y comparent) sont gardes en liste
+    for r in (out or {}).get("models") or []:
+        r["_fids"] = set(r.get("_fids") or ())
+    return out
+
+
+def _json_default(v):
+    if isinstance(v, (set, frozenset)):
+        return sorted(v, key=str)
+    return str(v)
 
 
 def unset_models() -> list:
@@ -72,10 +87,17 @@ def unset_models() -> list:
 
 
 def _snap_put(out):
+    # (11/11/2026) l'ecriture echouait a chaque calcul depuis le 06/11 (« _fids », un ensemble, que JSON n'ecrit pas) :
+    # au redemarrage, « A faire » et le calendrier repartaient d'un instantane du 06/11 (des plateaux faits depuis,
+    # replanifies) jusqu'au calcul frais. Un ensemble s'ecrit en liste, toute autre valeur inconnue en texte, tout en
+    # ASCII echappe ; l'ecriture passe par un fichier temporaire (jamais un instantane a moitie ecrit) ; la cause est dite
+    p = _snap_path()
     try:
-        _snap_path().write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        logger.exception("[QUEUE] instantane non garde")
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(out, default=_json_default), encoding="utf-8")
+        tmp.replace(p)
+    except Exception as e:
+        logger.exception("[QUEUE] instantane non garde : %s: %s", type(e).__name__, str(e)[:300])
 
 
 async def _recompute(fresh: bool = False):
