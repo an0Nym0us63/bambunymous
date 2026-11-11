@@ -62,7 +62,7 @@ def enabled() -> bool:
 _E = re.compile(rb"(?:^|\s)E(-?\d*\.?\d+)")
 _M73P = re.compile(rb"M73 P(\d+)")
 _M73L = re.compile(rb"M73 L(\d+)")
-_T = re.compile(rb"T(\d+)")
+_T = re.compile(rb"[ \t]*T(\d+)")
 
 
 _OBJ = b"; start printing object, unique label id:"
@@ -78,7 +78,8 @@ def parse_gcode(raw: bytes) -> dict:
     ce qui s'extrude entre les deux est aussi compte pour elle, pour savoir ce qu'une piece annulee n'imprime pas."""
     # (11/11/2026) un print a un seul filament (profil sans AMS) n'a souvent aucun « T<n> » : tout est alors au premier
     # filament (rien n'etait compte) ; avec des changements, rien avant le premier (le debut du G-code)
-    tool = None if any(int(m.group(1)) < 255 for m in re.finditer(rb"(?m)^T(\d+)", raw)) else 0
+    # (11/11/2026) le premier filament est pose par une ligne indentee (« T0 » indente de 4 espaces, dans le G-code de demarrage Bambu)
+    tool = None if any(int(m.group(1)) < 255 for m in re.finditer(rb"(?m)^[ \t]*T(\d+)", raw)) else 0
     obj = None
     rel = True
     last_e = 0.0
@@ -90,6 +91,11 @@ def parse_gcode(raw: bytes) -> dict:
         if not line:
             continue
         c = line[0]
+        if c in (32, 9):                             # une ligne indentee (le G-code de demarrage)
+            line = line.lstrip()
+            if not line:
+                continue
+            c = line[0]
         if c == 59:                                  # ';' : commentaire, sauf les rincages virtuels et les pieces
             if line.startswith(b";VG1") and tool is not None:
                 m = _E.search(line)

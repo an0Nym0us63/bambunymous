@@ -24,7 +24,9 @@ _CACHE: dict = {}          # print_id -> {"raw", "L", "O", "P", "Tpos", "Tval"} 
 
 _LAYER = re.compile(rb"(?m)^M73 L(\d+)")
 _PCT = re.compile(rb"(?m)^M73 P(\d+)")
-_TOOL = re.compile(rb"(?m)^T(\d+)")
+# (11/11/2026) indente aussi : le G-code de demarrage Bambu pose le premier filament par « T[initial_extruder] »
+# indente de 4 espaces (dans le bloc M620) ; manque, rien n'etait dessine avant le premier changement de filament
+_TOOL = re.compile(rb"(?m)^[ \t]*T(\d+)")
 _NUM = re.compile(rb"([XYZEIJ])(-?\d*\.?\d+)")
 _OBJ = re.compile(rb"(?m)^; (start|stop) printing object(?:, unique label id: (\d+))?")
 _ZH = re.compile(rb"(?m)^; Z_HEIGHT: (-?\d*\.?\d+)")
@@ -97,6 +99,11 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
         if not line:
             continue
         c = line[0]
+        if c in (32, 9):                              # une ligne indentee (le G-code de demarrage)
+            line = line.lstrip()
+            if not line:
+                continue
+            c = line[0]
         if c == 59:                                   # ';' : le debut et la fin d'une piece
             if shell and line.startswith(b"; FEATURE:"):
                 keep = line.startswith(_SHELL)
@@ -264,6 +271,7 @@ async def layer(pid: int, p, n: Optional[int]) -> dict:
 
 SHELL_LAYERS = 240     # au-dela, une couche sur deux (trois...) : la forme reste, le poids non
 SHELL_POINTS = 40000   # points envoyes au plus (quelques centaines de Ko)
+SHELL_V = 2            # la facon de lire le G-code : une vue gardee d'une autre version est refaite
 
 
 def _shell_file(pid: int) -> Path:
@@ -280,8 +288,9 @@ def _shell_disk(pid: int, p) -> Optional[dict]:
         if not f.is_file() or (src is not None and src.is_file() and src.stat().st_mtime > f.stat().st_mtime):
             return None
         res = json.loads(gzip.decompress(f.read_bytes()))
-        # (11/11/2026) une vue sans aucun trace (gardee avant le correctif des prints sans « T<n> ») : refaite
-        return res if res.get("box") else None
+        # (11/11/2026) une vue d'une version d'avant (sans aucun trace, ou sans le debut du print quand le premier
+        # filament etait pose par une ligne indentee) : refaite
+        return res if res.get("box") and res.get("v") == SHELL_V else None
     except (OSError, ValueError):
         return None
 
@@ -360,7 +369,7 @@ async def shell(pid: int, p) -> dict:
                 break
         if not math.isfinite(box[0]):
             return {"ok": False, "why": "empty"}            # aucun trace : ni gardee, ni resservie comme prete
-        return {"ok": True, "layers": out, "first": L[0], "last": L[-1], "step": step, "ztop": round(zt, 2),
+        return {"ok": True, "v": SHELL_V, "layers": out, "first": L[0], "last": L[-1], "step": step, "ztop": round(zt, 2),
                 "box": [round(v, 1) for v in box]}
 
     res = await asyncio.to_thread(build)
