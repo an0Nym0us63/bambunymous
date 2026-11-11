@@ -958,11 +958,22 @@ async def list_groups(_: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         gs = (await db.execute(select(Group.id, Group.name, Group.created_at).order_by(Group.name))).all()
         per: dict = {}
-        for gid, pd in (await db.execute(select(Print.group_id, Print.print_date).where(Print.group_id.isnot(None)))).all():
+        # (11/11/2026) aussi l'impression la plus recente (la vignette du groupe dans « Ajouter a un groupe ») et
+        # ses modeles MakerWorld (les groupes du meme modele proposes en tete)
+        last: dict = {}
+        mws: dict = {}
+        for gid, pd, pid, did in (await db.execute(select(Print.group_id, Print.print_date, Print.id, Print.design_id)
+                                                    .where(Print.group_id.isnot(None)))).all():
             e = per.setdefault(gid, [0, []])
             e[0] += 1
             if pd:
                 e[1].append(pd)
+                if gid not in last or pd > last[gid][0]:
+                    last[gid] = (pd, pid)
+            elif gid not in last:
+                last[gid] = (None, pid)
+            if did and str(did).strip():
+                mws.setdefault(gid, set()).add(str(did).strip())
     groups = []
     for gid, name, created in gs:
         n, dates = per.get(gid, (0, []))
@@ -971,6 +982,8 @@ async def list_groups(_: str = Depends(get_current_user)):
             "print_count": n,
             "created_at": created,
             "latest_date": max(dates) if dates else created,
+            "cover_print": last[gid][1] if gid in last else None,
+            "design_ids": sorted(mws.get(gid, ()))[:10],
         })
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
     from ....core.fastjson import json_response

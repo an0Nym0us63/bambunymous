@@ -2623,7 +2623,7 @@ function printTint(p) {
   return "#A78BFA";
 }
 
-function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress, row = false }) {
+function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress, onGroup = null, row = false }) {
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
   const visiting = useFriend((s) => s.friend);
   const toRate = useToRateSet(!visiting && !!p.design_id);
@@ -2638,6 +2638,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
     items: [
       { icon: "📄", label: "Ouvrir", onClick },
       onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour grouper ou supprimer plusieurs prints", onClick: () => onLongPress(p.id) },
+      onGroup && isAdmin && { icon: "📁", label: "Grouper…", hint: "Le mettre dans un groupe, nouveau ou existant", onClick: () => onGroup(p.id) },
       p.design_id && { icon: "🌐", label: "Modèle MakerWorld", onClick: () => setMw(true) },
       isAdmin && "-",
       isAdmin && { icon: "✏️", label: "Modifier", onClick: () => loadFull("edit") },
@@ -3355,6 +3356,7 @@ export default function Prints() {
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const [groupFor, setGroupFor] = useState(null);   // (11/11/2026) « Grouper… » du menu d'un print : ses ids, sans passer par la selection
   const [confirmDelete, setConfirmDelete] = useState(false);  // 1er clic -> confirme
   const [deleting, setDeleting] = useState(false);
 
@@ -3646,7 +3648,7 @@ export default function Prints() {
   useEffect(() => { if (viewMode === "list" && listDirty.current) { listDirty.current = false; load(); } }, [load, viewMode]);
   // la liste des groupes ne sert qu'au selecteur « Ajouter a un groupe » : lue a son ouverture (28/10/2026 :
   // elle partait a chaque ouverture de la page), puis rafraichie apres les actions qui la changent
-  useEffect(() => { if (groupPickerOpen) loadGroups(); }, [groupPickerOpen, loadGroups]);
+  useEffect(() => { if (groupPickerOpen || groupFor) loadGroups(); }, [groupPickerOpen, groupFor, loadGroups]);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -4038,7 +4040,8 @@ export default function Prints() {
         if (groupF) {
           return (
             <div style={rows ? { display:"flex", flexDirection:"column", gap:8 } : { display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
-              {prints.map(p => <PrintCard key={p.id} p={p} row={rows} onClick={()=>setSelected(p)} onDelete={onDelete} onChanged={() => refreshInPlace({ id: p.id })} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
+              {prints.map(p => <PrintCard key={p.id} p={p} row={rows} onClick={()=>setSelected(p)} onDelete={onDelete} onChanged={() => refreshInPlace({ id: p.id })} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}
+                onGroup={id => setGroupFor([id])}/>)}
             </div>
           );
         }
@@ -4056,7 +4059,8 @@ export default function Prints() {
                 selectMode={selectMode}
                 selected={selectedIds.has(item.p.id)}
                 onToggleSelect={toggleSelect}
-                onLongPress={id => { setSelectMode(true); setSelectedIds(new Set([id])); }}/>
+                onLongPress={id => { setSelectMode(true); setSelectedIds(new Set([id])); }}
+                onGroup={id => setGroupFor([id])}/>
             ) : (
               <GroupTile key={item.groupId} groupId={item.groupId} name={item.name} row={rows}
                 selectMode={selectMode}
@@ -4188,20 +4192,21 @@ export default function Prints() {
       )}
 
       {/* Sélecteur de groupe — créer ou choisir un groupe existant (recherche substring) */}
-      {groupPickerOpen && (
-        <GroupPickerSheet
+      {(groupPickerOpen || groupFor) && (() => { const ids = groupFor || Array.from(selectedIds);
+        return <GroupPickerSheet
           groups={groups}
-          onClose={() => setGroupPickerOpen(false)}
+          items={prints.filter(x => ids.includes(x.id))}
+          onClose={() => { setGroupPickerOpen(false); setGroupFor(null); }}
           onPick={async (payload) => {
             try {
-              await client.post("/prints/group/bulk", { print_ids: Array.from(selectedIds), ...payload });
-              setGroupPickerOpen(false);
-              exitSelectMode();
+              await client.post("/prints/group/bulk", { print_ids: ids, ...payload });
+              if (groupFor) egg("grouper_menu");
+              setGroupPickerOpen(false); setGroupFor(null);
+              if (!groupFor) exitSelectMode();
               await Promise.all([load(), loadGroups()]);
             } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
           }}
-        />
-      )}
+        />; })()}
       <HiddenMark egg="rubber_duck" e="🦆" side="right"/>
       <Cachettes spot="prints"/>
     </div>
@@ -4311,95 +4316,71 @@ function fmtGroupDate(d) {
 }
 
 // ── Sélecteur de groupe — recherche substring + création ───────────────────
-function GroupPickerSheet({ groups, onClose, onPick }) {
+function GroupPickerSheet({ groups, items = [], onClose, onPick }) {
   useTrackDetail("Historique · Choisir un groupe");
   const [q, setQ] = useState("");
-  const [vh, setVh] = useState(typeof window !== "undefined" ? window.innerHeight : 800);
+  const norm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const qq = norm(q.trim());
+  const filtered = qq ? groups.filter(g => norm(g.name).includes(qq)) : groups;
+  // (11/11/2026) les groupes du meme modele MakerWorld que ce qu'on groupe : proposes en tete
+  const mine = new Set(items.map(x => String(x.design_id || "").trim()).filter(Boolean));
+  const same = mine.size ? filtered.filter(g => (g.design_ids || []).some(d => mine.has(d))) : [];
+  const rest = filtered.filter(g => !same.includes(g));
+  // Un homonyme exact ne bloque pas la creation : plusieurs groupes peuvent porter le meme nom (deux lots distincts
+  // d'un meme modele) ; on propose toujours de creer, les groupes existants juste dessous.
+  const exactNameExists = groups.some(g => norm(g.name) === qq);
+  const thumb = id => apiThumb(apiUrl(`/prints/${id}/image`), 128);
+  const name0 = items.length === 1 ? (items[0].translated_name || items[0].file_name || "") : "";
 
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => setVh(vv.height);
-    update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
-  }, []);
+  const row = g => (
+    <button key={g.id} type="button" onClick={() => onPick({ group_id: g.id })}
+      style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:6, paddingRight:12, marginBottom:6, textAlign:"left", cursor:"pointer",
+        borderRadius:14, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
+      <span style={{ width:44, height:44, borderRadius:11, flexShrink:0, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center",
+        background:"linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.14))", fontSize:20 }}>
+        {g.cover_print ? <img src={thumb(g.cover_print)} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = "none"; }}
+          style={{ width:"100%", height:"100%", objectFit:"cover" }}/> : "📁"}</span>
+      <span style={{ flex:1, minWidth:0 }}>
+        <span style={{ display:"block", fontSize:13.5, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
+        {/* la date du plus recent et le nombre : de quoi distinguer deux groupes de meme nom */}
+        <span style={{ display:"block", fontSize:11, fontWeight:700, color:"var(--muted)" }}>
+          {g.print_count} print{g.print_count > 1 ? "s" : ""} · {fmtGroupDate(g.latest_date)}</span>
+      </span>
+      <span style={{ color:"var(--muted)", fontSize:14 }}>›</span>
+    </button>);
+  const head = t => <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"var(--muted)", margin:"10px 2px 6px" }}>{t}</div>;
 
-  const filtered = q.trim()
-    ? groups.filter(g => g.name.toLowerCase().includes(q.trim().toLowerCase()))
-    : groups;
-  // Un homonyme exact ne bloque PLUS la création : plusieurs groupes peuvent
-  // porter le même nom (deux lots distincts d'un même modèle, par ex.). On propose
-  // donc toujours de créer, tout en listant les groupes existants juste dessous.
-  const exactNameExists = groups.some(g => g.name.toLowerCase() === q.trim().toLowerCase());
-
-  return (
-    <div onClick={onClose} style={{ position:"fixed", left:0, right:0, top:0, height: vh + "px", zIndex:1400,
-      background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)",
-        borderRadius:"20px 20px 0 0", width:"100%", maxWidth:480,
-        maxHeight: Math.round(vh * 0.9) + "px",
-        display:"flex", flexDirection:"column",
-        paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
-
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-        </div>
-
-        <div style={{ padding:"14px 18px 10px" }}>
-          <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 10px" }}>
-            Ajouter à un groupe
-          </h3>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher ou créer un groupe…"
-            autoFocus
-            style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
-              borderRadius:8, padding:"9px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
-        </div>
-
-        <div style={{ overflowY:"auto", padding:"0 18px 16px", flex:1 }}>
-          {q.trim() && (
-            <button onClick={() => onPick({ group_name: q.trim() })}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
-                marginBottom: exactNameExists ? 4 : 8, borderRadius:10, background:"rgba(59,130,246,0.12)",
-                border:"1px solid rgba(59,130,246,0.35)", color:"#3b82f6", fontSize:13, fontWeight:700,
-                cursor:"pointer", textAlign:"left" }}>
-              <FolderPlus size={15}/> Créer un nouveau groupe « {q.trim()} »
-            </button>
-          )}
-          {q.trim() && exactNameExists && (
-            <p style={{ margin:"0 0 10px", fontSize:11, color:"var(--muted)", padding:"0 2px" }}>
-              Un groupe porte déjà ce nom. Tu peux le rejoindre ci-dessous, ou en créer un nouveau.
-            </p>
-          )}
-
-          {filtered.length === 0 && !q.trim() && (
-            <p style={{ textAlign:"center", color:"var(--muted)", fontSize:12, padding:"20px 0" }}>
-              Aucun groupe pour l'instant — tape un nom pour en créer un.
-            </p>
-          )}
-
-          {filtered.map(g => (
-            <button key={g.id} onClick={() => onPick({ group_id: g.id })}
-              style={{ width:"100%", padding:"10px 14px", textAlign:"left", background:"var(--surface2)",
-                border:"1px solid var(--border)", borderRadius:8, cursor:"pointer",
-                color:"var(--text)", fontSize:13, marginBottom:6,
-                display:"flex", alignItems:"center", gap:10 }}>
-              <span style={{ fontSize:15, flexShrink:0 }}>📁</span>
-              <span style={{ flex:1, minWidth:0, fontWeight:600, overflow:"hidden",
-                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
-              {/* Date du print le plus récent + nombre : c'est ce qui permet de
-                  distinguer deux groupes de même nom. */}
-              <span style={{ flexShrink:0, fontSize:10, color:"var(--muted)",
-                fontFamily:"JetBrains Mono, monospace", textAlign:"right", lineHeight:1.35 }}>
-                {fmtGroupDate(g.latest_date)}<br/>
-                {g.print_count} print{g.print_count > 1 ? "s" : ""}
-              </span>
-            </button>
-          ))}
-        </div>
+  return createPortal(<FSheet onClose={onClose} z={1400}>
+    <div style={{ padding:"22px 16px 16px" }}>
+      {/* ce qu'on groupe : les vignettes, en eventail */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+        <span style={{ display:"flex", flexShrink:0 }}>
+          {items.slice(0, 4).map((x, i) => <img key={x.id} src={thumb(x.id)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+            style={{ width:46, height:46, borderRadius:12, objectFit:"cover", marginLeft: i ? -16 : 0, border:"2px solid var(--sheet-bg)",
+              background:"var(--surface2)", transform:`rotate(${(i - (Math.min(items.length, 4) - 1) / 2) * 6}deg)`, boxShadow:"0 4px 12px -6px rgba(0,0,0,.4)" }}/>)}
+        </span>
+        <span style={{ minWidth:0 }}>
+          <span style={{ display:"block", fontSize:16, fontWeight:900, color:"var(--text)" }}>📁 Ajouter à un groupe</span>
+          <span style={{ display:"block", fontSize:12, fontWeight:700, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {items.length > 1 ? `${items.length} prints` : name0 || "1 print"}</span>
+        </span>
       </div>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher ou nommer un nouveau groupe…" autoFocus
+        style={{ width:"100%", boxSizing:"border-box", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px",
+          fontSize:13.5, color:"var(--text)", outline:"none" }}/>
+      {!q.trim() && name0 && <button type="button" onClick={() => setQ(name0.split(" - ")[0].slice(0, 60))}
+        style={{ marginTop:6, border:"none", background:"none", padding:"2px 2px", color:"#3b82f6", fontSize:12, fontWeight:800, cursor:"pointer" }}>
+        ＋ Nouveau groupe « {name0.split(" - ")[0].slice(0, 40)} »</button>}
+      {q.trim() && <button type="button" onClick={() => onPick({ group_name: q.trim() })}
+        style={{ width:"100%", marginTop:8, display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:14, cursor:"pointer", textAlign:"left",
+          border:"none", color:"#fff", fontSize:13.5, fontWeight:800, background:"linear-gradient(135deg, #3B82F6, #6366F1)", boxShadow:"0 8px 18px -10px #3B82F6" }}>
+        <FolderPlus size={16}/> Créer « {q.trim()} »</button>}
+      {q.trim() && exactNameExists && <p style={{ margin:"6px 2px 0", fontSize:11, color:"var(--muted)" }}>
+        Un groupe porte déjà ce nom : tu peux le rejoindre ci-dessous, ou en créer un nouveau.</p>}
+      {same.length > 0 && <>{head("✨ Même modèle")}{same.map(row)}</>}
+      {rest.length > 0 && <>{head(same.length ? "Les autres groupes" : "Les groupes")}{rest.map(row)}</>}
+      {!filtered.length && !q.trim() && <p style={{ textAlign:"center", color:"var(--muted)", fontSize:12.5, padding:"20px 0" }}>
+        Aucun groupe pour l'instant : tape un nom pour en créer un.</p>}
     </div>
-  );
+  </FSheet>, document.body);
 }
