@@ -38,13 +38,16 @@ FETE_SLUGS.push(...FETE_SLUGS_MONDE);
 // ensuite elle se rejoue a son adresse. Jamais tiree au sort. C'est le serveur qui sait s'il en est une (il a ete
 // joint sous l'une de leurs adresses) : la page peut tourner sur une adresse locale.
 // seenKey : la marque de cet appareil, versionnee comme celle du serveur (une remise a zero change les deux)
+// variant : la version de la farce de cette maison (le serveur la dit), chacune sa marque sur l'appareil
 const MAISON = { slug: "don", egg: "merci_don", seenKey: "bn-don-vu-2" };
+const seenKeyOf = v => (v ? `bn-don${v}-vu-1` : MAISON.seenKey);
 export const isPrank = slug => PRANK_SLUGS.includes(slug) || FETE_SLUGS.includes(slug) || slug === MAISON.slug;
 
 export const usePrank = create(set => ({
   slug: null,
-  start: slug => set({ slug }),
-  stop: () => set({ slug: null }),
+  variant: "",
+  start: (slug, variant = "") => set({ slug, variant }),
+  stop: () => set({ slug: null, variant: "" }),
 }));
 
 /** L'adresse de la farce : on la retient, puis direction l'accueil. */
@@ -56,7 +59,7 @@ export function PrankRedirect({ slug, fallback = null }) {
   useEffect(() => {
     let alive = true;
     client.get(`/achievements/prank/${encodeURIComponent(slug)}`)
-      .then(({ data }) => { if (!alive) return; if (data?.ok) usePrank.getState().start(slug); setOk(!!data?.ok); })
+      .then(({ data }) => { if (!alive) return; if (data?.ok) usePrank.getState().start(slug, data?.variant || ""); setOk(!!data?.ok); })
       .catch(() => alive && setOk(false));
     return () => { alive = false; };
   }, [slug]);
@@ -141,6 +144,7 @@ let toAck = null;      // { slug, body }
 /** Monte la farce en cours par-dessus l'accueil (dans la mise en page). */
 export function PrankHost() {
   const slug = usePrank(s => s.slug);
+  const variant = usePrank(s => s.variant);
   const stop = usePrank(s => s.stop);
   const start = usePrank(s => s.start);
   const { pathname } = useLocation();
@@ -179,12 +183,12 @@ export function PrankHost() {
     // la farce de cette maison passe avant tout, tant qu'elle n'a pas ete vue jusqu'au bout
     // vue jusqu'au bout : le serveur le retient (« vu », a part du secret), cet appareil aussi. Interrompue
     // (appli fermee, page rechargee), rien n'est retenu : elle revient a l'ouverture suivante.
-    const seen = () => { try { return localStorage.getItem(MAISON.seenKey) === "1"; } catch { return false; } };
-    (seen() ? Promise.resolve({ data: {} }) : client.get(`/achievements/prank/${MAISON.slug}`)).then(({ data }) => {
-      if (!data?.maison || data?.vu) { roll(); return; }
+    const seen = v => { try { return localStorage.getItem(seenKeyOf(v)) === "1"; } catch { return false; } };
+    client.get(`/achievements/prank/${MAISON.slug}`).then(({ data }) => {
+      if (!data?.maison || data?.vu || seen(data?.variant || "")) { roll(); return; }
       const go = () => {
         if (document.getElementById("splash") || window.__bnCardFx) { setTimeout(go, 300); return; }
-        if (!usePrank.getState().slug) start(MAISON.slug);
+        if (!usePrank.getState().slug) start(MAISON.slug, data?.variant || "");
       };
       setTimeout(go, 1200);
     }).catch(roll);
@@ -215,10 +219,10 @@ export function PrankHost() {
       client.post("/achievements/surprise/shown", b).catch(() => {}).finally(claim);
     } else claim();
     if (slug === MAISON.slug) {
-      try { localStorage.setItem(MAISON.seenKey, "1"); } catch { /* rien */ }
+      try { localStorage.setItem(seenKeyOf(usePrank.getState().variant), "1"); } catch { /* rien */ }
       client.post(`/achievements/prank/${MAISON.slug}/vu`).catch(() => {});
     }
     setTimeout(() => { if (usePrank.getState().slug === slug) stop(); }, 1500);
   };
-  return <Suspense fallback={null}><Effect key={slug} done={done}/></Suspense>;
+  return <Suspense fallback={null}><Effect key={slug} done={done} variant={variant}/></Suspense>;
 }

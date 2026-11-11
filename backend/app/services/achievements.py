@@ -5834,30 +5834,36 @@ async def card_fx_seen(username: str, dev: str = "") -> None:
 # Les maisons de la farce « don » : reconnues par l'empreinte d'une adresse sous laquelle le serveur
 # a ete joint (l'appli peut tourner sur une adresse locale, en http : la page ne le saurait pas).
 # Une fois vue, la maison est retenue pour de bon.
-MAISON_HOSTS = {"c15afe7465412e1963b40eaf44eb5ac70130e50c3df3ea618d789f4976215ab2",
-                "4fd27201adaaf0d9a3443294dc64cfd0d3a84a4f32c626b542072851bfb63c17",
-                "41f8ec918583d04f2cd225698b9bc1d29e824cf845f9c337af7b2c537c51cf3a"}
-_MAISON = {"seen": None, "checked": set()}
+# Chaque empreinte porte sa version de la farce ("" : celle d'origine).
+MAISON_HOSTS = {"c15afe7465412e1963b40eaf44eb5ac70130e50c3df3ea618d789f4976215ab2": "",
+                "4fd27201adaaf0d9a3443294dc64cfd0d3a84a4f32c626b542072851bfb63c17": "30",
+                "41f8ec918583d04f2cd225698b9bc1d29e824cf845f9c337af7b2c537c51cf3a": "",
+                "a50c1de2191e2897f13e8bec836c1e016a268f204ca5ffe3c11d94c13188dc32": "30"}
+_MAISON = {"seen": None, "checked": set(), "v": None, "hit": False}
 
 
 def note_host(host: str) -> None:
-    """Appele a chaque requete (sans attendre) : l'adresse sous laquelle on m'a joint."""
-    if _MAISON["seen"]:
+    """Appele a chaque requete (sans attendre) : l'adresse sous laquelle on m'a joint. Reconnue une fois par
+    demarrage : sa version de la farce est relue (elle a pu changer avec une mise a jour)."""
+    if _MAISON["hit"]:
         return
     h = (host or "").split(",")[0].strip().split(":")[0].lower()
     if not h or h in _MAISON["checked"] or len(_MAISON["checked"]) > 200:
         return
     _MAISON["checked"].add(h)
     import hashlib
-    if hashlib.sha256(h.encode()).hexdigest() not in MAISON_HOSTS:
+    v = MAISON_HOSTS.get(hashlib.sha256(h.encode()).hexdigest())
+    if v is None:
         return
-    _MAISON["seen"] = True
+    _MAISON.update(seen=True, hit=True, v=v)
 
     async def keep():
         from ..db.session import AsyncSessionLocal
-        from .settings_service import set_setting
+        from .settings_service import get_setting, set_setting
         async with AsyncSessionLocal() as db:
-            await set_setting(db, KEY + "_MAISON", datetime.utcnow().isoformat())
+            if not await get_setting(db, KEY + "_MAISON", ""):
+                await set_setting(db, KEY + "_MAISON", datetime.utcnow().isoformat())
+            await set_setting(db, KEY + "_MAISON_V", v)
     try:
         import asyncio
         t = asyncio.get_running_loop().create_task(keep())
@@ -5872,18 +5878,36 @@ def note_host(host: str) -> None:
 MAISON_VU = KEY + "_MAISON_VU_2"
 
 
+async def maison_variant() -> str:
+    """La version de la farce de cette maison ("" : celle d'origine)."""
+    if _MAISON["v"] is None:
+        from ..db.session import AsyncSessionLocal
+        from .settings_service import get_setting
+        async with AsyncSessionLocal() as db:
+            _MAISON["v"] = str(await get_setting(db, KEY + "_MAISON_V", "") or "")
+    return _MAISON["v"]
+
+
+async def _vu_key() -> str:
+    """Chaque version a sa marque « vue jusqu'au bout » : une nouvelle version retombe une fois."""
+    v = await maison_variant()
+    return MAISON_VU if not v else f"{KEY}_MAISON_VU_{v}_1"
+
+
 async def maison_vu() -> bool:
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
+    k = await _vu_key()
     async with AsyncSessionLocal() as db:
-        return bool(await get_setting(db, MAISON_VU, ""))
+        return bool(await get_setting(db, k, ""))
 
 
 async def maison_vu_set() -> None:
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
+    k = await _vu_key()
     async with AsyncSessionLocal() as db:
-        await set_setting(db, MAISON_VU, datetime.utcnow().isoformat())
+        await set_setting(db, k, datetime.utcnow().isoformat())
 
 
 async def is_maison() -> bool:

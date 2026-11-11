@@ -33,7 +33,12 @@ const T = Object.fromEntries(Object.entries({ card: 1300, count: 2000, paper: 42
   .map(([k, v]) => [k, k === "line" ? v : v + INTRO]));
 const buzz = p => { try { navigator.vibrate?.(p); } catch { /* pas de vibreur */ } };
 
-export function MerciDon({ done }) {
+// les conclusions : chaque maison la sienne
+const FIN = { "": ["…mais fallait pas !", "Bon… même 10 €, ça paie du filament 😇"],
+  "30": ["…non merci !", "Mais 30 €, c'est déjà 3 kg de filament et plein de prints 😇"] };
+
+export function MerciDon({ done, variant = "" }) {
+  const [stampTxt, nudgeTxt] = FIN[variant] || FIN[""];
   const [t, setT] = useState(0);                       // le temps ecoule, par paliers
   const [n, setN] = useState(0);                       // le montant qui monte
   const [gone, setGone] = useState(false);
@@ -116,9 +121,9 @@ export function MerciDon({ done }) {
         {t >= T.stamp && <div style={{ position: "absolute", left: "50%", top: "56%", zIndex: 2, padding: "8px 16px", borderRadius: 12, whiteSpace: "nowrap",
           border: "4px solid #dc2626", color: "#dc2626", background: "rgba(255,255,255,.82)", fontSize: "clamp(20px, 6vw, 30px)", fontWeight: 900,
           letterSpacing: ".04em", textTransform: "uppercase", animation: "pk7-stamp .55s cubic-bezier(.3,1.3,.6,1) both",
-          boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>…mais fallait pas ! <span style={{ display: "inline-block", animation: "pk7-wink 1s ease-in-out .6s 3" }}>😏</span></div>}
+          boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>{stampTxt} <span style={{ display: "inline-block", animation: "pk7-wink 1s ease-in-out .6s 3" }}>😏</span></div>}
         {t >= T.nudge && <div style={{ marginTop: 14, fontSize: 16, fontWeight: 800, animation: "pk7-pop .7s ease both" }}>
-          Bon… même 10 €, ça paie du filament 😇</div>}
+          {nudgeTxt}</div>}
         {t >= T.close && <div style={{ marginTop: 12, fontSize: 13, fontWeight: 800, opacity: .8 }}>
           Retour à l'accueil dans {Math.max(1, Math.ceil((T.end - t) / 1000))} s…</div>}
       </div></div>}

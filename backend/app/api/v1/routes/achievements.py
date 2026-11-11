@@ -235,7 +235,7 @@ async def achievements_prank_ok(slug: str, acc=Depends(require_own_account), db:
         # administrateur » : c'est souvent le compte « admin » cree a l'installation, que personne n'utilise.
         # « vu » : vue jusqu'au bout depuis la derniere remise a zero ; « ok » : rejouable a son adresse
         return {"ok": await A.prank_replay_ok(slug), "maison": (await _me(acc[0], db))["main"] and await A.is_maison(),
-                "vu": await A.maison_vu()}
+                "vu": await A.maison_vu(), "variant": await A.maison_variant() if await A.is_maison() else ""}
     return {"ok": await A.prank_replay_ok(slug)}
 
 
