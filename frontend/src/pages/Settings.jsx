@@ -1814,6 +1814,7 @@ const CL_EMPTY = { text: "", bg: "#ffffff", fg: "#000000", n: 1 };
 function CustomLabelsCard({ card, cardTitle }) {
   const [rows, setRows] = useState(() => { try { return JSON.parse(localStorage.getItem(CL_KEY) || "null") || [CL_EMPTY]; } catch { return [CL_EMPTY]; } });
   const [skip, setSkip] = useState(() => sheetSkipGet(CL_KEY + "_skip"));
+  const [startOpen, setStartOpen] = useState(false);       // la planche entamee : repliee, elle prend de la place
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   useEffect(() => sheetSkipSet(CL_KEY + "_skip", skip), [skip]);
@@ -1874,11 +1875,17 @@ function CustomLabelsCard({ card, cardTitle }) {
           background: total ? "#3b82f6" : "var(--surface2)", color: total ? "white" : "var(--muted)", fontSize: 12, fontWeight: 800 }}>{busy ? "…" : "📄 Planche en PDF"}</button>
       </div>
       {err && <p style={{ fontSize: 12, color: "#ef4444", margin: "8px 0 0" }}>{err}</p>}
-      {/* la premiere planche entiere, a l'echelle : on touche la case ou commencer */}
+      {/* (11/11/2026) la planche entamee, repliee d'office : la planche entiere, on touche la case ou commencer */}
       <div style={{ marginTop: 10 }}>
-        <SheetStart cols={CL_COLS} rows={CL_PER / CL_COLS} skip={sk} setSkip={setSkip} count={total} ratio={2} gap="2%"
+        <button type="button" onClick={() => setStartOpen(o => !o)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+          fontSize: 12.5, fontWeight: 800, color: "var(--text)", display: "flex", alignItems: "center", gap: 6, width: "100%", flexWrap: "wrap", textAlign: "left" }}>
+          <span>✂ Planche entamée</span>
+          <span style={{ color: "var(--muted)", fontWeight: 700 }}>· ligne {Math.floor(sk / CL_COLS) + 1}, colonne {sk % CL_COLS + 1}</span>
+          <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{startOpen ? "▴" : "▾"}</span>
+        </button>
+        {startOpen && <div style={{ marginTop: 8 }}><SheetStart cols={CL_COLS} rows={CL_PER / CL_COLS} skip={sk} setSkip={setSkip} count={total} ratio={2} gap="2%"
           cell={i => { const c = flat[i]; return <span style={{ width: "100%", height: "100%", borderRadius: 1.5, display: "flex", alignItems: "center",
-            justifyContent: "center", fontSize: 5.5, fontWeight: 900, lineHeight: 1, textAlign: "center", overflow: "hidden", background: c.bg, color: c.fg }}>{c.text}</span>; }}/>
+            justifyContent: "center", fontSize: 5.5, fontWeight: 900, lineHeight: 1, textAlign: "center", overflow: "hidden", background: c.bg, color: c.fg }}>{c.text}</span>; }}/></div>}
       </div>
     </div>
   );
