@@ -52,9 +52,12 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
   const [armed, setArmed] = useState(null);        // la tuile dont la corbeille attend sa confirmation
   const [allKids, setAllKids] = useState(false);
   const [lib, setLib] = useState(false);           // la mediatheque (08/11/2026)
+  // (11/11/2026) repliee d'office (un groupe de 9 impressions prenait tout l'ecran) ; ouverte ou non, retenu par appareil
+  const [unf, setUnf] = useState(() => { try { return localStorage.getItem("bn-gal-open") === "1"; } catch { return false; } });
+  const fold = v => { setUnf(v); try { localStorage.setItem("bn-gal-open", v ? "1" : "0"); } catch { /* navigation privee */ } };
   const admin = useIsAdmin() && !currentFriend();
   const group = kind === "group";
-  const load = () => client.get(group ? `/prints/groups/${id}/media` : `/prints/${id}/media`).then(r => setD(r.data)).catch(() => setD(d0 => d0 || { photos: [], prints: [] }));
+  const load = () => client.get(group ? `/prints/groups/${id}/media` : `/prints/${id}/media`).then(r => setD(r.data)).catch(() => setD(d0 => d0 || { photos: [], prints: [], failed: true }));
   useEffect(() => { if (id) load(); }, [id, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const act = async f => {
     if (busy) return;
@@ -64,6 +67,9 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
     finally { setBusy(false); setArmed(null); }
   };
   if (!d) return <div className="card-sm" style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--muted)" }}>⏳ La galerie…</div>;
+  if (d.failed) return <div className="card-sm" style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--muted)" }}>
+    <span style={{ flex: 1 }}>🖼 Galerie : pas lue pour l'instant</span>
+    <button type="button" onClick={() => { setD(null); load(); }} style={{ ...fBtn, padding: "4px 10px", fontSize: 12 }}>Réessayer</button></div>;
 
   // ce que montre la fiche : elle-meme, puis (un groupe) chacune de ses impressions
   const ents = group
@@ -159,13 +165,20 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
     {lb && lb.i >= 0 && <Lightbox images={lb.items} index={lb.i} onClose={() => setLb(null)}/>}
     {/* le titre, l'ajout de photos, la mediatheque ; puis les onglets sur toute la largeur (sur telephone, a cote ils s'ecrasaient) */}
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ flex: 1, fontSize: 13, fontWeight: 900, color: "var(--text)" }}>🖼 Galerie</span>
-      {admin && cur === "photos" && <PhotoAddButton onPick={upload}/>}
+      <button type="button" onClick={() => fold(!unf)} aria-expanded={unf} data-tip={unf ? "Replier la galerie" : "Déplier la galerie"}
+        style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: 0, border: "none", background: "none", cursor: "pointer", font: "inherit", textAlign: "left" }}>
+        <span style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>🖼 Galerie</span>
+        {/* repliee : ce qu'il y a dedans */}
+        {!unf && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {TABS.filter(([k]) => n[k]).map(([k, l]) => `${l.split(" ")[0]} ${n[k]}`).join(" · ") || "vide"}</span>}
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>{unf ? "▾" : "▸"}</span>
+      </button>
+      {unf && admin && cur === "photos" && <PhotoAddButton onPick={upload}/>}
       <button type="button" onClick={() => setLib(true)} data-tip="Tout voir en grand : trier, supprimer, choisir ce qui s'affiche"
         style={{ height: 30, padding: "0 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", cursor: "pointer",
           fontSize: 12, fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>⤢ Tout voir</button>
     </div>
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    {unf && <><div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <div style={{ flex: 1, display: "flex", gap: 4, padding: 3, borderRadius: 13, background: "var(--surface2)", minWidth: 0 }}>
         {TABS.map(([k, l, c]) => { const on = cur === k;
           return <button key={k} type="button" onClick={() => setTab(k)} style={{ flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
@@ -175,8 +188,10 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
             {l}<span style={{ fontSize: 10.5, fontWeight: 900, padding: "0 5px", borderRadius: 8, background: on ? "rgba(255,255,255,.25)" : "var(--surface)" }}>{n[k]}</span></button>; })}
       </div>
     </div>
+    </>}
     {lib && <MediaLibrary title={title || (group ? "Le groupe" : "L'impression")} group={group} admin={admin} ents={ents} allOf={allOf} cover={cover} busy={busy}
       act={act} setCover={setCover} delItem={delItem} onClose={() => setLib(false)}/>}
+    {unf && <>
     {n[cur] > 0 && admin && <span style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.35 }}>{legend}</span>}
     {!n[cur] && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{empty}</span>}
     {shown.map(({ e, items }) => <div key={e.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -200,5 +215,6 @@ export default function MediaGallery({ kind, id, title = "", refreshKey = "", on
     </div>)}
     {!allKids && kids.length > KIDS && <button type="button" onClick={() => setAllKids(true)} style={{ ...fBtn, alignSelf: "flex-start", fontSize: 12.5, padding: "6px 12px" }}>
       Voir les {kids.length - KIDS} autres impressions</button>}
+    </>}
   </div>;
 }
