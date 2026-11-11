@@ -1504,7 +1504,7 @@ function ObjectGroupPickerSheet({ title, onClose, onPick }) {
               fontSize:13.5, display:"flex", alignItems:"center", gap:10, opacity: busy ? 0.6 : 1 }}>
             <span style={{ fontSize:16, flexShrink:0 }}>📁</span>
             <span style={{ flex:1, minWidth:0, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
-            {g.desired_price > 0 && <span style={{ fontSize:12, fontWeight:800, color:"var(--muted)" }}>{fmtPrice(g.desired_price)}</span>}
+            {g.desired_price > 0 && <span style={{ fontSize:12, fontWeight:800, color:"var(--muted)" }}>{fmtPrice(g.desired_price)} / u</span>}
           </button>
         ))}
       </div>
@@ -1707,6 +1707,7 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
   const soldCount = shown.filter(o => o.sold_price > 0).length;
   const shownSold = shown.filter(o => o.sold_price > 0);
   const revenue = shownSold.reduce((a, o) => a + (o.sold_price || 0), 0);
+  const ask = groupAsk(shown, group);
   return (
     <FSheet onClose={onClose} z={200}>
       {/* le groupe en vedette : la mosaique de ses objets sur un fond lavande */}
@@ -1725,9 +1726,9 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
           <div style={{ fontSize:24, fontWeight:900, lineHeight:1.15, overflowWrap:"anywhere", ...fGrad("#8B5CF6", "#C084FC") }}>{group.name}</div>
           <div style={{ fontSize:13, fontWeight:800, color:"var(--muted)" }}>
             Coût {fmtPrice(totalCost)}{revenue > 0 ? ` · ${fmtPrice(revenue)} encaissés` : ""}</div>
-          {group.desired_price > 0 && <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
-            <span style={{ fontSize:24, fontWeight:900, lineHeight:1.2, ...fGrad("#16a34a", "#4ade80") }}>{fmtPrice(group.desired_price)}</span>
-            <span style={{ fontSize:12.5, fontWeight:800, color:"var(--muted)" }}>prix souhaité</span></div>}
+          {ask.total > 0 && <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap" }}>
+            <span style={{ fontSize:24, fontWeight:900, lineHeight:1.2, ...fGrad("#16a34a", "#4ade80") }}>{fmtPrice(ask.total)}</span>
+            <span style={{ fontSize:12.5, fontWeight:800, color:"var(--muted)" }}>prix souhaité{ask.n > 1 && ask.unit ? ` · ${fmtPrice(ask.unit)} l'unité` : ""}</span></div>}
           {canToggle && (
             <button onClick={()=>setShowAll(v=>!v)}
               style={{ alignSelf:"flex-start", padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:800, cursor:"pointer",
@@ -1781,8 +1782,10 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged,
               qu'il en existe d'autres ailleurs, sans avoir a l'ouvrir. */}
           📁 {objects.length}{partial ? ` / ${totalCount}` : ""}
         </span>
-        {group.desired_price > 0 && <span style={{ ...glassPill, position:"absolute", top:7, right:7,
-          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{fmtPrice(group.desired_price)}</span>}
+        {groupAsk(objects, group).total > 0 && <span data-tip={(() => { const a = groupAsk(objects, group);
+            return a.n > 1 && a.unit ? `Prix souhaité : ${a.n} × ${fmtPrice(a.unit)}` : "Prix souhaité"; })()}
+          style={{ ...glassPill, position:"absolute", top:7, right:7,
+          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{fmtPrice(groupAsk(objects, group).total)}</span>}
         {cfg && <span style={{ ...pill, position:"absolute", bottom:7, left:7, color:"#fff",
           background:`linear-gradient(135deg, ${cfg.color}, color-mix(in srgb, ${cfg.color} 65%, #ffffff))` }}>
           {objects.length} {cfg.short}{cfg.plural && objects.length > 1 ? "s" : ""}
@@ -1803,6 +1806,15 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged,
 
 // ── Main ──────────────────────────────────────────────────────────────────
 const KPI_ICONS = { "à vendre":"🏷️", espéré:"🎯", encaissé:"💶", marge:"📈", articles:"🔩", unités:"📦", valeur:"💶", rupture:"⚠" };
+// (11/11/2026) le prix souhaite d'un groupe est un prix A L'UNITE (recopie sur chaque objet) : le groupe vaut la somme
+// des objets pas encore vendus (leur propre prix, sinon celui du groupe), a cote de son cout qui est deja un cumul
+function groupAsk(objs, group) {
+  const left = (objs || []).filter(o => !(o.sold_price > 0));
+  const prices = left.map(o => o.desired_price > 0 ? o.desired_price : group?.desired_price > 0 ? group.desired_price : 0);
+  const total = prices.reduce((a, x) => a + x, 0), set = new Set(prices.filter(x => x > 0));
+  return { total, n: left.length, unit: set.size === 1 ? [...set][0] : null };
+}
+
 export default function Objects() {
   const [tab, setTab] = useUrlTab("tab", "objects", ["objects", "accessories"]);
   useTrackDetail(`Objets · ${tab === "accessories" ? "Accessoires" : "Objets"}`);
