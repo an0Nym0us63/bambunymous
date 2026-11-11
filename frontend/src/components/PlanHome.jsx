@@ -10,7 +10,7 @@ import { JobSheet, LowStockBanner, BlockedList, DryList } from "./PlanPanels";
 import { sheetRef } from "./planActs";
 import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
 import Lightbox from "./Lightbox";
-import { FilDot, UsedFils } from "./PlanDay";
+import { FilDot, UsedFils, MergedList } from "./PlanDay";
 
 // Le planning sur l'accueil (05/11/2026, revu) : la tuile (la journee en frise, l'etat, l'impression en cours, un
 // agenda des prochains plateaux, les alertes) et sa vue en grand (en cours, prochaines, les 3 prochains jours, les
@@ -126,7 +126,7 @@ function NextUp({ p, onSheet }) {
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
-  const where = j.merged ? " : regroupe ses plateaux avant de lancer" : j.plates_total > 1 ? ` : lance le plateau ${j.plate}` : "";
+  const where = j.merged ? " : regroupe ses plateaux avant de lancer" : ` : lance le plateau ${j.plate || 1}`;
   const btn = { padding: "6px 12px", borderRadius: 11, cursor: "pointer", fontSize: 12.5, fontWeight: 900, textDecoration: "none",
     display: "inline-flex", alignItems: "center", gap: 5 };
   const open = canHome && j.iid && mw ? (IS_MOBILE
@@ -153,13 +153,14 @@ function NextUp({ p, onSheet }) {
         <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: C }}>
           ⏭ Prochain · {mins <= 1 ? "maintenant" : `${dayLabel(j.day, p.now).toLowerCase()} à ${hhmm(j.start)} (dans ${dur(mins)})`}</div>
         <div style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.title}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{[j.plates_total > 1 ? plateTxt(j) : null, dur(j.seconds / 60)].filter(Boolean).join(" · ")}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{[plateTxt(j), dur(j.seconds / 60)].filter(Boolean).join(" · ")}</div>
       </div>
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {todo.length ? todo.map(([ic, c, t], i) => <div key={i} style={{ display: "flex", gap: 7, alignItems: "baseline", fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>
         <span style={{ flexShrink: 0 }}>{ic}</span><span style={{ color: c, minWidth: 0 }}>{t}</span></div>)
         : <div style={{ fontSize: 12.5, fontWeight: 700, color: "#16A34A" }}>✓ Rien à préparer : les bobines et le plateau sont en place</div>}
+      {j.merged && <MergedList j={j}/>}
       <UsedFils j={j}/>
     </div>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -264,8 +265,8 @@ export function PlanZoom({ p: p0 }) {
         <span style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 12.5, fontWeight: 900, color: c }}>{head}</span>
           <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>{txt}</span></span></div>;
       return <>{sec(bj && !j ? "Prochain changement de plateau" : "Prochain changement")}
-        {bj && line("🔲", "#0369A1", `${dayLabel(bj.day, p.now)} à ${hhmm(bj.start)}`, <>Pour {bj.title}{bj.plates_total > 1 ? ` · ${plateTxt(bj)}` : ""} : {bedTxt(bj.bed_change).replace(/^🔲 Mets/, "mets")}.</>, bj)}
-        {j && line("🧵", "#6366F1", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{j.plates_total > 1 ? ` · ${plateTxt(j)}` : ""} : <SwapLinks j={j}/>.</>, j)}
+        {bj && line("🔲", "#0369A1", `${dayLabel(bj.day, p.now)} à ${hhmm(bj.start)}`, <>Pour {bj.title}{` · ${plateTxt(bj)}`} : {bedTxt(bj.bed_change).replace(/^🔲 Mets/, "mets")}.</>, bj)}
+        {j && line("🧵", "#6366F1", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{` · ${plateTxt(j)}`} : <SwapLinks j={j}/>.</>, j)}
         {ro && line("🔄", "#B45309", `${dayLabel(ro.runout[0].at.slice(0, 10), p.now)} vers ${hhmm(ro.runout[0].at)}`, <>Pendant {ro.title} : <FilLink id={ro.runout[0].id} label={ro.runout[0].name}/>{runoutTxt(ro.runout[0]).slice(3 + ro.runout[0].name.length)}. Prépare une autre bobine.</>, ro)}
       </>; })()}
     {sec("Les prochains jours")}

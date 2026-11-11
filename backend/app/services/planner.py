@@ -666,8 +666,10 @@ async def _live_print(d: dict) -> dict:
 
 
 def _title(j) -> str:
-    """Le nom d'un travail : le modele, et son plateau quand il en a plusieurs."""
-    pl = f" · plateau {j['plate']}" if j.get("plates_total", 0) > 1 else ""
+    """Le nom d'un travail : le modele et son plateau, toujours (11/11/2026 : meme seul retenu, c'est son numero dans le
+    fichier qui sert a le retrouver dans Studio) ; regroupes : leurs numeros."""
+    pl = (f" · plateaux {', '.join(str(x) for x in j.get('merged_plates') or [])}" if j.get("merged")
+          else f" · plateau {j.get('plate') or 1}")
     return f"{j['title']}{pl}"
 
 
@@ -1638,6 +1640,10 @@ def _merged(jobs: list, d: dict) -> list:
         head.update(seconds=max(60, sum(x["seconds"] for x in ms) - PREP_S * (len(ms) - 1)), fils=list(fl.values()),
                     merged=there, merged_plates=[x["plate"] for x in ms], merge_id=gid,
                     merged_thumbs=[x.get("thumb") for x in ms],      # chaque plateau en grand (08/11/2026)
+                    # (11/11/2026) le detail de chacun : sa variante (son titre), son plateau, son exemplaire, ses filaments
+                    # (des variantes d'un meme modele regroupees ne disaient que le titre de la premiere)
+                    merged_detail=[{"key": x["key"], "title": x.get("title"), "plate": x["plate"], "copy": x.get("copy"), "qty": x.get("qty"),
+                                    "thumb": x.get("thumb"), "fils": x.get("fils") or []} for x in ms],
                     plate_name=f"Regroupés : plateaux {', '.join(str(x['plate']) for x in ms)}",
                     weight_g=round(sum(x.get("weight_g") or 0 for x in ms), 1))
         # (09/11/2026) comme la proposition : des couleurs differentes se regroupent objet par objet, et un plateau plus haut
@@ -2783,10 +2789,25 @@ def _todo_lines(j: dict) -> list:
     if j.get("bed_change"):
         out.append(_bed_txt(j["bed_change"]))
     if j.get("merged"):
-        out.append(f"🧩 Regrouper ses plateaux ({', '.join(str(x) for x in j.get('merged_plates') or [])}) dans Bambu Studio")
+        md = j.get("merged_detail") or []
+        names = _variant_names([x.get("title") or "" for x in md])
+        det = ", ".join(f"plateau {x['plate']}" + (f" ({n})" if n else "") for x, n in zip(md, names)) if md else \
+            ", ".join(str(x) for x in j.get("merged_plates") or [])
+        out.append(f"🧩 Regrouper dans Bambu Studio" + (f", {j['merge_mode']}" if j.get("merge_mode") else "") + f" : {det}")
     for ro in j.get("runout") or []:
         out.append(f"🔄 {ro['name']} se videra vers {_fmt(datetime.fromisoformat(ro['at']))} : prépare une autre bobine")
     return out
+
+
+def _variant_names(titles: list) -> list:
+    """Ce qui distingue des titres regroupes (11/11/2026) : « Cerf · Argenté », « Cerf · Violet » -> « Argenté »,
+    « Violet » ; tous pareils : rien."""
+    if len(set(titles)) <= 1:
+        return [""] * len(titles)
+    import os
+    pre = os.path.commonprefix(titles)
+    pre = pre[:pre.rfind(" · ") + 3] if " · " in pre else ""
+    return [t[len(pre):] if pre else t for t in titles]
 
 
 def _bed_txt(ch: dict) -> str:

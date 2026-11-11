@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import client from "../api/client";
 import { egg } from "../eggs";
 import { toast } from "../store/toast";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor, UsedFils, ObjectRest } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor, UsedFils, ObjectRest, MergedList } from "./PlanDay";
 import Lightbox from "./Lightbox";
 import { useStackZ } from "../utils/zstack";
 import { useSwipeClose } from "../utils/swipeClose";
@@ -127,6 +127,7 @@ export function JobSheet({ j, now, edit, onClose, act, jobs }) {
           {(j.dry || []).map((d, i) => <span key={`dry${i}`} style={{ fontSize: 11, fontWeight: 900, color: d.mode === "none" ? "#DC2626" : "#EA580C" }}>{d.txt}</span>)}
           <StockTags j={j}/>
         </span>
+        {j.merged && <MergedList j={j}/>}
         {(j.reasons || []).map((r, i) => <span key={i} style={{ fontSize: 11.5, color: "var(--muted)" }}>↪ {r}</span>)}
         {j.why && j.why.map((r, i) => <span key={i} style={{ fontSize: 11.5, fontWeight: 800, color: "#DC2626" }}>⛔ {r}</span>)}
       </div>
@@ -682,7 +683,7 @@ export function LowStockBanner({ jobs, now, onOpen, inPopup = false }) {
       <span style={{ width: 12, height: 12, borderRadius: "50%", flexShrink: 0, background: a.color || "#94A3B8", border: "1px solid rgba(0,0,0,.2)" }}/>
       <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.35 }}>
         <b>{a.name}</b> passera sous le seuil <b>{dayTxt(a.j.start)}</b> vers {hhmm(a.j.end)}, pendant <b>{a.j.title}</b>
-        {a.j.plates_total > 1 ? ` · plateau ${a.j.plate}` : ""} <span style={{ color: "var(--muted)" }}>(il en restera {a.left} g, seuil {a.low} g)</span></span>
+        {` · plateau ${a.j.plate || 1}`} <span style={{ color: "var(--muted)" }}>(il en restera {a.left} g, seuil {a.low} g)</span></span>
     </button>)}
     {alerts.length > 3 && <button type="button" onClick={() => setAll(v => !v)} style={{ alignSelf: "flex-start", border: "none", background: "none", padding: 0, cursor: "pointer",
       fontSize: 12, fontWeight: 800, color: "#DC2626" }}>{all ? "Moins" : `+ ${alerts.length - 3} autre${alerts.length > 4 ? "s" : ""}`}</button>}

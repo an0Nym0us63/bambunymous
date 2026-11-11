@@ -21,7 +21,7 @@ import { pdJobs, pdStored, pdStore } from "../utils/planSnap";
 
 export const hm = s => { const m = Math.round((s || 0) / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}`; };
 export const hhmm = iso => iso ? iso.slice(11, 16).replace(":", " h ").replace(/ h 00$/, " h").replace(/^0(?=\d)/, "") : "";
-export const jobName = j => `${j.title}${j.plates_total > 1 ? ` · plateau ${j.plate}` : ""}${j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}`;
+export const jobName = j => `${j.title} · ${j.merged ? `plateaux ${(j.merged_plates || []).join(", ")}` : `plateau ${j.plate || 1}`}${j.qty > 1 ? ` · ${j.copy}/${j.qty}` : ""}`;
 // le plateau qui termine un objet : « 🏁 Objet terminé » (« 1 sur 2 » quand il en faut plusieurs)
 // deux niveaux (06/11/2026) : 🏁 un exemplaire termine (il en reste), 🏆 le modele entierement fini (le dernier exemplaire)
 export const isFinal = j => !!j.completes && j.completes >= (j.qty || 1);
@@ -233,7 +233,7 @@ export function ObjectRest({ designId, iid = null, exclude = null, dark = false,
     <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".05em", textTransform: "uppercase", color: mu }}>Le reste de cet objet · {sib.length} prévu{sib.length > 1 ? "s" : ""}</div>
     {sib.slice(0, 6).map(x => <div key={x.key} style={{ display: "flex", gap: 6, fontSize: 11.5, fontWeight: 600, color: tx }}>
       <span style={{ width: 8, height: 8, borderRadius: 2, marginTop: 4, flexShrink: 0, background: TONES[toneOf(x)].c }}/>
-      <span style={{ flex: 1, minWidth: 0 }}>{x.plates_total > 1 ? plateTxt(x) : "Plateau"}{x.qty > 1 ? ` · ex. ${x.copy}/${x.qty}` : ""}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>{plateTxt(x)}{x.qty > 1 ? ` · ex. ${x.copy}/${x.qty}` : ""}</span>
       <span style={{ color: mu, whiteSpace: "nowrap" }}>{x.start ? `${wday(x.start)} ${hhmm(x.start)}` : "pas encore placé"}</span></div>)}
     {sib.length > 6 && <div style={{ fontSize: 11, color: mu, paddingLeft: 14 }}>+ {sib.length - 6} autre{sib.length - 6 > 1 ? "s" : ""}</div>}
   </div>;
@@ -267,15 +267,39 @@ export function PlateThumb({ j, size = 52, onClick, tip }) {
 // les images d'un plateau, pour les voir en grand (08/11/2026) : chaque plateau d'un regroupement, puis le modele
 export const platePics = j => [
   ...(j.merged_thumbs?.length ? j.merged_thumbs.map((t, i) => t && { url: t, label: `Plateau ${j.merged_plates?.[i] ?? "?"}/${j.plates_total || "?"}` })
-    : [j.thumb && { url: j.thumb, label: j.plates_total > 1 ? plateTxt(j) : "Le plateau" }]),
+    : [j.thumb && { url: j.thumb, label: plateTxt(j) }]),
   j.cover && j.cover !== j.thumb && { url: j.cover, label: "Le modèle" }].filter(Boolean);
 // le nom d'un plateau quand il dit autre chose que « Plateau 2 » (sinon « Plateau 2/4 · Plateau 2 »)
 const pname = j => j.plate_name && !/^(plateau|plate)\s*\d+$/i.test(j.plate_name.trim()) ? j.plate_name : "";
 // un modele pas retenu dans « A faire » (05/11/2026) : planifie quand meme, apres les retenus, en gris
 export const UNRET = "#94A3B8";
 export const unretained = j => j && j.retained === false;
+// (11/11/2026) le numero du plateau meme quand c'est le seul retenu : « plateau 3 » d'un fichier qui en a d'autres
 export const plateTxt = j => j.plates_total > 1 ? `Plateau ${j.plate}/${j.plates_total}${pname(j) ? ` · ${pname(j)}` : ""}`
-  : pname(j) || "Plateau unique";
+  : j.merged ? pname(j) : `Plateau ${j.plate || 1}${pname(j) ? ` · ${pname(j)}` : ""}`;
+// ce qui distingue des titres regroupes : « Cerf · Argenté », « Cerf · Violet » -> « Argenté », « Violet » (11/11/2026)
+export const variantNames = titles => {
+  if (new Set(titles).size <= 1) return titles.map(() => "");
+  let pre = titles[0] || "";
+  for (const t of titles) while (pre && !String(t).startsWith(pre)) pre = pre.slice(0, -1);
+  pre = pre.includes(" · ") ? pre.slice(0, pre.lastIndexOf(" · ") + 3) : "";
+  return titles.map(t => pre ? String(t).slice(pre.length) : t);
+};
+// le detail d'un regroupement : chaque plateau, sa variante, son exemplaire, ses filaments
+export function MergedList({ j }) {
+  const md = j.merged_detail || [];
+  if (!md.length) return null;
+  const names = variantNames(md.map(x => x.title || ""));
+  return <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 22 }}>
+    {md.map((x, i) => <div key={x.key} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
+      <span style={{ fontWeight: 900, color: "#6366F1" }}>Plateau {x.plate}</span>
+      {names[i] && <span style={{ fontWeight: 900 }}>· {names[i]}</span>}
+      {x.qty > 1 && <span style={{ color: "var(--muted)" }}>· {x.copy}e sur {x.qty}</span>}
+      <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>{(x.fils || []).map((f, k) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--muted)" }}>
+        <Dot f={f}/>{f.name}{f.g ? ` ${Math.round(f.g)} g` : ""}</span>)}</span>
+    </div>)}
+  </div>;
+}
 export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, onUnpin, onOpen, onDue, onDone, dragging, compact = false }) {
   const [over, setOver] = useState(false);
   const drift = j.drift_min;
@@ -332,6 +356,7 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
       {(j.runout || []).map(r => <React.Fragment key={r.name}>{tag(<>🔄 <FilLink id={r.id} label={r.name}/>{runoutTxt(r).slice(3 + r.name.length)}</>, "#B45309", "La bobine chargée ne suffit pas : prépare-en une autre de ce filament pour cette heure-là")}</React.Fragment>)}
       {(j.dry || []).map((d, i) => <React.Fragment key={`dry${i}`}>{tag(d.txt, d.mode === "none" ? "#DC2626" : "#EA580C", `À sécher avant ce plateau (${d.why || "délai dépassé"}) · réglage : ${d.src}`)}</React.Fragment>)}
     </div>}
+    {j.merged && !compact && <MergedList j={j}/>}
     {/* decale par la tache de fond (pas par un rangement) : d'ou il vient, quand, pourquoi */}
     {j.moved && <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.35, color: "#0EA5E9" }}>
       🔄 Décalé {j.moved.from < j.day ? "depuis" : "avancé du"} {dueTxt(j.moved.from)} à {hhmm(j.moved.at)} : {j.moved.why}</div>}
@@ -1123,7 +1148,7 @@ export function NowNextTiles({ pd, onOpenPrint, onPickJob, wide }) {
         <PlateThumb j={j} size={34}/>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {finIc(j, " ")}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ""}</span></span>
+            {finIc(j, " ")}{unretained(j) ? "○ " : ""}{j.title}<span style={{ color: "#6366F1" }}>{j.plates_total > 1 ? ` · ${j.plate}/${j.plates_total}` : ` · plateau ${j.plate || 1}`}</span></span>
           <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text2)" }}>{whenTxt(j.start, now)} → {whenTxt(j.end, now)}</span> · {hm(j.seconds)}
             {j.bed_change ? <span style={{ color: "#0369A1" }}> · 🔲 {BED_NAMES[j.bed_change.to] || j.bed_change.to}</span> : ""}
