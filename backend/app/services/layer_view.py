@@ -279,7 +279,9 @@ def _shell_disk(pid: int, p) -> Optional[dict]:
         src = DATA_DIR / p.model_3mf if p is not None and p.model_3mf else None
         if not f.is_file() or (src is not None and src.is_file() and src.stat().st_mtime > f.stat().st_mtime):
             return None
-        return json.loads(gzip.decompress(f.read_bytes()))
+        res = json.loads(gzip.decompress(f.read_bytes()))
+        # (11/11/2026) une vue sans aucun trace (gardee avant le correctif des prints sans « T<n> ») : refaite
+        return res if res.get("box") else None
     except (OSError, ValueError):
         return None
 
@@ -356,8 +358,10 @@ async def shell(pid: int, p) -> dict:
                 out.append({"n": nl, "z": round(z, 2), "paths": lay})
             if pts_n <= SHELL_POINTS:
                 break
+        if not math.isfinite(box[0]):
+            return {"ok": False, "why": "empty"}            # aucun trace : ni gardee, ni resservie comme prete
         return {"ok": True, "layers": out, "first": L[0], "last": L[-1], "step": step, "ztop": round(zt, 2),
-                "box": [round(v, 1) for v in box] if math.isfinite(box[0]) else None}
+                "box": [round(v, 1) for v in box]}
 
     res = await asyncio.to_thread(build)
     ix["shell"] = res
