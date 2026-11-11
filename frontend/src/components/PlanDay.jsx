@@ -992,8 +992,8 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
           <button type="button" disabled={!newFam.trim()} onClick={() => { setDry({ ...dry, fresh: { ...dry.fresh, [newFam.trim()]: 7 } }); setNewFam(""); }}
             style={{ ...seg, padding: "4px 10px" }}>+ Matière</button></span>
       </div>}
-      <div style={hint}>Avant une impression, le planning propose de sécher une bobine séchée il y a plus de ces jours-là (sinon, au délai général
-        de Paramètres › Séchage). Le TPU et les filaments techniques vont dans l'AMS HT, où ils restent pour imprimer ; les autres se posent sans être
+      <div style={hint}>Le but : le plus de stock sec possible. Avant une impression, le planning propose de sécher une bobine qui aura passé la
+        <b> moitié</b> de ces jours-là le jour de l'impression (sinon, qui sera dans les 30 derniers jours de son délai général, Paramètres › Séchage). Le TPU et les filaments techniques vont dans l'AMS HT, où ils restent pour imprimer ; les autres se posent sans être
         insérés dans un AMS libre dont les bobines supportent la même température, de préférence pendant que les autres impriment. Un AMS de même
         nature qui ne sert pas pendant quelques heures est proposé au séchage aussi.</div>
     </div>

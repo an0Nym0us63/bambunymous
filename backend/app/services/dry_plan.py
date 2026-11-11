@@ -94,20 +94,40 @@ def _age_days(last, now) -> float | None:
     return None if last is None else (now - last).total_seconds() / 86400
 
 
-def wants(sp: dict, cfg: dict, now: datetime) -> str | None:
-    """Pourquoi secher cette bobine maintenant (None : pas la peine)."""
+SOON_DAYS = 30            # « bientot a secher » : comme la fiche et les statistiques, borne au tiers d'un delai court
+
+
+def urgency(sp: dict, cfg: dict, at: datetime) -> tuple[float, str | None]:
+    """(urgence, pourquoi) pour cette bobine a l'heure at. Le but (11/11/2026) : le plus de stock sec possible, donc on
+    seche AVANT l'echeance, pas apres. Delai frais de la matiere (consignes du planning) : a sa moitie deja ; sinon le
+    delai general (Parametres › Sechage) : des qu'il entre dans ses 30 derniers jours. urgence >= 1 : a proposer (plus
+    elle est grande, plus c'est presse) ; jamais sechee : 9."""
+    fam = sp.get("family") or "?"
+    age = _age_days(sp.get("last"), at)
+    if age is None:
+        return 9.0, "jamais séchée"
+    n = cfg["fresh"].get(fam)
+    if n is not None:
+        thr, lim, what = n / 2, n, f"le délai de {n} j du {fam}"
+    else:
+        lim = sp.get("limit_days") or 180
+        thr, what = max(1.0, lim - min(SOON_DAYS, lim / 3)), f"son délai de {lim} j"
+    if age < thr:
+        return age / thr, None
+    left = lim - age
+    why = (f"séchée il y a {int(age)} j : {what} est dépassé" if left <= 0 else
+           f"séchée il y a {int(age)} j : {what} tombe dans {max(1, round(left))} j")
+    return 1.0 + age / max(lim, 1), why
+
+
+def wants(sp: dict, cfg: dict, at: datetime, pla: bool = False) -> str | None:
+    """Pourquoi secher cette bobine avant at (None : pas la peine). Le PLA seulement en mode « tout », ou pla (le temps
+    libre d'un AMS : le stock sec, toutes matieres)."""
     if cfg["mode"] == "off":
         return None
-    fam = sp.get("family") or "?"
-    if fam == "PLA" and cfg["mode"] != "all":
+    if (sp.get("family") or "?") == "PLA" and cfg["mode"] != "all" and not pla:
         return None
-    age = _age_days(sp.get("last"), now)
-    n = cfg["fresh"].get(fam)
-    if n is not None and (age is None or age > n):
-        return "jamais séchée" if age is None else f"séchée il y a {int(age)} j (au-delà de {n} j pour du {fam})"
-    if sp.get("needs"):
-        return "jamais séchée" if age is None else f"séchée il y a {int(age)} j : au-delà de son délai"
-    return None
+    return urgency(sp, cfg, at)[1]
 
 
 def _fmt(t: datetime) -> str:
@@ -222,7 +242,7 @@ def build(jobs: list, units: list, spools: dict, cfg: dict, now: datetime, prese
         sp = spools.get(sid)
         if not sp:
             continue
-        why = wants(sp, cfg, now)
+        why = wants(sp, cfg, j["_s"])               # son age le jour de l'impression
         if not why:
             continue
         done_sids.add(sid)
@@ -298,31 +318,46 @@ def build(jobs: list, units: list, spools: dict, cfg: dict, now: datetime, prese
               "out": [spools[x]["name"] for x in plan.get("out") or [] if x in spools]}
         add(it, j)
 
-    # ── l'opportunite : un AMS de meme nature qui ne sert pas, une bobine qui commence a dater ──
-    for u in units:
+    # ── le temps libre d'un AMS (11/11/2026, le stock sec d'abord) : un AMS qui sait secher et ne sert pas pendant
+    # quelques heures seche ses bobines (si elles supportent la meme temperature), et on remplit ses places libres de
+    # bobines du stock qui approchent de leur delai, les plus pressees d'abord, de meme temperature. Le PLA compte ici
+    # (sauf « pas de sechage ») : c'est du temps gratuit.
+    taken = set(done_sids)
+    stock = sorted(((urgency(sp, cfg, now)[0], sid) for sid, sp in spools.items() if sp.get("stored") and sid not in taken),
+                   reverse=True)
+    for u in sorted(units, key=lambda u: (not u["ht"], u["id"])):
         if not u["can"] or u.get("drying") or u["id"] in used_units:
             continue
-        sids = [x.get("sid") for x in u["trays"] if x.get("sid") in spools]
-        if not sids or any(s in done_sids for s in sids):
+        inside = [x for t in u["trays"] for x in (t.get("sid"), t.get("posed")) if x and x in spools]
+        if any(x in taken for x in inside):
             continue
-        fams = {spools[s].get("family") for s in sids}
-        if cfg["mode"] != "all" and fams == {"PLA"}:
+        free = [t["tray"] for t in u["trays"] if t.get("empty") and not t.get("posed")]
+        rs = {x: recipe(spools[x], u["ht"]) for x in inside}
+        ts = [r[0] for r in rs.values()]
+        if ts and max(ts) - min(ts) > 5:               # pas de meme nature : la plus fragile empeche les autres
             continue
-        rs = [recipe(spools[s], u["ht"]) for s in sids]
-        ts = [r[0] for r in rs]
-        if max(ts) - min(ts) > 5:                      # pas de meme nature : la plus fragile empeche les autres
+        T = min(ts) if ts else None
+        pose = []
+        for urg, sid in stock:
+            if len(pose) >= len(free):
+                break
+            if urg < 1 or sid in taken:
+                continue
+            sp = spools[sid]
+            if (sp.get("family") or "?") in TECH and not u["ht"] and any(h["can"] for h in units if h["ht"]):
+                continue                              # le technique attend le HT
+            t, h, src = recipe(sp, u["ht"])
+            if T is None:
+                T = t
+            if abs(t - T) > 5:
+                continue
+            pose.append(sid)
+            rs[sid] = (t, h, src)
+        due = [x for x in inside if wants(spools[x], cfg, now, pla=True)] + pose
+        if not due:
             continue
-        t, h = min(ts), max(r[1] for r in rs)
-        # une bobine qui commence a dater : plus de la moitie de son delai (frais, sinon general)
-        old = []
-        for s in sids:
-            sp = spools[s]
-            n = cfg["fresh"].get(sp.get("family")) or sp.get("limit_days")
-            age = _age_days(sp.get("last"), now)
-            if age is None or (n and age > n / 2):
-                old.append(s)
-        if not old:
-            continue
+        T = min(r[0] for r in rs.values())
+        h = max(r[1] for r in rs.values())
         fids = u_fids(u)
         tt, best = now, None
         stop = now + OPP_WINDOW
@@ -337,13 +372,19 @@ def build(jobs: list, units: list, spools: dict, cfg: dict, now: datetime, prese
             tt += timedelta(minutes=15)
         if best is None:
             continue
+        taken |= set(inside) | set(pose)
+        used_units[u["id"]] = best + timedelta(hours=h)
         e = best + timedelta(hours=h)
-        others = any(s < e and en > best for j in seq for s, en in [(j["_s"], j["_e"])])
-        add({"kind": "opportunity", "unit": u["id"], "unit_label": u["label"], "t": t, "h": h,
-             "src": "profil Bambu" if all(r[2] == "profil Bambu" for r in rs) else "valeur usuelle",
+        others = any(a < e and b > best for j in seq for a, b in [(j["_s"], j["_e"])])
+        fams = {spools[x].get("family") for x in list(inside) + pose}
+        add({"kind": "opportunity", "unit": u["id"], "unit_label": u["label"], "t": T, "h": h,
+             "src": "profil Bambu" if all(r[2] == "profil Bambu" for r in rs.values()) else "valeur usuelle",
              "start": best.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
-             "family": "/".join(sorted(f for f in fams if f)), "spools": [{"spool": s, "name": spools[s].get("name")} for s in sids],
-             "old": [spools[s].get("name") for s in old], "printing_others": others})
+             "family": "/".join(sorted(f for f in fams if f)),
+             "pose": [{"spool": x, "fid": spools[x]["fid"], "name": spools[x].get("name"), "tray": tr, "where": spools[x].get("where"),
+                       "why": urgency(spools[x], cfg, now)[1]} for x, tr in zip(pose, free)],
+             "with": [spools[x].get("name") for x in inside],
+             "due": [spools[x].get("name") for x in due], "printing_others": others})
     for j in seq:
         j.pop("_s", None)
         j.pop("_e", None)
@@ -373,8 +414,14 @@ def text(it: dict, now: datetime | None = None) -> str:
     hh = f"{int(h)} h" if float(h).is_integer() else f"{h:.1f} h".replace(".", ",")
     rec = f"{it['t']} °C · {hh}"
     if it["kind"] == "opportunity":
-        return (f"♨ Sécher {it['unit_label']} ({it['family']}) {when(s, now)} : {rec}, il ne sert pas pendant"
-                + (" (les autres AMS impriment)" if it.get("printing_others") else ""))
+        bits = []
+        if it.get("pose"):
+            bits.append("pose sans les insérer " + ", ".join(
+                f"{x['name']}" + (f" (📍 {x['where']})" if x.get("where") else "") + f" slot {int(x['tray']) + 1}" for x in it["pose"]))
+        if it.get("with"):
+            bits.append(("avec " if it.get("pose") else "") + ", ".join(it["with"]) + (" déjà dedans" if it.get("pose") else ""))
+        return (f"♨ Sécher {it['unit_label']} {when(s, now)} : {rec}" + (f" ; {' ; '.join(bits)}" if bits else "")
+                + " (il ne sert pas pendant" + (", les autres AMS impriment)" if it.get("printing_others") else ")"))
     if it["mode"] == "inplace":
         how = f"sèche-la sur place dans {it['unit_label']}"
     elif it["mode"] == "ht":
@@ -421,17 +468,25 @@ async def annotate(jobs: list, d: dict, now: datetime, present=None) -> dict:
     sids |= {(sp or {}).get("spool") for j in jobs for sp in (j.get("load_spots") or []) if (sp or {}).get("spool")}
     spools = {}
     try:
-        from sqlalchemy import select
+        from sqlalchemy import select, or_
         from ..db.session import AsyncSessionLocal
         from ..models.filament import Filament, Spool
         from . import drying as DR
         from .planner import fil_label
+        from .storage_places import in_printer
         async with AsyncSessionLocal() as db:
             await DR.load(db)
             rows = (await db.execute(select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id)
                                      .where(Spool.id.in_([int(x) for x in sids if x])))).all()
-        for sp, f in rows:
-            spools[int(sp.id)] = {"fid": int(f.id), "name": fil_label(f.name, f.material, f.fila_type, f.manufacturer),
+            # le stock (11/11/2026) : les bobines rangees, a secher dans le temps libre d'un AMS
+            rows += [(sp, f, True) for sp, f in (await db.execute(
+                select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id)
+                .where(Spool.archived.is_(False), Spool.ordered.is_(False),
+                       or_(Spool.remaining_weight_g.is_(None), Spool.remaining_weight_g > 50)))).all()
+                     if not in_printer(sp.location) and int(sp.id) not in sids]
+        for row in rows:
+            sp, f = row[0], row[1]
+            spools[int(sp.id)] = {"stored": len(row) > 2, "where": sp.location if len(row) > 2 else None,"fid": int(f.id), "name": fil_label(f.name, f.material, f.fila_type, f.manufacturer),
                                   "family": family(f.material, f.fila_type), "last": DR.dry_reference(sp),
                                   "needs": DR.needs_drying(sp, f), "limit_days": DR.days_for(f),
                                   "dry_t": getattr(f, "dry_temp", None), "dry_h": getattr(f, "dry_hours", None)}

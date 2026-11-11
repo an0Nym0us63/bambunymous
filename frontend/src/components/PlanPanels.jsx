@@ -705,9 +705,11 @@ export function DryList({ items, edit, onOpen, jobs, now }) {
   const C = "#EA580C";
   return <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
     <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
-      Le plus tard possible avant l'impression, quand tu es là (heures de lancement, créneaux de chargement), et si possible pendant que les
-      autres AMS impriment. Température et durée : celles du profil Bambu du filament (ou une valeur usuelle). Rien n'est lancé tout seul :
-      l'AMS date lui-même les bobines une fois le séchage assez avancé.</div>
+      Le but : le plus de stock sec possible. Une bobine est proposée avant d'avoir dépassé son délai (à la moitié du délai de sa matière dans les
+      réglages du planning, sinon dans les 30 derniers jours de son délai général), mesuré au jour de l'impression ; et un AMS qui ne sert pas sèche ses
+      bobines et des bobines du stock posées dans ses places libres, les plus pressées d'abord. Quand tu es là (heures de lancement, créneaux de
+      chargement), si possible pendant que les autres AMS impriment. Température et durée : celles du profil Bambu (ou une valeur usuelle). Rien
+      n'est lancé tout seul : l'AMS date lui-même les bobines une fois le séchage assez avancé.</div>
     {items.map((it, i) => { const j = it.for_key && (jobs || []).find(x => x.key === it.for_key);
       const c = it.mode === "none" ? "#DC2626" : C;
       return <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 12,
@@ -720,8 +722,15 @@ export function DryList({ items, edit, onOpen, jobs, now }) {
           <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", lineHeight: 1.4 }}>{(t => t.charAt(0).toUpperCase() + t.slice(1))(
             (it.txt || "").replace(/^♨ /, "").replace(it.kind !== "opportunity" && it.name ? `${it.name} ` : "", "").replace(/^: /, ""))}</span>
           <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
-            {it.kind === "opportunity" ? `À sécher : ${(it.old || []).join(", ")} · ` : it.why ? `${it.why} · ` : ""}réglage : {it.src}</span>
+            {it.kind === "opportunity" ? (it.pose || []).filter(x => x.why).map(x => `${x.name} : ${x.why}`).join(" · ") + ((it.pose || []).some(x => x.why) ? " · " : "")
+              : it.why ? `${it.why} · ` : ""}réglage : {it.src}</span>
           <span style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+            {edit && (it.pose || []).map(x => done[`${it.unit}:${x.tray}`]
+              ? <span key={x.spool} style={{ fontSize: 11.5, fontWeight: 900, color: "#16A34A" }}>✓ {x.name} posée</span>
+              : <button key={x.spool} type="button" onClick={() => pose({ ...it, spool: x.spool, tray: x.tray })}
+                data-tip={`Dire à BambuNymous que ${x.name} est posée dans ${it.unit_label} slot ${x.tray + 1} (sans l'insérer) : elle sera datée quand le séchage aura assez duré`}
+                style={{ padding: "4px 10px", borderRadius: 10, border: `1px solid color-mix(in srgb, ${C} 45%, var(--border))`, background: "var(--surface)",
+                  color: C, fontSize: 11.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>📥 {x.name} posée</button>)}
             {edit && it.mode === "posed" && it.tray != null && (done[`${it.unit}:${it.tray}`]
               ? <span style={{ fontSize: 11.5, fontWeight: 900, color: "#16A34A" }}>✓ posée</span>
               : <button type="button" onClick={() => pose(it)} data-tip={`Dire à BambuNymous que cette bobine est posée dans ${it.unit_label} slot ${it.tray + 1} (sans l'insérer) : elle sera datée quand le séchage aura assez duré`}
