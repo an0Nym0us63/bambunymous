@@ -4331,23 +4331,35 @@ function GroupPickerSheet({ groups, items = [], onClose, onPick }) {
   const exactNameExists = groups.some(g => norm(g.name) === qq);
   const thumb = id => apiThumb(apiUrl(`/prints/${id}/image`), 128);
   const name0 = items.length === 1 ? (items[0].translated_name || items[0].file_name || "") : "";
+  // la vignette du groupe, comme sa tuile dans la liste : sa vue 3D choisie, sinon la mosaique de ses impressions
+  const cover = g => {
+    const im = (src, st) => <img key={src} src={src} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+      style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", ...st }}/>;
+    if (g.vue3d) return im(apiThumb(`${apiUrl(`/prints/groups/${g.id}/photo/${g.vue3d.name}`)}?v=${g.vue3d.v || 0}`, 256), { objectFit:"contain" });
+    const t = g.thumbs || [];
+    if (!t.length) return <span style={{ fontSize:30 }}>📁</span>;
+    if (t.length === 1) return im(thumb(t[0]));
+    return <span style={{ display:"grid", width:"100%", height:"100%", gap:2,
+      gridTemplateColumns:"1fr 1fr", gridTemplateRows: t.length === 2 ? "1fr" : "1fr 1fr" }}>
+      {t.map((id, i) => <span key={id} style={{ overflow:"hidden", minWidth:0, minHeight:0, gridRow: t.length === 3 && i === 0 ? "span 2" : undefined }}>{im(thumb(id))}</span>)}
+    </span>;
+  };
 
+  // (11/11/2026) en mini-tuiles plutot qu'en lignes : la vignette en grand, le nom, combien et quand
   const row = g => (
     <button key={g.id} type="button" onClick={() => onPick({ group_id: g.id })}
-      style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:6, paddingRight:12, marginBottom:6, textAlign:"left", cursor:"pointer",
+      style={{ display:"flex", flexDirection:"column", gap:5, padding:5, textAlign:"left", cursor:"pointer", minWidth:0,
         borderRadius:14, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
-      <span style={{ width:44, height:44, borderRadius:11, flexShrink:0, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center",
-        background:"linear-gradient(135deg, rgba(59,130,246,0.18), rgba(139,92,246,0.14))", fontSize:20 }}>
-        {g.cover_print ? <img src={thumb(g.cover_print)} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = "none"; }}
-          style={{ width:"100%", height:"100%", objectFit:"cover" }}/> : "📁"}</span>
-      <span style={{ flex:1, minWidth:0 }}>
-        <span style={{ display:"block", fontSize:13.5, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
-        {/* la date du plus recent et le nombre : de quoi distinguer deux groupes de meme nom */}
-        <span style={{ display:"block", fontSize:11, fontWeight:700, color:"var(--muted)" }}>
+      <span style={{ aspectRatio:"1", width:"100%", borderRadius:10, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center",
+        background:"linear-gradient(135deg, rgba(59,130,246,0.14), rgba(139,92,246,0.12))" }}>{cover(g)}</span>
+      <span style={{ padding:"0 3px 2px", minWidth:0 }}>
+        <span style={{ display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", fontSize:12, fontWeight:800, lineHeight:1.25 }}>{g.name}</span>
+        {/* le nombre et la date du plus recent : de quoi distinguer deux groupes de meme nom */}
+        <span style={{ display:"block", fontSize:10.5, fontWeight:700, color:"var(--muted)", marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
           {g.print_count} print{g.print_count > 1 ? "s" : ""} · {fmtGroupDate(g.latest_date)}</span>
       </span>
-      <span style={{ color:"var(--muted)", fontSize:14 }}>›</span>
     </button>);
+  const grid = list => <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(104px, 1fr))", gap:8 }}>{list.map(row)}</div>;
   const head = t => <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"var(--muted)", margin:"10px 2px 6px" }}>{t}</div>;
 
   return createPortal(<FSheet onClose={onClose} z={1400}>
@@ -4377,8 +4389,8 @@ function GroupPickerSheet({ groups, items = [], onClose, onPick }) {
         <FolderPlus size={16}/> Créer « {q.trim()} »</button>}
       {q.trim() && exactNameExists && <p style={{ margin:"6px 2px 0", fontSize:11, color:"var(--muted)" }}>
         Un groupe porte déjà ce nom : tu peux le rejoindre ci-dessous, ou en créer un nouveau.</p>}
-      {same.length > 0 && <>{head("✨ Même modèle")}{same.map(row)}</>}
-      {rest.length > 0 && <>{head(same.length ? "Les autres groupes" : "Les groupes")}{rest.map(row)}</>}
+      {same.length > 0 && <>{head("✨ Même modèle")}{grid(same)}</>}
+      {rest.length > 0 && <>{head(same.length ? "Les autres groupes" : "Les groupes")}{grid(rest)}</>}
       {!filtered.length && !q.trim() && <p style={{ textAlign:"center", color:"var(--muted)", fontSize:12.5, padding:"20px 0" }}>
         Aucun groupe pour l'instant : tape un nom pour en créer un.</p>}
     </div>

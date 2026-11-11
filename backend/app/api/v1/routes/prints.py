@@ -956,11 +956,13 @@ async def list_groups(_: str = Depends(get_current_user)):
     # Deux lectures legeres (27/10/2026) : avant, chaque groupe chargeait ses impressions en objets complets
     # (les 1 900) pour les compter et trouver la plus recente.
     async with AsyncSessionLocal() as db:
-        gs = (await db.execute(select(Group.id, Group.name, Group.created_at).order_by(Group.name))).all()
+        gs = (await db.execute(select(Group.id, Group.name, Group.created_at, Group.cover_print_id, Group.thumb_3d)
+                               .order_by(Group.name))).all()
         per: dict = {}
-        # (11/11/2026) aussi l'impression la plus recente (la vignette du groupe dans « Ajouter a un groupe ») et
-        # ses modeles MakerWorld (les groupes du meme modele proposes en tete)
-        last: dict = {}
+        # (11/11/2026) la vignette du groupe dans « Ajouter a un groupe » (comme sa tuile : sa vue 3D choisie, sinon
+        # la mosaique de ses impressions, celle de couverture en tete) et ses modeles MakerWorld (les groupes du meme
+        # modele proposes en tete)
+        ps: dict = {}
         mws: dict = {}
         for gid, pd, pid, did in (await db.execute(select(Print.group_id, Print.print_date, Print.id, Print.design_id)
                                                     .where(Print.group_id.isnot(None)))).all():
@@ -968,21 +970,26 @@ async def list_groups(_: str = Depends(get_current_user)):
             e[0] += 1
             if pd:
                 e[1].append(pd)
-                if gid not in last or pd > last[gid][0]:
-                    last[gid] = (pd, pid)
-            elif gid not in last:
-                last[gid] = (None, pid)
+            ps.setdefault(gid, []).append((pd or datetime.min, pid))
             if did and str(did).strip():
                 mws.setdefault(gid, set()).add(str(did).strip())
     groups = []
-    for gid, name, created in gs:
+    for gid, name, created, cover, t3d in gs:
         n, dates = per.get(gid, (0, []))
+        ids = [pid for _, pid in sorted(ps.get(gid, []), reverse=True)]
+        if cover in ids:
+            ids = [cover] + [i for i in ids if i != cover]
+        v3 = None
+        if t3d:
+            vn, vv = _v3cover(DATA_DIR / "groups" / str(gid), t3d)
+            if vn:
+                v3 = {"name": vn, "v": vv}
         groups.append({
             "id": gid, "name": name,
             "print_count": n,
             "created_at": created,
             "latest_date": max(dates) if dates else created,
-            "cover_print": last[gid][1] if gid in last else None,
+            "thumbs": ids[:4], "vue3d": v3,
             "design_ids": sorted(mws.get(gid, ()))[:10],
         })
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
