@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
 import { egg } from "../eggs";
+import { currentFriend } from "../store/friend";
 
 // Le dessin d'une couche (02/11/2026) : les traces de chaque filament, lus dans le G-code du 3MF tranche, et la couche
 // d'avant en fantome. Affichage seulement. Pas de « deja imprime » dans la couche : on sait l'ordre des traces, pas le
@@ -37,17 +38,26 @@ const lightCol = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) ret
   return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.78; };
 // la vue 3D (05/11/2026) : le contour exterieur de chaque couche, lu une fois par impression ; colore jusqu'a la
 // couche en cours, le reste en fantome. Le 3MF envoye a l'imprimante n'a pas le maillage : tout vient du G-code
+// (11/11/2026) gardee par BambuNymous (le mien ou celui d'un copain : chacun a son impression 16) et seulement quand
+// elle est prete : un « pas de vue » (demandee avant que le 3MF tranche soit la, ou en plein calcul) restait jusqu'au
+// rechargement de la page ; il est redemande toutes les 20 s
 const SHELLS = {};
 export function useShell(enabled, printId) {
-  const [s, setS] = useState(() => (printId && SHELLS[printId]) || null);
+  const key = printId ? `${currentFriend()?.id || "me"}:${printId}` : null;
+  const [s, setS] = useState(() => (key && SHELLS[key]) || null);
   useEffect(() => {
-    if (!enabled || !printId) return;
-    if (SHELLS[printId]) { setS(SHELLS[printId]); return; }
-    let on = true;
-    client.get("/live/shell", { params: { print_id: printId } }).then(r => { SHELLS[printId] = r.data; if (on) setS(r.data); })
-      .catch(() => { if (on) setS({ ok: false }); });
-    return () => { on = false; };
-  }, [enabled, printId]);
+    if (!enabled || !key) return;
+    if (SHELLS[key]) { setS(SHELLS[key]); return; }
+    setS(null);
+    let on = true, t = null;
+    const go = () => client.get("/live/shell", { params: { print_id: printId } }).then(r => {
+      if (!on) return;
+      if (r.data?.ok) SHELLS[key] = r.data; else t = setTimeout(go, 20000);
+      setS(r.data);
+    }).catch(() => { if (on) { setS({ ok: false }); t = setTimeout(go, 20000); } });
+    go();
+    return () => { on = false; clearTimeout(t); };
+  }, [enabled, key]); // eslint-disable-line react-hooks/exhaustive-deps
   return s;
 }
 
