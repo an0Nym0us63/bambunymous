@@ -516,6 +516,16 @@ EVENTS["mw_queue_ready"] = {
     "sample": {"title": "✅ Prêt à imprimer : Lampe lune", "priority": 2, "attach": _SAMPLE_COVER, "link": "/prints?tab=queue",
                "message": "🧵 Tout le filament est en stock (2 couleurs, 184 g).\n✨ Déjà dans l'AMS."},
 }
+EVENTS["mw_queue_unset"] = {
+    "section": "mw", "label": "Modèles de « À faire » à régler",
+    "description": "Une synthèse régulière des modèles de « À faire » dont tu n'as pas encore choisi le profil et les couleurs "
+                   "(le planning les place avec le profil par défaut en attendant). Rien n'est envoyé quand il n'y en a pas.",
+    "options": [{"key": "every", "type": "select", "label": "Tous les", "default": "1",
+                 "choices": [["1", "jours"], ["2", "deux jours"], ["3", "trois jours"], ["7", "sept jours"]]},
+                {"key": "hour", "type": "number", "label": "à", "unit": "h", "default": 18, "min": 0, "max": 23}],
+    "sample": {"title": "📌 3 modèles à régler dans « À faire »", "priority": 2, "attach": _SAMPLE_COVER, "link": "/prints?tab=queue&filter=unset",
+               "message": "Profil et couleurs pas encore choisis :\n   • Lampe lune\n   • Toucan\n   • Kit de semis auto-arrosant"},
+}
 EVENTS["mw_profile_gone"] = {
     "section": "mw", "label": "Profil retenu retiré de MakerWorld",
     "description": "Le profil que tu avais retenu pour un modèle de « À faire » n'existe plus sur MakerWorld (retiré ou "
@@ -586,7 +596,7 @@ _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_en
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
           "spool_loaded", "spool_removed", "spool_to_store", "spool_auto_store", "ams_humidity", "spool_runout", "spool_low", "spool_short", "stock_low", "fil_to_order", "order_mail",
-          "printer_idle", "weekly_summary", "mw_queue_ready", "mw_profile_gone", "app_update", "app_started"]
+          "printer_idle", "weekly_summary", "mw_queue_ready", "mw_queue_unset", "mw_profile_gone", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 
 

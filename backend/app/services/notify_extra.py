@@ -30,6 +30,7 @@ K_ACC = "NOTIF_ACCESSORIES"         # {id accessoire: "low" | "out"} deja signal
 K_UNSOLD = "NOTIF_UNSOLD"           # objets en vente deja signales
 K_OVERDUE = "NOTIF_OVERDUE"         # id de la derniere impression signalee en retard
 K_MWAUTH = "NOTIF_MW_AUTH"          # "lost" : jeton refuse deja signale
+K_UNSET = "NOTIF_QUEUE_UNSET"       # "AAAA-MM-JJ" de la derniere synthese des modeles a regler
 K_BOOSTS = "NOTIF_BOOST_TOKENS"     # {"ids": [jetons boost connus], "reminded": "AAAA-MM-JJ" du dernier rappel}
 
 
@@ -658,6 +659,33 @@ async def profile_gone_tick(cfg) -> int:
     return 1
 
 
+# ── « A faire » : modeles a regler (11/11/2026) ──────────────────────────────
+async def unset_tick(cfg) -> int:
+    """Synthese reguliere : les modeles sans profil ni couleurs choisis, tous les N jours a l'heure dite."""
+    from . import mw_queue
+    opts = N.options_of(cfg, "mw_queue_unset")
+    now = _now()
+    if now.hour < opts["hour"]:
+        return 0
+    last = await _get(K_UNSET, "")
+    try:
+        if last and (now.date() - datetime.strptime(last, "%Y-%m-%d").date()).days < int(opts["every"]):
+            return 0
+    except ValueError:
+        pass
+    items = mw_queue.unset_models()
+    await _put(K_UNSET, now.strftime("%Y-%m-%d"))
+    if not items:
+        return 0
+    n = len(items)
+    lines = ["Profil et couleurs pas encore choisis :"] + [f"   • {x.get('title_fr') or x.get('title') or x['design_id']}" for x in items[:8]]
+    if n > 8:
+        lines.append(f"   … et {n - 8} autre{'s' if n - 8 > 1 else ''}")
+    await N.notify("mw_queue_unset", f"📌 {n} modèle{'s' if n > 1 else ''} à régler dans « À faire »", "\n".join(lines),
+                   click=N.app_link(cfg, "/prints?tab=queue&filter=unset"), attach=items[0].get("cover_url"), priority=2)
+    return 1
+
+
 async def plan_tick(cfg) -> int:
     """Le planning (05/11/2026) : a l'heure prevue, l'imprimante libre, ce qu'il faut lancer."""
     from . import planner
@@ -669,7 +697,7 @@ async def plan_tick(cfg) -> int:
 # tiennent a jour meme quand leur notification est coupee).
 _TICKS = [(("attention_new",), attention_tick), (("weekly_summary",), weekly_tick), (("printer_idle",), idle_tick),
           (None, achievements_tick), (("friend_achievement",), friend_achievements_tick),
-          (("mw_queue_ready",), queue_ready_tick), (("mw_profile_gone",), profile_gone_tick),
+          (("mw_queue_ready",), queue_ready_tick), (("mw_queue_unset",), unset_tick), (("mw_profile_gone",), profile_gone_tick),
           (("dry_needed_loaded",), dry_needed_tick), (("dry_forgotten",), dry_forgotten_tick),
           (("accessory_low", "accessory_out"), accessories_tick), (("objects_unsold",), unsold_tick),
           (("print_overdue",), overdue_tick), (("mw_auth_lost",), mw_auth_tick),

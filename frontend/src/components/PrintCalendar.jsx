@@ -5,6 +5,7 @@ import client, { apiUrl, apiThumb } from "../api/client";
 import { egg } from "../eggs";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import UnsetBanner from "./UnsetBanner";
 import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
 import { usePlanActs, sheetRef } from "./planActs";
@@ -495,6 +496,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     <PoolSummary jobs={pd.jobs} blocked={pd.blocked} now={pd.now} onOpenModel={setModelSel} bulk={edit ? bulk : null}/>
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    {/* (11/11/2026) ce que le planning place avec le profil par defaut : a regler dans « A faire » */}
+    {edit && <UnsetBanner/>}
     {/* le mois et ses chiffres ; la date et ‹ › restent en haut au defilement (05/11/2026 au telephone, 06/11/2026 partout) */}
     {/* sur ordinateur, la page a 16 px de marge en haut : la barre colle au bord (top negatif), sinon le contenu passe au-dessus */}
     <div style={{ display: "flex", alignItems: "center", gap: 8, position: "sticky", zIndex: 20,

@@ -24,6 +24,7 @@ import { moneyVal } from "../utils/money";
 import { FSheet, fBtn } from "./FicheKit";
 import { pdStore } from "../utils/planSnap";
 import { mwCollections } from "../utils/mwSync";
+import UnsetBanner from "./UnsetBanner";
 
 // « 8 nov. » : la date d'un « repartir a zero » (enregistree en UTC)
 const sinceTxt = s => new Date(String(s).endsWith("Z") ? s : `${s}Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
@@ -149,7 +150,8 @@ export default function MwQueue() {
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pick, setPick] = useState(false);
-  const [filter, setFilter] = useState("all");
+  // ?filter=unset (11/11/2026, depuis le Calendrier ou la notification) : les modeles a regler
+  const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get("filter") === "unset" ? "unset" : "all");
   const [search, setSearch] = useState("");          // (08/11/2026) le titre, la collection, le profil, un filament
   // le tri au sein d'un filtre (l'ordre de priorite par defaut) ; garde dans ce navigateur
   // le tri : a chaque ouverture, l'ordre du planning (06/11/2026 ; avant, celui de la liste) ; le choix ne se garde pas
@@ -308,7 +310,7 @@ export default function MwQueue() {
   const words = sorting || cutting ? [] : norm(search).split(/\s+/).filter(Boolean);
   const hay = r => norm([r.title, r.title_fr, r.variant, r.profile?.title, ...(r.collections || []),
     ...(r.filaments || []).flatMap(f => [f.type, f.chosen?.name, f.chosen?.brand, f.chosen?.fila_type])].filter(Boolean).join(" "));
-  const filtered = q.models.filter(r => (sorting || cutting || choosing || filter === "all" || r.status === filter)
+  const filtered = q.models.filter(r => (sorting || cutting || choosing || filter === "all" || (filter === "unset" ? !r.planned && !r.done : r.status === filter))
     && (!words.length || (h => words.every(w => h.includes(w)))(hay(r))));
   const rows = sorting || cutting ? filtered : sortQueue(filtered, sortBy, plan?.by);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
@@ -376,6 +378,8 @@ export default function MwQueue() {
           {busy || q.stale ? <span className="mw-spin" style={{ width:13, height:13 }}/> : "⟳"}</button>
       </div>
       {isAdmin && <DoneCleanup models={q.models || []} colls={q.collections} onDone={refresh}/>}
+      {(() => { const seen = new Set(), un = (q.models || []).filter(r => !r.planned && !r.done && !seen.has(String(r.mw_id || r.design_id)) && seen.add(String(r.mw_id || r.design_id)));
+        return <UnsetBanner items={un} active={filter === "unset"} onShow={() => { setTab("models"); setFilter(f => f === "unset" ? "all" : "unset"); }}/>; })()}
 
       {q.collections.length === 0 ? (
         <div style={{ padding:"18px 16px", borderRadius:18, border:"1px dashed var(--border)", textAlign:"center",
@@ -600,7 +604,7 @@ export default function MwQueue() {
                       style={{ ...tag, color:"#B45309", background:"rgba(245,158,11,0.16)" }}>⚠️ Profil retiré</span>}
                     {r.planned
                       ? <span data-tip="Profil, plateaux et filaments retenus depuis la fiche" style={{ ...tag, color:"#16a34a", background:"rgba(34,197,94,0.14)" }}>📌 Retenu</span>
-                      : <span data-tip="Profil retenu par l'appli, tous les plateaux, filament le plus proche du stock" style={{ ...tag, color:"var(--muted)", background:"var(--surface)", border:"1px dashed var(--border)" }}>Par défaut</span>}
+                      : <span data-tip="À régler : profil retenu par l'appli, tous les plateaux, filament le plus proche du stock. Ouvre sa fiche pour choisir profil et couleurs" style={{ ...tag, color:"#B45309", background:"rgba(245,158,11,0.14)", border:"1px dashed rgba(245,158,11,0.6)" }}>📌 À régler</span>}
                     {r.printed > 0 && <span style={{ ...tag, color:"#8B5CF6", background:"rgba(139,92,246,0.14)" }}>✓ imprimé {r.printed}×</span>}
                     {(() => { const before = (r.plates || []).reduce((s, p) => s + Math.max(0, (p.printed_all || 0) - (p.printed || 0)), 0);
                       const all = (r.plates || []).reduce((s, p) => s + (p.printed_all || 0), 0), after = all - before;

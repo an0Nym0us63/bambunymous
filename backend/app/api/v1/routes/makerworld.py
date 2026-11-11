@@ -320,6 +320,13 @@ async def mw_queue(fresh: bool = False, until: str | None = None, ids: str = "",
     return await _call(Q.queue(fresh, until, [i for i in ids.split(",") if i.strip()][:500]))
 
 
+@router.get("/queue/unset")
+async def mw_queue_unset(_: str = Depends(get_current_user)):
+    """(11/11/2026) Les modeles de « A faire » sans profil ni couleurs choisis (bandeau du Calendrier)."""
+    from ....services import mw_queue as Q
+    return {"items": Q.unset_models()}
+
+
 @router.get("/queue/config")
 async def mw_queue_config(_: str = Depends(get_current_user)):
     from ....services import mw_queue as Q

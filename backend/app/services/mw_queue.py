@@ -57,6 +57,20 @@ def _snap_get():
         return None
 
 
+def unset_models() -> list:
+    """(11/11/2026) Les modeles de « A faire » sans plan retenu (profil, plateaux, couleurs), pas encore faits : le
+    planning les place avec le profil par defaut. D'apres le dernier calcul (en memoire, sinon sur disque)."""
+    raw = _CACHE[1] or _snap_get() or {}
+    out, seen = [], set()
+    for r in raw.get("models") or []:
+        mw = mw_of(r["design_id"])
+        if r.get("planned") or r.get("done") or mw in seen:
+            continue
+        seen.add(mw)
+        out.append({"design_id": mw, "title": r.get("title"), "title_fr": r.get("title_fr"), "cover_url": r.get("cover_url")})
+    return out
+
+
 def _snap_put(out):
     try:
         _snap_path().write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
