@@ -225,7 +225,9 @@ async def _get(pid: int, p) -> Optional[dict]:
 
 def _tool_at(ix: dict, pos: int) -> Optional[int]:
     i = bisect.bisect_right(ix["Tpos"], pos) - 1
-    return ix["Tval"][i] if i >= 0 else None
+    # (11/11/2026) aucun « T<n> » dans tout le fichier : un print a un seul filament (profil sans AMS) n'en a souvent
+    # aucun, et rien ne sortait (couche vide, vue 3D vide) ; c'est alors le premier filament
+    return ix["Tval"][i] if i >= 0 else (None if ix["Tval"] else 0)
 
 
 def _obj_at(ix: dict, pos: int) -> Optional[str]:

@@ -76,7 +76,9 @@ def parse_gcode(raw: bytes) -> dict:
     rincages faits par l'imprimante sont notes en commentaire (« ;VG1 E… ») et comptent pour le filament qui arrive.
     Chaque piece est encadree par « ; start printing object, unique label id: N » et « ; stop printing object » (05/11/2026) :
     ce qui s'extrude entre les deux est aussi compte pour elle, pour savoir ce qu'une piece annulee n'imprime pas."""
-    tool = None
+    # (11/11/2026) un print a un seul filament (profil sans AMS) n'a souvent aucun « T<n> » : tout est alors au premier
+    # filament (rien n'etait compte) ; avec des changements, rien avant le premier (le debut du G-code)
+    tool = None if any(int(m.group(1)) < 255 for m in re.finditer(rb"(?m)^T(\d+)", raw)) else 0
     obj = None
     rel = True
     last_e = 0.0
