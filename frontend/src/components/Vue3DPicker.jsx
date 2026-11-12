@@ -106,7 +106,28 @@ function Picker({ kind, id, shot, onDone, close }) {
         <img src={(u => `${u}${u.includes("?") ? "&" : "?"}v=${d.cover.v}`)(apiUrl(`${kind === "group" ? `/prints/groups/${id}/photo` : `/prints/${id}/file`}/${d.cover.name}`))} alt="" style={{ ...img(true), width: 72, height: 72 }}/>
         <span>La vignette : les {sel.length} vues choisies défilent l'une après l'autre</span>
       </div>}
-      {d && !d.slots.length && !shot && <span style={{ fontSize: 12.5 }}>Aucune vue : prends-en une avec 📸 dans la vue 3D.</span>}
+      {d && !d.slots.length && !shot && <span style={{ fontSize: 12.5 }}>Aucune vue : prends-en une avec 📸 dans la vue 3D{kind === "group" && d.members?.length ? ", ou reprends celle d'une de ses impressions ci-dessous" : ""}.</span>}
+      {/* (12/11/2026) les vues et animations prises sur ses impressions : les copier dans le groupe en fait sa vignette,
+          qui reste meme quand d'autres impressions le rejoignent */}
+      {kind === "group" && !!d?.members?.length && <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4, borderTop: "1px solid var(--border)" }}>
+        <span style={{ fontSize: 13, fontWeight: 900, color: "var(--text)" }}>📥 Depuis ses impressions
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}> · copiée dans le groupe, elle reste sa vignette même si d'autres impressions le rejoignent</span></span>
+        {d.members.map(m => <div key={m.print_id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {m.slots.map(s => <div key={s.n} style={tile}>
+              <img src={apiUrl(s.url.replace(/^\/api\/v1/, ""))} alt="" style={img(false)}/>
+              <button type="button" disabled={busy || full} onClick={() => act(() => client.post(`${base}/vue3d/adopt`, { print_id: m.print_id, n: s.n }))}
+                data-tip={full ? `Déjà ${d.max} vues dans le groupe : supprimes-en une` : "La copier dans le groupe et en faire sa vignette"} style={btn(true)}>📌 Vignette du groupe</button>
+            </div>)}
+            {(m.anims || []).map(a => <div key={a.name} style={tile}>
+              <video src={apiAnim(apiUrl(a.url.replace(/^\/api\/v1/, "")))} autoPlay loop muted playsInline style={{ ...img(false), objectFit: "cover", background: "#111" }}/>
+              <button type="button" disabled={busy} onClick={() => act(() => client.post(`${base}/vue3d/adopt`, { print_id: m.print_id, anim: a.name }))}
+                data-tip="La copier dans le groupe (elle tourne sur sa vignette et en tête de sa fiche)" style={btn(false)}>📌 Au groupe</button>
+            </div>)}
+          </div>
+        </div>)}
+      </div>}
       {/* les animations (08/11/2026) : une par effet, en boucle ici, en grand au toucher ; la premiere tourne en tete de fiche */}
       {!!d?.anims?.length && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 900 }}>🎞 {d.anims.length > 1 ? `Les animations (${d.anims.length})` : "L'animation"}

@@ -2851,6 +2851,8 @@ async def set_group_bulk(body: dict, _: str = Depends(get_current_user)):
 
         updated = 0
         affected = set()
+        if target_gid and group_id:
+            await _keep_lone_vue(db, target_gid)
         for pid in print_ids:
             p = await db.get(Print, int(pid))
             if p:
@@ -2895,6 +2897,8 @@ async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user
             g = await db.get(Group, int(group_id))
             if not g:
                 raise HTTPException(404, "Groupe introuvable")
+            if g.id != old_gid:
+                await _keep_lone_vue(db, g.id)
             p.group_id = g.id
         elif group_name:
             g = Group(name=group_name)
@@ -3527,7 +3531,87 @@ async def group_vue3d_list(group_id: int, _: str = Depends(get_current_user)):
         g = await db.get(Group, group_id)
         if not g:
             raise HTTPException(404, "Groupe introuvable")
-        return _v3list("group", group_id, DATA_DIR / "groups" / str(group_id), g.thumb_3d or 0)
+        out = _v3list("group", group_id, DATA_DIR / "groups" / str(group_id), g.thumb_3d or 0)
+        # (12/11/2026) les vues et animations prises sur ses impressions : en faire la vignette du groupe les y copie
+        members = (await db.execute(select(Print.id, Print.file_name).where(Print.group_id == group_id).order_by(Print.print_date))).all()
+    out["members"] = []
+    for pid, name in members:
+        m = _v3list("print", pid, DATA_DIR / "prints" / str(pid), 0)
+        if m["slots"] or m["anims"]:
+            out["members"].append({"print_id": pid, "name": name, "slots": m["slots"], "anims": m["anims"]})
+    return out
+
+
+def _adopt(gid: int, pid: int, n: int = 0, anim: str = "") -> int:
+    """Copie dans le groupe une vue (n) ou une animation (anim) prise sur l'une de ses impressions (12/11/2026) : elle
+    est alors au groupe, et y reste quelles que soient les impressions ajoutees ou retirees ensuite. Rend la place de la
+    vue copiee (0 pour une animation)."""
+    import shutil
+    src_dir, dst = DATA_DIR / "prints" / str(pid), DATA_DIR / "groups" / str(gid)
+    dst.mkdir(parents=True, exist_ok=True)
+    _V3IDS["at"] = 0
+    if anim:
+        if not _V3ANIM_RE.fullmatch(anim) or not (src_dir / anim).is_file():
+            raise HTTPException(404, "Animation introuvable")
+        shutil.copy2(src_dir / anim, dst / anim)
+        (dst / V3_ANIM_OFF).unlink(missing_ok=True)
+        gallery_touched()
+        return 0
+    f = src_dir / _v3name(n)
+    if not 1 <= n <= V3_MAX or not f.is_file():
+        raise HTTPException(404, "Vue introuvable")
+    have = _v3slots(dst)
+    slot = next((k for k in range(1, V3_MAX + 1) if k not in have), 0)
+    if not slot:
+        raise HTTPException(400, f"Le groupe a déjà {V3_MAX} vues : supprimes-en une d'abord")
+    shutil.copy2(f, dst / _v3name(slot))
+    os.utime(dst / _v3name(slot))                    # sa date sert de version aux vignettes en cache
+    gallery_touched()
+    return slot
+
+
+@router.post("/groups/{group_id}/vue3d/adopt")
+async def group_vue3d_adopt(group_id: int, body: dict, _: str = Depends(require_admin)):
+    """En faire la vignette du groupe : {print_id, n} (une vue) ou {print_id, anim} (une animation) d'une de ses
+    impressions, copiee dans le groupe ; une vue s'ajoute aux vues choisies comme vignette du groupe."""
+    pid = int(body.get("print_id") or 0)
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        p = await db.get(Print, pid) if pid else None
+        if not g or not p or p.group_id != group_id:
+            raise HTTPException(404, "Impression introuvable dans ce groupe")
+        slot = _adopt(group_id, pid, int(body.get("n") or 0), str(body.get("anim") or ""))
+        if slot:
+            folder = DATA_DIR / "groups" / str(group_id)
+            g.thumb_3d = _v3val(_v3sel(g.thumb_3d, _v3slots(folder)) + [slot])
+        await db.commit()
+    return {"ok": True, "n": slot}
+
+
+async def _keep_lone_vue(db, gid) -> None:
+    """Un groupe d'une seule impression montre la vignette de cette impression (sa vue 3D choisie). Quand une autre
+    impression le rejoint, il passait a la mosaique : s'il n'a pas de vue a lui, on lui copie celles que son impression
+    unique avait choisies (12/11/2026)."""
+    try:
+        if not gid:
+            return
+        g = await db.get(Group, int(gid))
+        if not g or _v3slots(DATA_DIR / "groups" / str(g.id)):
+            return
+        rows = (await db.execute(select(Print.id, Print.thumb_3d).where(Print.group_id == g.id))).all()
+        if len(rows) != 1:
+            return
+        pid, val = rows[0]
+        ns = _v3sel(val, _v3slots(DATA_DIR / "prints" / str(pid)))
+        slots = [_adopt(g.id, pid, n) for n in ns]
+        if slots:
+            g.thumb_3d = _v3val(slots)
+        a = _v3anim(DATA_DIR / "prints" / str(pid), fresh=True)
+        if a:
+            _adopt(g.id, pid, anim=a["name"])
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(f"[VUE3D] vignette du groupe {gid}")
 
 
 @router.post("/{print_id}/vue3d")
