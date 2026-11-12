@@ -31,11 +31,13 @@ logger = logging.getLogger(__name__)
 
 # les reglages par defaut du planning (cle « dry » des consignes)
 #  mode : "off" (rien), "sensitive" (pas le PLA : il ne craint presque rien), "all" (le PLA aussi, a son delai general)
-#  fresh : secher avant de s'en servir si le dernier sechage date de plus de N jours (par matiere) ; une matiere absente
-#          suit seulement le delai general des bobines (Parametres › Sechage)
-DEFAULT = {"mode": "sensitive",
-           "fresh": {"TPU": 3, "PA": 3, "PAHT": 3, "PA6": 3, "PPA": 3, "PC": 3, "PET": 3, "PPS": 3, "PVA": 2, "BVOH": 2,
-                     "PETG": 30, "ABS": 60, "ASA": 60}}
+#  fresh : un delai propre au planning pour une matiere (N jours depuis le dernier sechage), seulement si on l'ajoute ;
+#          sinon chaque bobine suit son delai de Parametres › Sechage (12/11/2026 : c'est lui qui fait foi ; avant, des
+#          delais par defaut caches ici, PETG 30 j, passaient devant un PETG regle a 6 mois)
+DEFAULT = {"mode": "sensitive", "fresh": {}}
+# les anciens delais par defaut : une valeur egale, enregistree avec les reglages du planning sans etre choisie, est oubliee
+OLD_FRESH = {"TPU": 3, "PA": 3, "PAHT": 3, "PA6": 3, "PPA": 3, "PC": 3, "PET": 3, "PPS": 3, "PVA": 2, "BVOH": 2,
+             "PETG": 30, "ABS": 60, "ASA": 60}
 # des valeurs usuelles quand le profil n'en donne pas (°C, h), pour un AMS 2 Pro ; le HT monte plus haut
 USUAL = {"PLA": (50, 8), "PETG": (65, 8), "PET": (65, 8), "TPU": (65, 8), "ABS": (65, 8), "ASA": (65, 8), "PC": (65, 8),
          "PA": (65, 12), "PAHT": (65, 12), "PA6": (65, 12), "PPA": (65, 12), "PPS": (65, 12), "PVA": (55, 8), "BVOH": (55, 8),
@@ -70,7 +72,7 @@ def clean_settings(v) -> dict:
                 n = int(n)
             except (TypeError, ValueError):
                 continue
-            if k != "?" and 0 < n <= 365:
+            if k != "?" and 0 < n <= 365 and OLD_FRESH.get(k) != n:
                 fr[k] = n
         out["fresh"] = fr
     return out

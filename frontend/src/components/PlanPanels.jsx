@@ -706,8 +706,8 @@ export function DryList({ items, edit, onOpen, jobs, now }) {
   const C = "#EA580C";
   return <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
     <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
-      Le but : le plus de stock sec possible. Une bobine est proposée avant d'avoir dépassé son délai (à la moitié du délai de sa matière dans les
-      réglages du planning, sinon dans les 30 derniers jours de son délai général), mesuré au jour de l'impression ; et un AMS qui ne sert pas sèche ses
+      Le but : le plus de stock sec possible. Une bobine est proposée avant d'avoir dépassé son délai de séchage (Paramètres › Séchage) : dès
+      qu'elle entre dans ses 30 derniers jours (le tiers pour un délai court), mesuré au jour de l'impression ; et un AMS qui ne sert pas sèche ses
       bobines et des bobines du stock posées dans ses places libres, les plus pressées d'abord. Quand tu es là (heures de lancement, créneaux de
       chargement), si possible pendant que les autres AMS impriment. Température et durée : celles du profil Bambu (ou une valeur usuelle). Rien
       n'est lancé tout seul : l'AMS date lui-même les bobines une fois le séchage assez avancé.</div>
