@@ -236,7 +236,21 @@ def _clean_query(q) -> dict:
     return out
 
 
-async def call_api(app, method: str, path: str, mode: str, query: dict | None = None, body=None, max_chars: int = MAX_CHARS) -> list:
+# (12/11/2026) ce qu'un assistant ne lit pas : les adresses d'images et les champs vides (le planning passait de 200 000
+# caracteres, coupe, a la moitie)
+_SLIM_KEYS = {"thumb", "cover", "cover_url", "merged_thumbs", "image", "thumbnail", "thumb_url", "image_url"}
+
+
+def _slim(v):
+    if isinstance(v, dict):
+        return {k: _slim(x) for k, x in v.items() if k not in _SLIM_KEYS and x is not None and x != [] and x != {} and x != ""}
+    if isinstance(v, list):
+        return [_slim(x) for x in v]
+    return v
+
+
+async def call_api(app, method: str, path: str, mode: str, query: dict | None = None, body=None, max_chars: int = MAX_CHARS,
+                   slim: bool = False) -> list:
     """L'appel, et son resultat en contenus MCP (texte JSON masque et coupe, ou image)."""
     import httpx
     full = _norm(path)
@@ -265,6 +279,8 @@ async def call_api(app, method: str, path: str, mode: str, query: dict | None = 
             data = redact(r.json())
         except ValueError:
             data = None
+        if slim and data is not None:
+            data = _slim(data)
         if data is not None:
             return [_text(json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str), max_chars)]
     if ct.startswith("text/"):
@@ -407,6 +423,13 @@ _T = [
      "GET", "/filaments/incoming", {"all": BOOL("true : aussi les commandes déjà rangées")}, [], {}),
     ("drying", "Séchage", "L'état du séchage des bobines actives : dernier séchage, délai, à sécher.", "GET", "/filaments/drying/overview", {}, [], {}),
     ("stock_thresholds", "Seuils de stock", "Les seuils de réapprovisionnement par filament.", "GET", "/filaments/stock-thresholds", {}, [], {}),
+    ("restock", "Que commander ?",
+     "Ce qu'il faut commander, calculé par l'appli : pour chaque filament, le stock (et les bobines déjà commandées), ce que le "
+     "planning lui demande jusqu'à sa fin (grammes, plateaux, jour où il passe sous le quart de bobine), la consommation "
+     "réelle des derniers jours, et le nombre de bobines à prendre. À utiliser plutôt que de lire tout le planning.",
+     "GET", "/filaments/restock", {"days": INT("Fenêtre de consommation en jours (90 d'office)"),
+                                   "cover_days": INT("Jours de consommation habituelle à couvrir après le planning (30 d'office)"),
+                                   "all": BOOL("true : aussi les filaments qui n'ont besoin de rien")}, [], {}),
     ("price_review", "Prix à revoir", "Les bobines et filaments dont le prix manque ou semble faux.", "GET", "/filaments/price-review", {}, [], {}),
     ("catalog_search", "Catalogue de filaments", "Recherche dans les catalogues de filaments (Bambu et autres marques).",
      "GET", "/filaments/catalog/search", {"q": STR("Le texte cherché")}, ["q"], {}),
@@ -438,12 +461,14 @@ _T = [
     # — File et planning —
     ("queue", "File « À faire »",
      "La file d'attente : modèles des collections choisies, profils et plateaux, filaments retenus, ce qui est imprimable "
-     "maintenant avec l'AMS ou avec le stock, plateaux déjà faits.", "GET", "/makerworld/queue", {}, [], {}),
+     "maintenant avec l'AMS ou avec le stock, plateaux déjà faits. Allégée d'office (sans images ni champs vides).",
+     "GET", "/makerworld/queue", {}, [], {"slim": True}),
     ("queue_config", "Réglages de la file", "Collections suivies, profils retenus, quantités.", "GET", "/makerworld/queue/config", {}, [], {}),
     ("plan", "Planning",
      "Le planning : chaque plateau posé sur les jours à venir (début, fin, filaments à charger et où les prendre, "
      "changements de bobine, plateau à monter), les jours, les échéances, les conseils. La « key » d'un plateau sert aux "
-     "actions du planning.", "GET", "/makerworld/plan", {"tz": INT("Décalage horaire en minutes (d'office celui du serveur)")}, [], {}),
+     "actions du planning. Allégé d'office (sans images ni champs vides) ; pour les besoins en filament, préférer restock.",
+     "GET", "/makerworld/plan", {"tz": INT("Décalage horaire en minutes (d'office celui du serveur)")}, [], {"slim": True}),
     ("build_plates", "Plateaux d'impression", "Les plateaux possédés (PEI, Cool Plate…), celui en place.", "GET", "/makerworld/plan/plates", {}, [], {}),
     # — MakerWorld —
     ("mw_search", "Chercher sur MakerWorld", "Recherche publique MakerWorld, avec « déjà imprimé ».",
@@ -632,6 +657,8 @@ def _tool_def(t) -> dict:
     props = dict(params)
     if method == "GET" and not opt.get("image"):
         props["max_chars"] = MAXC
+    if opt.get("slim"):
+        props["full"] = BOOL("true : la réponse complète, images et champs vides compris")
     rw = bool(opt.get("rw"))
     ann = {"title": title, "readOnlyHint": not rw, "openWorldHint": path.startswith("/makerworld/") and not path.startswith("/makerworld/plan")}
     if rw:
@@ -688,7 +715,9 @@ async def call_tool(app, name: str, args: dict, mode: str) -> dict:
                 raise ToolError(f"Valeur invalide pour {k}")
             path = path.replace("{" + k + "}", v)
         if method == "GET":
-            return {"content": await call_api(app, method, path, mode, args, None, maxc)}
+            slim = bool(opt.get("slim")) and not args.pop("full", False)
+            args.pop("full", None)
+            return {"content": await call_api(app, method, path, mode, args, None, maxc, slim=slim)}
         body = args.get("body") if opt.get("body") else args
         if opt.get("body") and not isinstance(body, dict):
             body = {}
@@ -800,8 +829,8 @@ PROMPTS = {
     "ou_est": ("Où est cette bobine ?", "Trouve la bobine « {bobine} » (spools_list, storage) : où elle est rangée, combien il en reste.",
                [("bobine", "Nom, couleur ou numéro de la bobine")]),
     "stock": ("Point sur le stock",
-              "Fais le point sur mon stock de filament (filaments_list, spools_list, stock_thresholds, orders_incoming) : ce qui va manquer, "
-              "ce qui est commandé, ce qui dort.", []),
+              "Fais le point sur mon stock de filament (restock d'abord : ce que le planning et mes habitudes vont consommer ; puis "
+              "orders_incoming, attention) : ce qu'il faut commander et pourquoi, ce qui est commandé, ce qui dort.", []),
     "planning_semaine": ("Planning de la semaine",
                          "Résume mon planning des 7 prochains jours (plan) : chaque jour, ce qui s'imprime, les changements de bobine, "
                          "les échéances menacées ; propose des améliorations sans rien changer.", []),

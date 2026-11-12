@@ -770,6 +770,123 @@ async def get_stock_thresholds(db: AsyncSession = Depends(get_db), _: str = Depe
     return await _thresholds(db)
 
 
+# ── Que commander (12/11/2026) : le planning, l'habitude et le stock, filament par filament ──────────────────────
+@router.get("/restock")
+async def restock(days: int = Query(90, ge=7, le=365), cover_days: int = Query(30, ge=0, le=180),
+                  all: bool = Query(False), db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """Que commander : pour chaque filament, le stock (bobines, et celles commandees), ce que le planning lui demande
+    (plateau par plateau jusqu'a sa fin, et le jour ou il passerait sous le quart de bobine), ce qui a ete consomme les
+    `days` derniers jours, et les bobines a commander pour tenir le planning puis `cover_days` jours de consommation
+    habituelle, sans finir sous le quart de bobine. order : a commander (le plus pressant d'abord) ; watch : tient, mais
+    juste ; all=true : aussi tout le reste. Calcule en une fois ce qui demandait de lire le planning entier."""
+    import math
+    from ....models.print_history import Print
+    from ....services import planner as P
+    now = datetime.now()
+    try:
+        plan = await P.plan()
+    except Exception:
+        plan = {}
+    jobs = plan.get("jobs") or []
+    end_s = (plan.get("summary") or {}).get("end")
+
+    def _d(s):
+        try:
+            return datetime.fromisoformat(str(s)[:16])
+        except (TypeError, ValueError):
+            return None
+    end = _d(end_s) or now
+    horizon = max(0.0, (end - now).total_seconds() / 86400)
+
+    used = dict((await db.execute(
+        select(Spool.filament_id, func.sum(FilamentUsage.grams_used))
+        .join(Spool, FilamentUsage.spool_id == Spool.id).join(Print, FilamentUsage.print_id == Print.id)
+        .where(FilamentUsage.grams_used > 0, Print.print_date >= datetime.utcnow() - timedelta(days=days),
+               Print.status.in_(["SUCCESS", "FAILED", "PARTIAL", "TO_REDO"]))
+        .group_by(Spool.filament_id))).all())
+    fils = {f.id: f for f in (await db.execute(select(Filament))).scalars().all()}
+    agg = await _spool_aggregates(db, list(fils))
+
+    def nominal(fid):
+        f = fils.get(fid)
+        return float((f.filament_weight_g if f else None) or 1000)
+
+    def have(fid):                                  # en bobines, et commande pas encore recue
+        a = (list(agg.get(fid, (0, 0, 0.0, 0))) + [0])[:4]
+        return float(a[2] or 0), int(a[3] or 0)
+
+    # le planning, dans son ordre : la demande et le jour ou le stock passe sous le quart de bobine
+    need, plates, first, low_on = {}, {}, {}, {}
+    run = {}
+    for j in jobs:
+        day = str(j.get("start") or "")[:10] or None
+        for x in j.get("fils") or []:
+            fid = x.get("filament_id")
+            if fid is None:
+                continue
+            g = float(x.get("g") or 0)
+            need[fid] = need.get(fid, 0.0) + g
+            plates[fid] = plates.get(fid, 0) + 1
+            first.setdefault(fid, day)
+            if fid not in run:
+                st, n_ord = have(fid)
+                run[fid] = st + n_ord * nominal(fid)
+            before, run[fid] = run[fid], run[fid] - g
+            if fid not in low_on and before >= 0.25 * nominal(fid) > run[fid]:
+                low_on[fid] = day
+
+    ids = set(fils) if all else (set(need) | {k for k, v in used.items() if (v or 0) > 0})
+    order, watch, rest = [], [], []
+    for fid in ids:
+        f = fils.get(fid)
+        if not f:
+            continue
+        nom = nominal(fid)
+        st, n_ord = have(fid)
+        pg, ug = need.get(fid, 0.0), float(used.get(fid) or 0)
+        rate = ug / days
+        demand = max(pg, rate * horizon) + rate * cover_days + 0.25 * nom
+        short = demand - st - n_ord * nom
+        buy = math.ceil(short / nom) if short > 0 else 0
+        after = st + n_ord * nom - pg
+        why = []
+        if pg:
+            why.append(f"planning : {round(pg)} g sur {plates[fid]} plateau(x), "
+                       + (f"il en manque {round(-after)} g" if after < 0 else f"il restera {round(after)} g")
+                       + (f" (sous le quart de bobine le {low_on[fid][8:10]}/{low_on[fid][5:7]})" if low_on.get(fid) else ""))
+        if ug:
+            why.append(f"{round(ug)} g en {days} j ({round(rate * 30)} g/mois)")
+        if n_ord:
+            why.append(f"{n_ord} bobine(s) déjà commandée(s)")
+        if buy and f.no_reorder:
+            why.append("marqué « ne pas recommander » : choisir un remplaçant")
+        row = {"id": f.id, "name": f.translated_name or f.name, "brand": f.manufacturer, "type": f.fila_type or f.material,
+               "color": f.color, "stock_g": round(st), "ordered": n_ord, "plan_g": round(pg), "plates": plates.get(fid, 0),
+               "first": first.get(fid), "low_on": low_on.get(fid), "left_after_plan_g": round(after),
+               "used_g": round(ug), "per_month_g": round(rate * 30),
+               "days_left": round(st / rate) if rate > 0 else None, "buy": buy, "price": f.price,
+               "no_reorder": bool(f.no_reorder), "why": " ; ".join(why)}
+        if buy:
+            order.append(row)
+        elif st + n_ord * nom - max(pg, rate * horizon) < 0.5 * nom and (pg or ug):     # tient, mais juste
+            watch.append(row)
+        else:
+            rest.append(row)
+    far = "9999-12-31"
+    order.sort(key=lambda r: (r["low_on"] or far, r["days_left"] if r["days_left"] is not None else 1e9))
+    watch.sort(key=lambda r: r["left_after_plan_g"])
+    rest.sort(key=lambda r: -r["per_month_g"])
+    out = {"window_days": days, "cover_days": cover_days,
+           "plan": {"plates": len(jobs), "end": end_s, "grams": round(sum(need.values()))},
+           "total": {"spools": sum(r["buy"] for r in order),
+                     "cost": round(sum(r["buy"] * (r["price"] or 0) for r in order), 2),
+                     "unpriced": sum(1 for r in order if not r["price"])},
+           "order": order, "watch": watch}
+    if all:
+        out["rest"] = rest
+    return out
+
+
 @router.put("/stock-thresholds")
 async def set_stock_thresholds(body: dict = Body({}), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
     import json as _j
