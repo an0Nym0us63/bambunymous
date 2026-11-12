@@ -255,6 +255,8 @@ async def lifespan(app: FastAPI):
     _tasks.track("nas", _bg(_arch.nightly_loop()))        # sauvegarde vers le NAS (et vidage du local) chaque nuit, si activee
     from app.services import mail_orders as _mail
     _tasks.track("mail", _bg(_mail.loop()))               # commandes Bambu Lab lues dans les mails, si active
+    from app.services import home_assistant as _ha
+    _tasks.track("home_assistant", _bg(_ha.loop()))       # l'electricite des impressions, mesuree chez Home Assistant
     await mqtt_manager.start()
     # Catalogue filaments Bambu (nuancier de Bambu Studio) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.

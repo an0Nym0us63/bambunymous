@@ -24,6 +24,7 @@ import PublicLinksCard from "../components/PublicLinksCard";
 import MailOrdersSettings from "../components/MailOrdersSettings";
 import ClaudeSettings from "../components/ClaudeSettings";
 import McpSettings from "../components/McpSettings";
+import HomeAssistantSettings from "../components/HomeAssistantSettings";
 import SwitchCard, { phoneWidth } from "../components/SwitchCard";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
@@ -2420,6 +2421,8 @@ export default function Settings() {
           <div style={{ maxWidth:200 }}>
             {F("Tarif (€/h)", cost, setCost, { placeholder:"0.20" })}
           </div>
+          <p style={{ fontSize:11.5, color:"var(--muted)", margin:"8px 0 0", lineHeight:1.4 }}>Une estimation : la durée × ce tarif. Avec une prise branchée
+            dans Home Assistant et un abonnement choisi (Connexions › Home Assistant), chaque impression compte ses vrais kWh, à leur prix.</p>
         </div>
 
 
@@ -2458,6 +2461,8 @@ export default function Settings() {
       <AdminOnly><ClaudeSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       {/* le serveur MCP (10/11/2026) : Claude interroge l'appli et, si on le permet, agit dessus */}
       <AdminOnly><McpSettings card={card} cardTitle={cardTitle}/></AdminOnly>
+      {/* Home Assistant (12/11/2026) : la prise de l'imprimante, l'electricite reelle de chaque impression, l'abonnement */}
+      <AdminOnly><HomeAssistantSettings card={card} cardTitle={cardTitle}/></AdminOnly>
       <FriendsCard/>
       </div>)}
 

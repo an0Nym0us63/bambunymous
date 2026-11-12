@@ -431,6 +431,76 @@ async def claude_labels_stop(_: str = Depends(require_admin)):
     return AI.stop_run()
 
 
+# ── Home Assistant (12/11/2026) : la prise de l'imprimante, l'electricite reelle de chaque impression, le tarif ──
+def _ha_err(e):
+    raise HTTPException(400, str(e))
+
+
+@router.get("/ha")
+async def ha_settings(_: str = Depends(require_admin)):
+    from ....services import home_assistant as HA
+    return await HA.settings_get()
+
+
+@router.put("/ha")
+async def ha_settings_set(body: dict, _: str = Depends(require_admin)):
+    from ....services import home_assistant as HA
+    try:
+        return await HA.settings_set(body or {})
+    except HA.HAError as e:
+        _ha_err(e)
+
+
+@router.post("/ha/test")
+async def ha_test(_: str = Depends(require_admin)):
+    from ....services import home_assistant as HA
+    try:
+        return await HA.test()
+    except HA.HAError as e:
+        _ha_err(e)
+
+
+@router.get("/ha/entities")
+async def ha_entities(kind: str = "", _: str = Depends(require_admin)):
+    """Les entites de Home Assistant qui conviennent : switch, power, energy, price, label (vide : toutes)."""
+    from ....services import home_assistant as HA
+    try:
+        return await HA.entities(kind)
+    except HA.HAError as e:
+        _ha_err(e)
+
+
+@router.get("/ha/live")
+async def ha_live(_: str = Depends(get_current_user)):
+    """La prise maintenant : allumee, puissance (W), compteur (kWh), prix et libelle en cours."""
+    from ....services import home_assistant as HA
+    return await HA.live()
+
+
+@router.get("/ha/stats")
+async def ha_stats(days: int = 0, date_from: Optional[str] = None, date_to: Optional[str] = None, _: str = Depends(get_current_user)):
+    """L'electricite mesuree : kWh, cout, puissance moyenne, part de chaque libelle (HC, Bleu HP…), par mois."""
+    from ....services import home_assistant as HA
+    return await HA.stats(max(0, min(int(days or 0), 3650)), date_from, date_to)
+
+
+@router.post("/ha/measure/{print_id}")
+async def ha_measure(print_id: int, _: str = Depends(require_admin)):
+    """Mesure (ou remesure) l'electricite d'une impression."""
+    from ....services import home_assistant as HA
+    try:
+        return await HA.measure(print_id, force=True)
+    except HA.HAError as e:
+        _ha_err(e)
+
+
+@router.post("/ha/backfill")
+async def ha_backfill(body: dict = None, _: str = Depends(require_admin)):
+    """Rattrape les impressions des N derniers jours pas encore mesurees (body.days, 30 d'office)."""
+    from ....services import home_assistant as HA
+    return HA.start_backfill(int((body or {}).get("days") or 30))
+
+
 # ── Commandes Bambu Lab lues dans les mails (28/10/2026) ──
 @router.get("/mail")
 async def mail_status(_: str = Depends(require_admin)):

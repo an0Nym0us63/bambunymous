@@ -45,6 +45,9 @@ class PrintOut(BaseModel):
     total_weight_g: float; total_cost_filament: float
     total_cost_filament_normal: float = 0.0
     electric_cost: float; total_cost: float
+    # mesure par Home Assistant (12/11/2026) : vide sans mesure
+    energy_kwh: Optional[float] = None; energy_avg_w: Optional[float] = None; energy_cost: Optional[float] = None
+    energy_source: Optional[str] = None; energy_labels: Optional[dict] = None
     number_of_items: int; sold_units: int
     sold_price_total: Optional[float]; margin: float
     plate_id: str; design_id: Optional[str]; printer_model: str

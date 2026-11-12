@@ -7,13 +7,14 @@ import { useUrlTab } from "../utils/useUrlTab";
 import { useNavigate } from "react-router-dom";
 
 import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter, Droplets,
-  Gauge, Activity, Timer, Target, PauseCircle } from "lucide-react";
+  Gauge, Activity, Timer, Target, PauseCircle, Zap } from "lucide-react";
 import client from "../api/client";
 import { egg } from "../eggs";
 import HeaderAction from "../components/HeaderAction";
 import { WrappedBanner } from "../components/YearWrapped";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
+import { elecColor } from "../utils/elecColor";
 // les fiches viennent des autres pages, chargees a l'ouverture seulement (28/10/2026 : importees en dur, la page
 // Stats embarquait Impressions, Objets, Filaments et Succes entieres avant son premier affichage)
 import { PrintDetail, GroupBottomSheet, ObjectSheet, AccessorySheet, FilamentSheetFromSpool } from "../components/LazySheets";
@@ -1309,6 +1310,29 @@ function PeriodFilterSheet({ value, onApply, onClose }) {
 // nombre, poids, cout ou temps. Une impression compte dans chacune de ses familles, categories et etiquettes. Une
 // ligne touchee ouvre la liste des impressions filtree dessus (meme periode).
 const LAB_METRICS = [["prints", "Impressions", n => `${n}`], ["weight_g", "Poids", fmtKg], ["cost", "Coût", fmtEur], ["seconds", "Temps", fmtH]];
+// (12/11/2026) l'electricite mesuree par Home Assistant sur la periode : kWh, cout, puissance moyenne, et la part de
+// chaque libelle du tarif (heures creuses, jours rouges…) ; rien tant qu'aucune impression n'est mesuree
+function ElecStats({ period }) {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    client.get("/settings/ha/stats", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
+      .then(r => setD(r.data)).catch(() => setD(null));
+  }, [period.from, period.to]);
+  if (!d || !d.prints) return null;
+  const max = Math.max(...d.labels.map(x => x.kwh), 0);
+  const kwh = v => `${v.toLocaleString("fr-FR", { maximumFractionDigits: v < 10 ? 2 : 1 })} kWh`;
+  return <Section title="Électricité" icon="⚡">
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: d.labels.length ? 10 : 0 }}>
+      <KpiCard icon={Zap} label="Consommé" value={kwh(d.kwh)} sub={`${d.prints} impression${d.prints > 1 ? "s" : ""} mesurée${d.prints > 1 ? "s" : ""}`} color="#EAB308"/>
+      <KpiCard icon={Euro} label="Coût réel" value={fmtEur(d.cost)} sub={d.per_kwh ? `${d.per_kwh.toLocaleString("fr-FR", { maximumFractionDigits: 4 })} €/kWh en moyenne` : null} color="#16A34A"/>
+      <KpiCard icon={Zap} label="Puissance moyenne" value={d.avg_w ? `${Math.round(d.avg_w)} W` : "—"} sub="pendant l'impression" color="#F97316"/>
+    </div>
+    {d.labels.length > 0 && <div style={statCard("#6366F1", { padding: "6px 12px 10px", display: "flex", flexDirection: "column" })}>
+      {d.labels.map(x => <Bar key={x.label} stacked label={x.label} value={x.kwh} max={max} color={elecColor(x.label)} sublabel={`${x.pct.toLocaleString("fr-FR")} % · ${kwh(x.kwh)}`}/>)}
+    </div>}
+  </Section>;
+}
+
 function LabelsStats({ period }) {
   const navigate = useNavigate();
   const [d, setD] = useState(null);
@@ -1677,6 +1701,7 @@ export default function Stats() {
             onItemClick={openDetail}/>
         </div>
       </Section>
+      <ElecStats period={period}/>
 
       </>))}
 

@@ -861,6 +861,12 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
             await _costs(db, p)
             # Note: déduction des bobines faite au démarrage dans _apply_meta/_enrich
             await db.commit()
+        # l'electricite reelle, lue chez Home Assistant deux minutes apres (12/11/2026), s'il est branche
+        try:
+            from . import home_assistant as _ha
+            _bg(_ha.measure_later(pid))
+        except Exception:
+            pass
         # suivi couche par couche (alpha) : une impression ratee rend aux bobines ce qui n'a pas ete imprime
         from . import live_usage
         if live_usage.enabled():
@@ -952,7 +958,7 @@ async def _costs(db, p: Print):
     """Recalcule et stocke tous les coûts du print :
     - cost (override) : grams × prix_bobine / poids_nominal
     - normal_cost     : grams × prix_filament / poids_nominal
-    - electric_cost   : durée_h × COST_BY_HOUR
+    - electric_cost   : mesure par Home Assistant au tarif de chaque tranche (energy_cost) ; sinon durée_h × COST_BY_HOUR
     """
     try:
         from ..services.settings_service import get_setting
@@ -1021,6 +1027,8 @@ async def _costs(db, p: Print):
             rate = 0.0
         dur_h = (p.duration_seconds or p.estimated_seconds or 0) / 3600
         elec  = round(dur_h * rate, 4)
+        if getattr(p, "energy_cost", None) is not None:     # mesuree (12/11/2026) : les vrais kWh, au bon prix
+            elec = round(p.energy_cost, 4)
 
         p.total_weight_g             = total_w
         p.total_cost_filament        = round(total_c, 4)

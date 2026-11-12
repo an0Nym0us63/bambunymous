@@ -78,6 +78,28 @@ class Print(Base):
     stats_excluded      = Column(Integer, default=0)
     # la vignette : celle de la vue 3D assemblee (Vue3D.png, prise dans la vue 3D) plutot que l'image du plateau
     thumb_3d            = Column(Integer, default=0)
+    # l'electricite mesuree par Home Assistant (12/11/2026, services/home_assistant.py) : kWh, puissance moyenne, cout
+    # au tarif de chaque tranche, d'ou vient la mesure, et les tranches de 15 min [[debut UTC, kWh, prix, libelle]]
+    energy_kwh          = Column(Float, nullable=True)
+    energy_avg_w        = Column(Float, nullable=True)
+    energy_cost         = Column(Float, nullable=True)
+    energy_source       = Column(String(32), nullable=True)
+    energy_slots        = Column(Text, nullable=True)
+    energy_tries        = Column(Integer, default=0)
+
+    @property
+    def energy_labels(self):
+        """{libelle: kWh} (HC, HP, Bleu HC…) des tranches mesurees."""
+        import json as _json
+        try:
+            rows = _json.loads(self.energy_slots) if self.energy_slots else []
+        except ValueError:
+            return None
+        out = {}
+        for r in rows:
+            if len(r) >= 4 and r[3]:
+                out[r[3]] = round(out.get(r[3], 0.0) + (r[1] or 0), 4)
+        return out or None
 
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

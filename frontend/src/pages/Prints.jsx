@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { elecColor } from "../utils/elecColor";
 import { usePromotedTabs, tabLabel } from "../utils/navMenu";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
@@ -1720,6 +1721,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
               <span style={{ flex: 1, fontWeight: 800, color: "var(--muted)", fontSize: 12 }}>{l}</span>
               <span style={{ fontWeight: 900, fontSize: l === "Total" ? 15 : 13.5, ...v2grad(c1, c2) }}>{v}</span>
               {s ? <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 60 }}>({s})</span> : <span style={{ minWidth: 60 }}/>}</div>))}
+          {/* (12/11/2026) l'electricite reelle, mesuree par Home Assistant : kWh, puissance moyenne, part de chaque tarif */}
+          <EnergyLine p={p} isAdmin={isAdmin} onMeasured={reload}/>
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
             <span style={{ fontWeight: 800, color: "#16a34a" }}>{localNb} élément{localNb > 1 ? "s" : ""}</span>
             {localNb > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalBobine / localNb)}/u ({eur2(totalNormal / localNb)}/u)</span>}
@@ -3218,6 +3221,42 @@ const flattenItems = (items, sortF) => items.flatMap(it => it.type === "print" ?
 // (09/11/2026) la premiere page de la liste, gardee le temps de la session : revenir sur Impressions la remontre tout
 // de suite, puis la relit discretement (rien de perdu : la liste a jour la remplace des qu'elle arrive)
 const LIST_CACHE = { key: null, data: null };
+
+// (12/11/2026) l'electricite d'une impression, mesuree chez Home Assistant (Parametres › Connexions) : les kWh, la
+// puissance moyenne, la part de chaque libelle du tarif ; « ≈ » quand elle vient des statistiques horaires
+function EnergyLine({ p, isAdmin, onMeasured }) {
+  const [busy, setBusy] = useState(false);
+  const measure = async () => {
+    setBusy(true);
+    try { await client.post(`/settings/ha/measure/${p.id}`); onMeasured?.(); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+  const running = ["IN_PROGRESS", "PAUSED", "RUNNING"].includes(p.status);
+  if (p.energy_kwh == null) return isAdmin && !running ? <div style={{ display: "flex", justifyContent: "flex-end" }}>
+    <button type="button" onClick={measure} disabled={busy} data-tip="Lit chez Home Assistant les kWh de la prise entre le début et la fin"
+      style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7, border: "1px solid color-mix(in srgb, #EAB308 40%, var(--border))", background: "none",
+        color: "#CA8A04", cursor: busy ? "wait" : "pointer", fontWeight: 700 }}>{busy ? "Mesure…" : "⚡ Mesurer avec Home Assistant"}</button></div> : null;
+  const approx = /horaire/.test(p.energy_source || "");
+  const labs = Object.entries(p.energy_labels || {}).sort((a, b) => b[1] - a[1]);
+  const tot = labs.reduce((a, x) => a + x[1], 0);
+  const kwh = v => `${v.toLocaleString("fr-FR", { maximumFractionDigits: v < 1 ? 3 : 2 })} kWh`;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, color: "var(--text2)", paddingLeft: 34 }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <b data-tip={`Mesuré par Home Assistant (${p.energy_source || "historique"})`} style={{ color: "#CA8A04" }}>{approx ? "≈ " : ""}{kwh(p.energy_kwh)}</b>
+      {p.energy_avg_w != null && <span>· {Math.round(p.energy_avg_w)} W en moyenne</span>}
+      {p.energy_cost != null && p.energy_kwh > 0 && <span>· {(p.energy_cost / p.energy_kwh).toLocaleString("fr-FR", { maximumFractionDigits: 4 })} €/kWh</span>}
+      {isAdmin && <button type="button" onClick={measure} disabled={busy} data-tip="Relire la mesure chez Home Assistant"
+        style={{ marginLeft: "auto", fontSize: 11, padding: "2px 8px", borderRadius: 7, border: "1px solid var(--border)", background: "none",
+          color: "var(--muted)", cursor: busy ? "wait" : "pointer", fontWeight: 700 }}>{busy ? "…" : "↻"}</button>}
+    </div>
+    {labs.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+      {labs.map(([l, v]) => <span key={l} data-tip={kwh(v)} style={{ padding: "1px 8px", borderRadius: 999, fontSize: 11, fontWeight: 800,
+        background: `color-mix(in srgb, ${elecColor(l)} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${elecColor(l)} 35%, transparent)`,
+        color: "var(--text)" }}>{l} · {tot ? Math.round(v / tot * 100) : 0} %</span>)}
+    </div>}
+  </div>;
+}
 
 export default function Prints() {
   const [searchParams, setSearchParams] = useSearchParams();

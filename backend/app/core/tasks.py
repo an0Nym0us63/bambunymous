@@ -37,6 +37,7 @@ CATALOG = {
     "catalog":      ("Catalogue des filaments Bambu", "Télécharge le catalogue des filaments Bambu (codes, couleurs) : au démarrage, puis toutes les 24 h s'il a changé.", "Serveur"),
     "ai_tags":      ("Catégories par Claude", "Chaque nuit à 4 h : reprend le classement des modèles groupés, reliés ou dégroupés depuis, puis fait classer par Claude ce qui manque encore (impression ratée mais gardée, importée…), si le classement automatique est coché.", "Impressions"),
     "storage_remind": ("Bobines à ranger", "Toutes les 2 min : rappelle les bobines sorties de l'AMS, reçues ou ajoutées qui attendent que tu dises où tu les as rangées (rangement manuel, ou bobine sans place), selon la notification « Bobine à ranger ».", "Notifications"),
+    "home_assistant": ("Électricité (Home Assistant)", "Toutes les 30 min : mesure chez Home Assistant les impressions finies des 7 derniers jours qui ne l'ont pas encore été (la mesure se fait d'abord deux minutes après la fin).", "Impressions"),
     "nas":          ("Sauvegarde de nuit", "Sauvegarde vers le NAS (et vidage du local) chaque nuit, si elle est activée ; vérifie toutes les 5 min.", "Serveur"),
 }
 _ST: dict = {}

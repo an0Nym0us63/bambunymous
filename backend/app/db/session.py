@@ -304,6 +304,13 @@ async def _migrate():
         ("groups",         "number_of_items",          "INTEGER DEFAULT 1"),
         ("groups",         "cover_print_id",             "INTEGER"),
         ("prints",         "total_cost_filament_normal","REAL DEFAULT 0.0"),
+        # l'electricite mesuree par Home Assistant (12/11/2026)
+        ("prints",         "energy_kwh",       "REAL"),
+        ("prints",         "energy_avg_w",     "REAL"),
+        ("prints",         "energy_cost",      "REAL"),
+        ("prints",         "energy_source",    "TEXT"),
+        ("prints",         "energy_slots",     "TEXT"),
+        ("prints",         "energy_tries",     "INTEGER DEFAULT 0"),
     ]
     async with engine.connect() as conn:
         for table, col, col_type in migrations:

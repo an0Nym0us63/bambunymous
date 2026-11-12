@@ -159,7 +159,7 @@ _DENY_ALWAYS = [re.compile(p) for p in (
 )]
 # (10/11/2026) seulement les comptes et les connexions : tout le reste s'ecrit
 _DENY_WRITE = [re.compile(p) for p in (
-    r"^/api/v1/users(/|$)", r"^/api/v1/friends(/|$)", r"^/api/v1/settings/(mail|claude)$",
+    r"^/api/v1/users(/|$)", r"^/api/v1/friends(/|$)", r"^/api/v1/settings/(mail|claude|ha)$",
     r"^/api/v1/share/telegram/(login|logout)", r"^/api/v1/notify/devices",
 )]
 # PATCH /settings : la connexion a l'imprimante et l'administrateur restent a l'appli ; le reste (tarif, nom) passe

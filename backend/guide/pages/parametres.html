@@ -39,7 +39,7 @@
   </dl>
   <h4>Carte « Électricité »</h4>
   <dl class="opts">
-    <dt>Tarif (€/h)</dt><dd>Ce que coûte une heure d'impression en électricité (par défaut 0). La virgule (« 0,20 »), le symbole € et les espaces sont acceptés. Il entre dans le coût de chaque impression.</dd>
+    <dt>Tarif (€/h)</dt><dd>Ce que coûte une heure d'impression en électricité (par défaut 0). La virgule (« 0,20 »), le symbole € et les espaces sont acceptés. Il entre dans le coût de chaque impression tant qu'elle n'est pas <b>mesurée</b> : avec une prise branchée dans <a href="#parametres-links-ha">Home Assistant</a> et un abonnement choisi, ce sont ses vrais kWh, à leur prix.</dd>
   </dl>
   <p>Touche <span class="ui">Sauvegarder</span> : le bouton affiche <span class="ui">Sauvegardé ✓</span> quelques secondes.</p>
   <ul>
@@ -324,6 +324,24 @@
       <li><b>Jamais</b>, même en écriture : les comptes et les copains, les connexions et leurs identifiants (la connexion à l'imprimante, MakerWorld, les mails, la clé Claude, Telegram, les téléphones), l'import ou la remise à zéro de la base, le réglage du MCP lui-même, les flux vidéo. Des réglages généraux, seuls le tarif électrique, le nom et le modèle de l'imprimante s'écrivent. Dans les réponses, tout ce qui ressemble à un secret est masqué. Le jeton n'apparaît dans aucun journal ; ce que l'assistant change apparaît dans l'activité des comptes, marqué « MCP ».</li>
       <li>En bas : les appels d'outils du mois (et ceux refusés), le dernier contact, l'outil et le client ; <span class="ui">▸ Les outils</span> les liste (en orange, ceux qui écrivent).</li>
     </ul>
+  </section>
+  <section id="parametres-links-ha">
+    <h3>🏠 Home Assistant</h3>
+    <p><span class="admin">admin</span> La carte <b>🏠 Home Assistant</b> relie la prise de l'imprimante : son état et sa puissance en direct, et l'<b>électricité réelle de chaque impression</b>, au prix de ton abonnement heure par heure.</p>
+    <ol>
+      <li><b>L'adresse</b> de Home Assistant (« http://homeassistant.local:8123 ») et un <b>jeton longue durée</b> (dans Home Assistant : ton profil › Sécurité › Jetons d'accès longue durée), puis <span class="ui">Enregistrer</span> : l'appli teste aussitôt (✓ et la version). Le jeton reste sur ton serveur, jamais réaffiché ; <span class="ui">Oublier le jeton</span> coupe le lien.</li>
+      <li><b>🔌 La prise</b> : <span class="ui">Ce qu'elle mesure</span>, <span class="ui">Puissance et énergie</span> (un compteur en kWh : le plus juste) ou <span class="ui">Puissance seule</span> (les kWh sont calculés à partir des watts) ; puis les entités, choisies dans la liste lue chez Home Assistant : le <b>statut</b> (l'interrupteur, facultatif), la <b>puissance</b> (W), l'<b>énergie</b> (kWh). En dessous, la prise en direct : allumée ou éteinte, les watts, le compteur, le tarif en cours.</li>
+      <li><b>💶 L'abonnement</b>, puis <span class="ui">Enregistrer l'abonnement</span> :
+        <dl class="opts">
+          <dt>À l'heure, sans mesure</dt><dd>L'ancien calcul : la durée × le tarif à l'heure de l'onglet Imprimante. Les kWh se mesurent quand même.</dd>
+          <dt>Base</dt><dd>Un seul prix au kWh.</dd>
+          <dt>Heures creuses / heures pleines</dt><dd>Les deux prix et les plages d'heures creuses (« 22:00-06:00 », plusieurs séparées par des virgules : « 01:30-07:30, 12:30-14:30 »).</dd>
+          <dt>Tempo</dt><dd>Les six prix (bleu, blanc, rouge, en heures creuses et pleines) et les plages d'heures creuses ; la couleur du jour (un jour Tempo va de 6 h à 6 h le lendemain) est lue sur api-couleur-tempo.fr, ou chez Home Assistant dans l'entité de ton intégration Tempo.</dd>
+          <dt>Via Home Assistant</dt><dd>Une entité donne le <b>tarif en cours</b> (€/kWh ; un prix en centimes est converti), une autre le <b>libellé en cours</b> (HC, HP, Bleu HP… : facultatif mais recommandé, il donne aux stats la part imprimée en heures creuses ou en jour rouge).</dd>
+        </dl>
+        Chaque impression est comptée par <b>tranches de 15 minutes</b>, chacune à son prix et son libellé : une impression de 22 h à 8 h l'est en partie en heures pleines, en partie en heures creuses. Changer de tarif reprend le prix de toutes les impressions déjà mesurées (leurs kWh ne bougent pas).</li>
+      <li><b>La mesure</b> : deux minutes après la fin d'une impression, l'appli lit chez Home Assistant l'historique de la prise entre son début et sa fin (une tâche de fond rattrape toutes les 30 min celles des 7 derniers jours qui l'auraient manquée). <b>Au premier branchement</b>, elle remonte d'elle-même toutes les impressions passées que Home Assistant peut encore mesurer : le détail sur une dizaine de jours, puis ses statistiques à l'heure (gardées sans limite pour un compteur ; une impression plus courte qu'une heure en prend sa part, marquée « ≈ »). Une impression d'avant la prise passe, sans erreur. <b>⏪ Les impressions passées</b> relance ce rattrapage sur le nombre de jours voulu.</li>
+    </ol>
   </section>
   <section id="parametres-links-copains">
     <h3>👀 Copains</h3>
