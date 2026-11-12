@@ -263,13 +263,16 @@ async def for_print(pid: int) -> dict:
         # profil inconnu, ou retire du modele : celui du modele le plus proche
         iid, key = await resolve(did, "", guess=True), f"{did}:"
     if not iid:
+        await attribute_weight(pid)
         return {"skip": "modèle introuvable sur MakerWorld"}
     try:
         await fetch(iid)
     except ExactError as e:
+        await attribute_weight(pid)
         return {"skip": str(e)}
     except Exception as e:
         logger.exception("[MW-3MF] recuperation")
+        await attribute_weight(pid)
         return {"skip": f"{type(e).__name__}"}
     _index_put(key, iid)
     await attribute_plate(pid, iid)
@@ -290,22 +293,102 @@ async def attribute_plate(pid: int, iid: str) -> None:
         if not r or not r[0] or r[1]:
             return
         from .archive import local_or_archive
-        from ..api.v1.routes.makerworld import _plate_objects, _sliced_objects, _plate_from_objects
+        from ..api.v1.routes.makerworld import _plate_objects, _sliced_objects, _plates_from_objects
         f, src = local_or_archive(r[0]), path_of(iid)
         if not f or not f.is_file() or not src.is_file():
+            await attribute_weight(pid)
             return
         with zipfile.ZipFile(src) as zo, zipfile.ZipFile(f) as zs:
-            n = _plate_from_objects(_plate_objects(zo), _sliced_objects(zs))
-        if not n:
+            ns = _plates_from_objects(_plate_objects(zo), _sliced_objects(zs))
+        if not ns:
+            await attribute_weight(pid)                # objets introuvables : le poids, s'il est sans appel
             return
         prof = str(r[2] or "").strip()
         async with AsyncSessionLocal() as db:
             await db.execute(update(Print).where(Print.id == pid, Print.mw_plates.is_(None))
-                             .values(mw_plates=json.dumps({"profile": prof if prof and prof != "0" else None, "plates": [int(n)], "auto": "objets"})))
+                             .values(mw_plates=json.dumps({"profile": prof if prof and prof != "0" else None,
+                                                          "plates": [int(n) for n in ns], "auto": "objets"})))
             await db.commit()
-        logger.info(f"[MW-3MF] impression {pid} : plateau {n} reconnu aux objets de son fichier imprime")
+        _queue_stale()
+        logger.info(f"[MW-3MF] impression {pid} : plateau(x) {', '.join(map(str, ns))} reconnu(s) aux objets de son fichier imprime")
     except Exception:
         logger.exception("[MW-3MF] plateau aux objets")
+
+
+def _queue_stale() -> None:
+    try:
+        from . import mw_queue as _Q
+        _Q._INVALID[0] = True                          # « A faire » et le planning recomptent les plateaux faits
+    except Exception:
+        pass
+
+
+def plates_by_weight(plates: list, total: float, plate_id=None, n_fils: int = 0) -> list | None:
+    """Un regroupement devine au poids (12/11/2026), quand les objets ne disent rien (pas de 3MF d'origine) : seulement
+    si le plateau lu dans le fichier ne colle pas au poids imprime (sinon, rien n'est regroupe), et qu'un seul ensemble
+    de 2 a 5 plateaux du profil fait ce poids a 6 % pres, le suivant au moins deux fois plus loin. Un regroupement ne peut
+    pas user plus de filaments que ses plateaux n'en ont. None sinon."""
+    from itertools import combinations
+    if not total or total <= 0:
+        return None
+    pl = [(int(p["index"]), float(p["weight_g"]), len(p.get("filaments") or []) or 1) for p in plates or []
+          if isinstance(p.get("index"), int) and isinstance(p.get("weight_g"), (int, float)) and p["weight_g"] > 0]
+    try:
+        own = next((w for i, w, _f in pl if i == int(plate_id or 0)), None)
+    except (TypeError, ValueError):
+        own = None
+    if own and abs(own - total) / total <= 0.12:
+        return None
+    pl = [x for x in pl if x[1] <= total * 1.06]
+    if not 2 <= len(pl) <= 22:
+        return None
+    found = []
+    for k in range(2, min(5, len(pl)) + 1):
+        for combo in combinations(pl, k):
+            err = abs(sum(w for _i, w, _f in combo) - total) / total
+            if err <= 0.12 and (not n_fils or n_fils <= sum(f for _i, _w, f in combo)):
+                found.append((err, sorted(i for i, _w, _f in combo)))
+    found.sort()
+    if not found or found[0][0] > 0.06:
+        return None
+    if len(found) > 1 and found[1][0] < max(0.03, 2 * found[0][0]):
+        return None
+    return found[0][1]
+
+
+async def attribute_weight(pid: int) -> list | None:
+    """Pose le regroupement devine au poids (marque « auto » : « poids ») si rien n'est choisi a la main."""
+    from sqlalchemy import select, update, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print, FilamentUsage
+    try:
+        async with AsyncSessionLocal() as db:
+            r = (await db.execute(select(Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.plate_id, Print.total_weight_g)
+                                  .where(Print.id == pid))).first()
+            if not r or r[2] or not str(r[0] or "").isdigit():
+                return None
+            n_fils = (await db.execute(select(func.count(func.distinct(FilamentUsage.color_hex)))
+                                       .where(FilamentUsage.print_id == pid, FilamentUsage.grams_used > 0))).scalar() or 0
+        from .makerworld import _base
+        base = await _base(str(r[0]), True)
+        prof = str(r[1] or "").strip()
+        profs = [p for p in ((base.get("profiles") if isinstance(base, dict) else None) or []) if isinstance(p, dict)]
+        p = next((x for x in profs if prof and prof in (str(x.get("profile_id")), str(x.get("instance_id")))), None)
+        if not p:
+            return None                                # profil inconnu : trop d'ensembles possibles, on ne devine pas
+        ns = plates_by_weight(p.get("plates") or [], float(r[4] or 0), r[3], n_fils)
+        if not ns:
+            return None
+        async with AsyncSessionLocal() as db:
+            await db.execute(update(Print).where(Print.id == pid, Print.mw_plates.is_(None))
+                             .values(mw_plates=json.dumps({"profile": str(p.get("profile_id")), "plates": ns, "auto": "poids"})))
+            await db.commit()
+        _queue_stale()
+        logger.info(f"[MW-3MF] impression {pid} : regroupement {', '.join(map(str, ns))} deviné au poids")
+        return ns
+    except Exception:
+        logger.exception("[MW-3MF] regroupement au poids")
+        return None
 
 
 def _profile(prof, manual, did=None, task=None) -> str:

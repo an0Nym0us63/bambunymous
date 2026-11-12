@@ -2394,6 +2394,40 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
     return out
 
 
+@router.post("/mw-plates/guess")
+async def guess_mw_plates(body: dict, _: str = Depends(require_admin)):
+    """Redevine les plateaux MakerWorld de ces impressions (12/11/2026, regroupements compris) : aux objets de leur
+    fichier imprime face au 3MF d'origine, sinon au poids. Un choix fait a la main n'est jamais touche ; un plateau
+    deja devine (« auto ») est refait. {ids: [...]} -> {id: mw_plates}."""
+    import json as _json
+    from sqlalchemy import update as _upd
+    from ....services.mw_source import for_print
+    ids = [int(x) for x in (body.get("ids") or []) if str(x).isdigit()][:80]
+    out = {}
+    for pid in ids:
+        async with AsyncSessionLocal() as db:
+            p = await db.get(Print, pid)
+            if not p:
+                continue
+            try:
+                m = _json.loads(p.mw_plates) if p.mw_plates else None
+            except ValueError:
+                m = None
+            if isinstance(m, dict) and not m.get("auto"):
+                out[str(pid)] = p.mw_plates            # choisi a la main : on n'y touche pas
+                continue
+            await db.execute(_upd(Print).where(Print.id == pid).values(mw_plates=None))
+            await db.commit()
+        try:
+            await for_print(pid)
+        except Exception:
+            pass
+        async with AsyncSessionLocal() as db:
+            p = await db.get(Print, pid)
+            out[str(pid)] = p.mw_plates if p else None
+    return out
+
+
 @router.put("/{print_id}/mw-plates")
 async def set_mw_plates(print_id: int, body: dict, _: str = Depends(get_current_user)):
     """Plateaux MakerWorld imprimes par ce print (choisis a la main). Une liste

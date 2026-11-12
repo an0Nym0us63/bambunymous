@@ -1460,6 +1460,49 @@ def _plate_from_objects(plate_objs: dict, names: list) -> int | None:
     return exact[0] if len(exact) == 1 else None
 
 
+def _norm_obj(n: str) -> str:
+    """Un nom d'objet sans ce que Bambu Studio ajoute en copiant ou en regroupant : casse, extension, « _1 », « (2) »."""
+    import re as _re
+    s = str(n or "").strip().lower()
+    s = _re.sub(r"\.(stl|3mf|obj|step|stp)$", "", s)
+    s = _re.sub(r"(\s*\(\d+\)|[_\s-]+(copy|copie)?\d*)$", "", s)
+    return s or str(n or "").lower()
+
+
+def _plates_from_objects(plate_objs: dict, names: list) -> list | None:
+    """Les plateaux d'origine d'un fichier imprime (12/11/2026) : un seul quand il les contient tous (comme
+    _plate_from_objects) ; sinon un REGROUPEMENT, plusieurs plateaux reunis dans un projet (Vice Versa : les plateaux 7,
+    3 et 1 imprimes ensemble) -- le plus petit ensemble de plateaux dont les objets couvrent ceux du fichier, avec le
+    moins d'objets en trop, s'il est seul a ce compte. Les noms bruts d'abord, puis sans les ajouts de copie. None sinon."""
+    from collections import Counter
+    from itertools import combinations
+    if not names or not plate_objs:
+        return None
+    for norm in (lambda s: s, _norm_obj):
+        objs = {n: Counter(norm(o) for o in v) for n, v in plate_objs.items()}
+        one = _plate_from_objects({n: [norm(o) for o in v] for n, v in plate_objs.items()}, [norm(x) for x in names])
+        if one:
+            return [one]
+        want = Counter(norm(x) for x in names)
+        cand = sorted(n for n, c in objs.items() if c & want)
+        if not 2 <= len(cand) <= 20:
+            continue
+        for k in range(2, min(6, len(cand)) + 1):
+            found = []
+            for combo in combinations(cand, k):
+                u = Counter()
+                for n in combo:
+                    u += objs[n]
+                if not (want - u):
+                    found.append((sum((u - want).values()), combo))
+            if found:
+                found.sort()
+                if len(found) == 1 or found[0][0] < found[1][0]:
+                    return sorted(found[0][1])
+                break                                  # deux ensembles aussi bons : on ne devine pas
+    return None
+
+
 def _ext_map(origin: dict, sliced: dict) -> dict:
     """Filament du projet d'origine -> filament du projet imprime, d'apres les pieces de meme nom (27/10/2026 : par
     numero seulement, un projet retouche dans Bambu Studio -- filaments reordonnes, fusionnes -- melangeait les

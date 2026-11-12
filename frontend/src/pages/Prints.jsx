@@ -1117,6 +1117,22 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
             try { await client.patch(`/prints/${pr.id}`, { design_id: designId }); await save(pr, [pl.index]); onLinked?.(); }
             catch (e) { showAlert(e.response?.data?.detail || e.message); }
           } })),
+        // (12/11/2026) redeviner les plateaux de toutes les impressions du modele, regroupements compris (objets du
+        // fichier imprime face au 3MF d'origine, sinon le poids) ; un choix fait a la main ne bouge pas
+        "-",
+        { icon: "🔮", label: "Deviner les plateaux des impressions", hint: "Regroupements compris (plusieurs plateaux réunis dans un projet) ; tes choix faits à la main ne bougent pas",
+          onClick: async () => {
+            try {
+              const { data } = await client.post("/prints/mw-plates/guess", { ids: prints.map(pr => pr.id) });
+              const changed = prints.filter(pr => (data[pr.id] ?? null) !== (pr.mw_plates ?? null));
+              Object.entries(data).forEach(([k, v]) => { PLATES_OVER[k] = v; });
+              setOver(o => ({ ...o, ...data }));
+              const grouped = Object.values(data).filter(v => (manualPlates(v)?.plates || []).length > 1).length;
+              toast(changed.length ? `${changed.length} impression${changed.length > 1 ? "s" : ""} mise${changed.length > 1 ? "s" : ""} à jour`
+                + (grouped ? ` · ${grouped} regroupement${grouped > 1 ? "s" : ""}` : "") : "Rien de nouveau à deviner");
+              egg("plateaux_devines");
+            } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+          } },
         hand.length > 0 && "-",
         hand.length > 0 && { icon: "↺", label: "Revenir à la détection pour ce plateau",
           hint: `Oublie le choix fait à la main sur ${hand.length > 1 ? `les ${hand.length} impressions` : "l'impression"} de ce plateau (les autres plateaux ne bougent pas)`,
