@@ -89,7 +89,8 @@ export default function Achievements({ embedded = false }) {
   const focus = sp.get("a") || "";
   // (12/11/2026) les objets caches qu'on peut trouver maintenant : en tete de page, et en surbrillance dans les secrets
   const nowHidden = useActiveCachettes(!currentFriend());
-  const nowSet = useMemo(() => new Set(nowHidden.map(c => c.egg)), [nowHidden]);
+  // les succes des secrets s'appellent « egg_<nom> » (egg_c_pumpkin) : le nom nu ne correspondait a aucune vignette
+  const nowSet = useMemo(() => new Set(nowHidden.flatMap(c => [c.egg, `egg_${c.egg}`])), [nowHidden]);
   const hiddenRef = useRef(null);
   useEffect(() => {
     if (sp.get("cachettes") && nowHidden.length) setTimeout(() => hiddenRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
@@ -521,6 +522,9 @@ export default function Achievements({ embedded = false }) {
                             {(n => n > 0 && <span data-tip={`${n} trouvé${n > 1 ? "s" : ""} avant ${data.family?.house || "la maison"}`}
                               style={{ marginLeft:5, fontSize:10.5, fontWeight:900, padding:"1px 7px", borderRadius:20, color:"#fff", verticalAlign:"middle",
                               whiteSpace:"nowrap", display:"inline-block", background:"linear-gradient(135deg, #EC4899, #F59E0B)" }}>✨ {n}</span>)(sb.items.filter(x => x.scoop).length)}
+                            {(n => n > 0 && <span data-tip={`${n} à trouver en ce moment, en surbrillance dans ce tiroir`}
+                              style={{ marginLeft:5, fontSize:10.5, fontWeight:900, padding:"1px 7px", borderRadius:20, color:"#fff", verticalAlign:"middle",
+                              whiteSpace:"nowrap", display:"inline-block", background:"linear-gradient(135deg, #F59E0B, #EC4899)" }}>✨ {n} maintenant</span>)(sb.items.filter(x => x.level < 0 && nowSet.has(x.id)).length)}
                             {spentIn(sb.items).keys > 0 && <span title="Clés dépensées dans ce tiroir"
                               style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🔑 {spentIn(sb.items).keys}</span>}
                             {c.id === "secret" && <span style={{ display:"flex", marginTop:3 }}><Hand of={`s_${sb.id}`} size={18}/></span>}</span>
