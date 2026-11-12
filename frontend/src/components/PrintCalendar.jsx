@@ -6,6 +6,7 @@ import { egg } from "../eggs";
 import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 import UnsetBanner from "./UnsetBanner";
+import DoneCleanup from "./DoneCleanup";
 import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
 import { usePlanActs, sheetRef } from "./planActs";
@@ -501,8 +502,6 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
     <PoolSummary jobs={pd.jobs} blocked={pd.blocked} now={pd.now} onOpenModel={setModelSel} bulk={edit ? bulk : null}/>
   </div> : null;
   return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-    {/* (11/11/2026) ce que le planning place avec le profil par defaut : a regler dans « A faire » */}
-    {edit && <UnsetBanner/>}
     {/* le mois et ses chiffres ; la date et ‹ › restent en haut au defilement (05/11/2026 au telephone, 06/11/2026 partout) */}
     {/* sur ordinateur, la page a 16 px de marge en haut : la barre colle au bord (top negatif), sinon le contenu passe au-dessus */}
     <div style={{ display: "flex", alignItems: "center", gap: 8, position: "sticky", zIndex: 20,
@@ -520,6 +519,10 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
           color: view === k ? "#fff" : "var(--muted)", background: view === k ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "transparent",
           boxShadow: view === k ? "0 6px 14px -8px #6366F1" : "none" }}>{l}</button>)}
     </div>
+    {/* (12/11/2026) sous la date et Mois/Semaine/Jour : les bandeaux d'« A faire » (deja faits encore dans la collection,
+        modeles places avec le profil par defaut) */}
+    {edit && <DoneCleanup/>}
+    {edit && <UnsetBanner/>}
     {/* au telephone (06/11/2026) : la meme barre, en icones et nombres, sur une ligne qui defile au doigt */}
     {wide && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "inline-flex", gap: 6 }}>
