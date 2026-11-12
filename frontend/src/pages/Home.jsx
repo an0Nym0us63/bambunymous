@@ -203,6 +203,8 @@ function StatusBanner({ status, friend = null, switcher = null }) {
             flex:1, textAlign:"left", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"clip" }}>
             {printInfo?.file_name || status.print_name || cfg.label}
           </p>
+          {/* (12/11/2026) la prise de l'imprimante (Home Assistant), discrete ; pas chez un copain */}
+          {!friend && <PlugChip size={11}/>}
           {hasUnmatched && (
             <span title="Au moins un filament détecté par l'imprimante est introuvable en base">
               <AlertTriangle size={13} style={{ color:"#ef4444", flexShrink:0 }} />
@@ -1921,6 +1923,40 @@ function useMountedPlate(key) {
   }, [key]);
   return v;
 }
+// la prise de l'imprimante (12/11/2026, Home Assistant) : allumee ou eteinte, et sa puissance ; relue toutes les 30 s
+// (toutes les 10 min tant que Home Assistant n'est pas branche), une seule lecture partagee par toutes les tuiles
+const PLUG = { v: null, at: 0, subs: new Set(), timer: null, busy: false };
+function plugLoad() {
+  if (PLUG.busy) return;
+  PLUG.busy = true;
+  client.get("/settings/ha/live", { params: { lite: true } }).then(r => { PLUG.v = r.data; }).catch(() => { PLUG.v = null; })
+    .finally(() => {
+      PLUG.busy = false; PLUG.at = Date.now();
+      PLUG.subs.forEach(f => f(PLUG.v));
+      clearTimeout(PLUG.timer);
+      if (PLUG.subs.size) PLUG.timer = setTimeout(plugLoad, PLUG.v?.configured ? 30000 : 600000);
+    });
+}
+function usePlug() {
+  const [v, setV] = useState(PLUG.v);
+  useEffect(() => {
+    PLUG.subs.add(setV);
+    if (Date.now() - PLUG.at > 25000) plugLoad(); else setV(PLUG.v);
+    return () => { PLUG.subs.delete(setV); if (!PLUG.subs.size) clearTimeout(PLUG.timer); };
+  }, []);
+  return v?.configured && !v.error ? v : null;
+}
+function PlugChip({ size = 11.5, compact = false }) {
+  const p = usePlug();
+  if (!p || (p.on == null && p.power_w == null)) return null;
+  const off = p.on === false;
+  const w = p.power_w != null ? `${Math.round(p.power_w)} W` : null;
+  return <span data-pk="" data-tip={`Prise de l'imprimante : ${off ? "éteinte" : "allumée"}${w ? ` · ${w}` : ""} (Home Assistant)`}
+    style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: size, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0,
+      color: off ? "var(--muted)" : "var(--text2)", fontVariantNumeric: "tabular-nums" }}>
+    <span style={{ width: 6, height: 6, borderRadius: "50%", background: off ? "var(--muted)" : "#22C55E", opacity: off ? 0.6 : 1 }}/>
+    {off ? (compact ? "off" : "éteinte") : w || "allumée"}</span>;
+}
 const IcoPlate = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
   strokeLinejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h.01M11 14h.01M15 14h.01"/></svg>;
 
@@ -1990,6 +2026,8 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
               textOverflow: "ellipsis", lineHeight: 1.2 }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
+            {/* (12/11/2026) la prise (Home Assistant) : discrete, sur la ligne du nom qui se raccourcit pour elle */}
+            {W >= 300 && <PlugChip size={W < 380 ? 10.5 : 11.5} compact={W < 380}/>}
             {/* l'etape, toujours : « Impression » quand elle imprime, sinon chauffe, calibration, raison d'une pause… */}
             <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
               borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f`, flexShrink: 0 }}>

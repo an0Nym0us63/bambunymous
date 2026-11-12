@@ -494,10 +494,10 @@ async def ha_colors(_: str = Depends(get_current_user)):
 
 
 @router.get("/ha/live")
-async def ha_live(_: str = Depends(get_current_user)):
+async def ha_live(lite: bool = False, _: str = Depends(get_current_user)):
     """La prise maintenant : allumee, puissance (W), compteur (kWh), prix et libelle en cours."""
     from ....services import home_assistant as HA
-    return await HA.live()
+    return await HA.live(lite)
 
 
 @router.get("/ha/stats")

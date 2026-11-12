@@ -3276,11 +3276,11 @@ function EnergyLine({ p, isAdmin, onMeasured }) {
     {labs.length > 0 && tot > 0 && <>
       <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--surface)", gap: 1 }}>
         {labs.map(([l, v]) => <span key={l} data-tip={`${l} · ${kwh(v)} · ${Math.round(v / tot * 100)} %`}
-          style={{ width: `${v / tot * 100}%`, minWidth: 3, background: elecColor(l) }}/>)}
+          style={{ width: `${v / tot * 100}%`, minWidth: 3, background: elecColor(l), boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent)" }}/>)}
       </div>
       <div style={{ display: "flex", gap: "3px 10px", flexWrap: "wrap", fontSize: 11, fontWeight: 700 }}>
         {labs.map(([l, v]) => <span key={l} data-tip={kwh(v)} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: elecColor(l) }}/>{l} · {Math.round(v / tot * 100)} %</span>)}
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: elecColor(l), boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>{l} · {Math.round(v / tot * 100)} %</span>)}
       </div>
     </>}
   </div>;

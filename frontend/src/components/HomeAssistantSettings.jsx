@@ -167,8 +167,8 @@ export default function HomeAssistantSettings({ card, cardTitle }) {
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {s.labels.map(l => { const cur = (s.colors || {})[l] || elecDefault(l), mine = !!(s.colors || {})[l];
               return <div key={l} style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                <span style={{ display:"inline-flex", alignItems:"center", gap:6, minWidth:96, fontSize:12.5, fontWeight:800, color:"var(--text)" }}>
-                  <span style={{ width:14, height:14, borderRadius:4, background:cur, flexShrink:0 }}/>{l}</span>
+                <span style={{ display:"inline-flex", alignItems:"center", gap:6, minWidth:130, fontSize:12.5, fontWeight:800, color:"var(--text)" }}>
+                  <span style={{ width:14, height:14, borderRadius:4, background:cur, flexShrink:0, boxShadow:"inset 0 0 0 1px color-mix(in srgb, var(--text) 20%, transparent)" }}/>{l}</span>
                 <div role="radiogroup" aria-label={`Couleur de ${l}`} style={{ display:"grid", gridTemplateColumns:"repeat(8, 22px)", gap:4 }}>
                   {ELEC_PALETTE.map(c => { const on = mine && cur.toLowerCase() === c.toLowerCase();
                     return <button key={c} type="button" role="radio" aria-checked={on} aria-label={c} data-tip={c}

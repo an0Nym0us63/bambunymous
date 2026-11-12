@@ -290,13 +290,14 @@ _TO_KWH = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
 _TO_W = {"w": 1.0, "kw": 1000.0}
 
 
-async def live() -> dict:
-    """La prise maintenant : allumee, puissance, compteur, et le tarif en cours."""
+async def live(lite: bool = False) -> dict:
+    """La prise maintenant : allumee, puissance, compteur, et le tarif en cours. lite (12/11/2026, la tuile de l'accueil,
+    relue toutes les 30 s) : l'interrupteur et la puissance seulement, sans compteur ni tarif."""
     if not await _get(K_URL, ""):
         return {"configured": False}
     c, out = await cfg(), {"configured": await configured()}
     try:
-        for k in ("switch", "power", "energy"):
+        for k in (("switch", "power") if lite else ("switch", "power", "energy")):
             if not c[k]:
                 continue
             st = await _api(f"/states/{c[k]}")
@@ -307,9 +308,10 @@ async def live() -> dict:
                 out["power_w"] = round(_f(v) * _TO_W.get(u, 1.0), 1) if _f(v) is not None else None
             else:
                 out["energy_kwh"] = round(_f(v) * _TO_KWH.get(u, 1.0), 3) if _f(v) is not None else None
-        now = datetime.now(timezone.utc)
-        res = await _resolver(now - timedelta(minutes=1), now + timedelta(minutes=1))
-        out["price"], out["label"] = res(now)
+        if not lite:
+            now = datetime.now(timezone.utc)
+            res = await _resolver(now - timedelta(minutes=1), now + timedelta(minutes=1))
+            out["price"], out["label"] = res(now)
     except HAError as e:
         out["error"] = str(e)
     return out
