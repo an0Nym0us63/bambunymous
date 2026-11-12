@@ -80,5 +80,20 @@ def start(why: str, ids=None) -> bool:
     return True
 
 
+async def once(flag: str, why: str, delay: float = 120) -> None:
+    """Un recalcul complet, une seule fois (marque en reglage) : apres une mise a jour qui change le calcul."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    await asyncio.sleep(delay)
+    try:
+        async with AsyncSessionLocal() as db:
+            if await get_setting(db, flag, ""):
+                return
+            await set_setting(db, flag, "1")
+        start(why)
+    except Exception:
+        logger.exception(f"[RECALC] {flag}")
+
+
 def status() -> dict:
     return {**STATE, "queued": len(_NEXT)}

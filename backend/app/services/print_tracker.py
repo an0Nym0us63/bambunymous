@@ -1043,6 +1043,14 @@ async def _costs(db, p: Print):
         p.electric_cost              = elec
         p.total_cost                 = round(total_c + elec + wear, 4)
         logger.info(f"[COST] print #{p.id} : fil={total_c:.2f}€ fil_normal={total_cn:.2f}€ elec={elec:.2f}€ usure={wear:.2f}€ total={p.total_cost:.2f}€")
+        # (12/11/2026) les objets nes de cette impression (ou de son groupe) suivent, ou que le cout soit recalcule : la
+        # mesure de l'electricite par Home Assistant, la reprise de ses prix, la fin d'une impression, un rattrapage ne
+        # les prevenaient pas -- le prix d'un objet paraissait fige a sa creation
+        try:
+            from ..api.v1.routes.prints import _propagate_from_print
+            await _propagate_from_print(db, p.id)
+        except Exception:
+            logger.exception(f"[COST] objets de l'impression #{p.id}")
     except Exception as e:
         logger.error(f"_costs print #{getattr(p,'id','?')}: {e}", exc_info=True)
 

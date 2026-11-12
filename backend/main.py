@@ -255,6 +255,9 @@ async def lifespan(app: FastAPI):
     _tasks.track("nas", _bg(_arch.nightly_loop()))        # sauvegarde vers le NAS (et vidage du local) chaque nuit, si activee
     from app.services import mail_orders as _mail
     _tasks.track("mail", _bg(_mail.loop()))               # commandes Bambu Lab lues dans les mails, si active
+    from app.services import cost_recalc as _cr
+    # (12/11/2026) une fois : les objets reprennent le cout de leur impression (des recalculs ne les prevenaient pas)
+    _bg(_cr.once("MIGR_OBJECT_COSTS_20261112", "Mise à jour : coût des objets réaligné sur leurs impressions"))
     from app.services import home_assistant as _ha
     _tasks.track("home_assistant", _bg(_ha.loop()))       # l'electricite des impressions, mesuree chez Home Assistant
     await mqtt_manager.start()
