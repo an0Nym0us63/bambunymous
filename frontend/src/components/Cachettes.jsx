@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useEggsFound } from "../eggs";
+import { usePrinter } from "../store/printer";
 
 // Des petites choses cachees qui n'apparaissent qu'a certains moments (24/10/2026) : un jour de
 // l'annee, une saison, une heure. Chacune a sa place (spot) ; presque invisible, il suffit de la
@@ -138,17 +139,46 @@ export function Hide({ at, size = 10, style }) {
 
 // (12/11/2026) les cachettes qu'on peut trouver EN CE MOMENT (celles qui dependent du jour ou de l'heure, pas encore
 // trouvees) : l'avatar le signale, le menu du profil les compte, la page Succes les met en avant
-export function activeCachettes(now = new Date(), found = new Set()) {
-  return [...CACHETTES, ...HIDES.filter(h => h.when)].filter(c => c.when(now) && !found.has(c.egg));
+// (12/11/2026) et celles qui dependent de l'etat de l'imprimante (dans sa fenetre, sur l'accueil) : le compte bouge avec
+// elle -- une impression qui se termine, une pause, l'imprimante injoignable. Sans etat connu, elles ne comptent pas.
+const fullMoon = d => {
+  const age = (((d.getTime() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000) % 29.530588853 + 29.530588853) % 29.530588853;
+  return age > 14.3 && age < 15.3;
+};
+const LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
+export const STATE_HIDES = [
+  { egg: "owl", when: d => hour(d, 22, 5) },
+  { egg: "c_wolf", when: d => hour(d, 21, 5) && fullMoon(d) },
+  { egg: "c_spider", when: (d, s) => !!s && !s.connected },
+  { egg: "c_finish_flag", when: (d, s) => !!s && s.live && s.pct >= 99 },
+  { egg: "c_sloth", when: (d, s) => !!s && s.live && s.left > 720 },
+  { egg: "c_pause", when: (d, s) => !!s && s.paused },
+];
+
+export function activeCachettes(now = new Date(), found = new Set(), printer = null) {
+  return [...CACHETTES, ...HIDES.filter(h => h.when), ...STATE_HIDES].filter(c => c.when(now, printer) && !found.has(c.egg));
 }
+
+// l'etat de l'imprimante reduit a ce que les cachettes regardent (le compte ne se refait pas a chaque degre de buse)
+const printerKey = st => {
+  if (!st) return "";
+  const s = String(st.status || "").toUpperCase();
+  return [st.connected ? 1 : 0, LIVE.includes(s) ? 1 : 0, s === "PAUSE" || s === "PAUSED" ? 1 : 0,
+    Math.round(st.progress || 0) >= 99 ? 1 : 0, (st.remaining_minutes || 0) > 720 ? 1 : 0].join("");
+};
 
 export function useActiveCachettes(on = true) {
   const found = useEggsFound(st => st.found);
+  const pk = usePrinter(st => printerKey(st.status));
   const [t, setT] = useState(() => Date.now());
   useEffect(() => {
     if (!on) return undefined;
     const i = setInterval(() => setT(Date.now()), 60000);
     return () => clearInterval(i);
   }, [on]);
-  return useMemo(() => (on ? activeCachettes(new Date(t), found) : []), [t, found, on]);
+  return useMemo(() => {
+    if (!on) return [];
+    const p = pk ? { connected: pk[0] === "1", live: pk[1] === "1", paused: pk[2] === "1", pct: pk[3] === "1" ? 100 : 0, left: pk[4] === "1" ? 721 : 0 } : null;
+    return activeCachettes(new Date(t), found, p);
+  }, [t, found, on, pk]);
 }
