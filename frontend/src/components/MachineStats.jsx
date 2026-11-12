@@ -6,6 +6,7 @@ import client from "../api/client";
 import { showAlert } from "../utils/dialog";
 import { SensorChart, SensorLegend, amsLines, heatLines, fanLines, seriesOf } from "./SensorChart";
 import { egg } from "../eggs";
+import PowerCard from "./PowerCard";
 
 // Stats › Machine (03/11/2026) : les releves des capteurs de 3 h a 7 jours (le serveur n'en garde pas plus).
 // En tete la periode (un menu) et le bilan, puis la chronologie et une carte par mesure : buse et plateau, chambre,
@@ -324,6 +325,8 @@ export default function MachineStats() {
       <TimelineCard pageHours={hours} pick={pick} onPick={setPick} onOpen={openSheet}/>
       <ChartCard {...C} icon="🔥" label="Buse et plateau" color="#F97316" tone="#EA580C" build={p => heatLines(p, { chamber: false, targets: true })}
         unit="°" height={200} lo={0}/>
+      {/* (12/11/2026) la prise de l'imprimante (Home Assistant) : la puissance, sur les bandes du tarif */}
+      <PowerCard hours={hours}/>
       <ChartCard {...C} icon="📦" label="Chambre" color="#3B82F6" tone="#2563EB" build={p => { const l = heatLines(p, { only: ["chamber"], targets: true }); return l.some(x => !x.dash) ? l : []; }}
         unit="°" height={150} legend="targets"/>
       <ChartCard {...C} icon="💧" label="Humidité des AMS" color="#06B6D4" tone="#0891B2" build={p => amsLines(p, 0)} unit="%" height={190}/>

@@ -762,6 +762,51 @@ async def loop() -> None:
         await _tasks.sleep("home_assistant", 1800)
 
 
+# ── La courbe de consommation (Stats › Machine, 12/11/2026) ──────────────────────
+async def curve(hours: float = 24) -> dict:
+    """La puissance de la prise sur les `hours` dernieres heures, en pas reguliers (environ 300 points), et les bandes
+    du tarif (chaque libelle sur sa duree) : {points: [[ms, W]], bands: [{a, b, label}], kwh, cost}."""
+    if not await configured():
+        return {"configured": False}
+    c = await cfg()
+    hours = max(0.5, min(float(hours or 24), 24 * 31))
+    t1 = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    t0 = t1 - timedelta(hours=hours)
+    step = max(60, int(hours * 3600 / 300) // 60 * 60)
+    slots, t = [], t0
+    while t < t1:
+        slots.append((t, min(t + timedelta(seconds=step), t1)))
+        t += timedelta(seconds=step)
+    eid = c["energy"] if c["meter"] == "energy" else c["power"]
+    try:
+        st = await _api(f"/states/{eid}")
+        u = _unit(st).lower()
+        pts = await _history(eid, t0 - timedelta(minutes=20), t1)
+        if c["meter"] == "energy":
+            kw = _energy_from_counter(pts, _TO_KWH.get(u, 1.0), slots)
+        else:
+            kw = _energy_from_power(pts, _TO_W.get(u, 1.0), slots)
+        res = await _resolver(t0, t1)
+    except HAError as e:
+        return {"configured": True, "error": str(e)}
+    kw = kw or [0.0] * len(slots)
+    points, bands, cost, priced = [], [], 0.0, False
+    for (a, b), e in zip(slots, kw):
+        h = (b - a).total_seconds() / 3600
+        points.append([int(a.timestamp() * 1000), round(e * 1000 / h, 1) if h > 0 else 0])
+        pr, lab = res(a + (b - a) / 2)
+        if pr is not None:
+            cost += e * pr
+            priced = True
+        ms_a, ms_b = int(a.timestamp() * 1000), int(b.timestamp() * 1000)
+        if bands and bands[-1]["label"] == lab and bands[-1]["b"] == ms_a:
+            bands[-1]["b"] = ms_b
+        else:
+            bands.append({"a": ms_a, "b": ms_b, "label": lab})
+    return {"configured": True, "step": step, "points": points, "bands": [x for x in bands if x["label"]],
+            "kwh": round(sum(kw), 3), "cost": round(cost, 2) if priced else None}
+
+
 # ── Les chiffres (page Stats) ────────────────────────────────────────────────────
 async def stats(days: int = 0, date_from: str | None = None, date_to: str | None = None) -> dict:
     """La periode : date_from / date_to (AAAA-MM-JJ, fin incluse), sinon les `days` derniers jours, sinon tout."""

@@ -500,6 +500,13 @@ async def ha_live(lite: bool = False, _: str = Depends(get_current_user)):
     return await HA.live(lite)
 
 
+@router.get("/ha/curve")
+async def ha_curve(hours: float = 24, _: str = Depends(get_current_user)):
+    """La puissance de la prise sur les dernieres heures, et les bandes du tarif (Stats › Machine)."""
+    from ....services import home_assistant as HA
+    return await HA.curve(hours)
+
+
 @router.get("/ha/stats")
 async def ha_stats(days: int = 0, date_from: Optional[str] = None, date_to: Optional[str] = None, _: str = Depends(get_current_user)):
     """L'electricite mesuree : kWh, cout, puissance moyenne, part de chaque libelle (HC, Bleu HP…), par mois."""
