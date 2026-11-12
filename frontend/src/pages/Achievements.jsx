@@ -100,6 +100,7 @@ export default function Achievements({ embedded = false }) {
   const [openSubs, setOpenSubs] = useState(() => new Set());
   const toggleSub = id => setOpenSubs(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [detail, setDetail] = useState(null);
+  const [q, setQ] = useState("");                  // (13/11/2026) chercher un succes : nom, descriptif, section
   const [rules, setRules] = useState(false);
   useEffect(() => { if (rules) rulesOpened(); }, [rules]);
   const [slot, setSlot] = useState(false);
@@ -358,9 +359,43 @@ export default function Achievements({ embedded = false }) {
         </>;
       })()}
 
+      {/* (13/11/2026) chercher un succes : son nom, son descriptif (sauf s'il est cache), sa section ou son tiroir */}
+      {(() => {
+        const fold = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const words = fold(q).split(/\s+/).filter(Boolean);
+        const catName = Object.fromEntries((data.categories || []).map(c => [c.id, c.name]));
+        const subName = Object.fromEntries([...(data.subs || []), ...(data.card_groups || [])].map(s => [s.id, s.name]));
+        const hits = words.length ? data.items.filter(it => {
+          const hay = fold([it.name, it.masked && !it.loupe_desc ? "" : it.desc, catName[it.cat], subName[it.sub]].join(" "));
+          return words.every(w => hay.includes(w));
+        }).sort((a, b) => (b.level - a.level) || (progress(b) - progress(a))) : [];
+        return <>
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 12px", height:40, borderRadius:14,
+            background:"var(--surface2)", border:"1px solid var(--border)" }}>
+            <span style={{ fontSize:15, opacity:0.7 }}>🔎</span>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher un succès…" aria-label="Chercher un succès"
+              onBlur={() => words.length && hits.length && egg("succes_cherche")}
+              style={{ flex:1, minWidth:0, border:"none", outline:"none", background:"transparent", color:"var(--text)", fontSize:14, fontWeight:700 }}/>
+            {q && <button type="button" onClick={() => setQ("")} aria-label="Effacer" data-tip="Effacer"
+              style={{ border:"none", background:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, padding:4 }}>✕</button>}
+          </div>
+          {words.length > 0 && <div className="card" style={{ padding:12 }}>
+            <div style={{ fontSize:11, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"var(--muted)", marginBottom:8 }}>
+              {hits.length ? `${hits.length} succès trouvé${hits.length > 1 ? "s" : ""}` : "Aucun succès ne correspond"}</div>
+            {hits.length > 0 && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
+              {hits.slice(0, 120).map(it => <div key={it.id} style={{ display:"flex", flexDirection:"column", gap:3, minWidth:0 }}>
+                <Tile it={it} others={ringBy[it.id]} shared={shared(it)} rivals={rivalsOf(it)} onOpen={() => setDetail(it.id)}
+                  now={it.level < 0 && nowSet.has(it.id)}/>
+                <span style={{ fontSize:9.5, fontWeight:700, color:"var(--muted)", textAlign:"center", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                  {subName[it.sub] || catName[it.cat] || ""}</span></div>)}
+            </div>}
+          </div>}
+        </>;
+      })()}
+
       {/* Sections : sur PC, en colonnes, toutes de la meme hauteur ; le detail d'une section s'ouvre
           dans une fenetre (avant, il s'ouvrait sur place et prenait toute la ligne : grille decousue). */}
-      <div className="wide-list" style={{ "--wl-gap":"14px", "--wl-min":"440px", alignItems:"stretch" }}>
+      {!q.trim() && <div className="wide-list" style={{ "--wl-gap":"14px", "--wl-min":"440px", alignItems:"stretch" }}>
       {data.categories.map(c => {
         const items = data.items.filter(x => x.cat === c.id)
           .sort((a, b) => (b.level - a.level) || (progress(b) - progress(a)));
@@ -556,7 +591,7 @@ export default function Achievements({ embedded = false }) {
           </div>
         );
       })}
-      </div>
+      </div>}
 
       {data.since && <p style={{ ...msg, padding:"4px", fontSize:11 }}>
         Les dates viennent de ton historique ; ce qui ne s'y lit pas (MakerWorld, stock, copains) est daté du jour où il a été constaté.</p>}
