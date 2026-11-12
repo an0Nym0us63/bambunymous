@@ -3,6 +3,7 @@ import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import { TicketStub } from "./medals";
+import { egg } from "../eggs";
 
 // Roue de la fortune, facon machine a sous : le lot est tire par le serveur,
 // la page ne fait que jouer l'animation jusqu'a lui. Trois rouleaux qui
@@ -51,6 +52,30 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
   const [help, setHelp] = useState(false);            // l'aide : les lots, ce qu'ils valent, leurs chances
   const timers = useRef([]);
   const finish = useRef(null);
+  // (12/11/2026) tous les tours d'un coup : sans animation, ceux gagnes en route compris, puis le recapitulatif
+  const [batch, setBatch] = useState(null);           // {n, tally: {lot: {label, n}}, hints: [], running}
+  const spinAll = async () => {
+    if (phase === "spinning" || spins <= 0) return;
+    setErr(null); setRes(null); setBonus(null); setPhase("spinning");
+    const tally = {}, hints = [];
+    let first = null, left = spins, n = 0;
+    setBatch({ n: 0, tally: {}, hints: [], running: true });
+    try {
+      while (left > 0 && n < 300) {
+        const r = (await client.post("/achievements/wheel/spin")).data;
+        first = first || r.at; n += 1; left = r.spins;
+        const k = r.prize || "none";
+        tally[k] = { label: k === "none" ? "Pas cette fois" : r.label || k, n: (tally[k]?.n || 0) + 1 };
+        if (r.secret?.hint) hints.push(`« ${r.secret.name} » : ${r.secret.hint}`);
+        setSpins(r.spins);
+        setBatch({ n, tally: { ...tally }, hints: [...hints], running: true });
+      }
+    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+    const b = first ? await client.post("/achievements/wheel/settle", null, { params: { since: first } }).then(x => x.data.bonus || []).catch(() => []) : [];
+    setBatch({ n, tally, hints, running: false }); setBonus(b); setPhase("idle");
+    onDone?.();
+    if (n > 1) egg("roue_rafale");
+  };
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const spin = async () => {
@@ -138,7 +163,9 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 : <>{wheel?.weekly || 3} tours offerts chaque lundi, 1 toutes les {wheel?.prints_per_spin || 8} impressions
                 réussies et 1 par secret gagné ; un ticket de palier toutes les {wheel?.prints_per_ticket || 5} impressions
                 réussies et tous les {wheel?.secrets_per_ticket || 5} secrets. Gagner des paliers ou un secret pendant un tour rapporte aussi
-                ses clés, affichées en bonus.</>}</div>
+                ses clés, affichées en bonus.</>}
+                <span style={{ display:"block", marginTop:4 }}>⚡ <b>Tout lancer</b> (à partir de 2 tours) : tous tes tours d'un coup, sans l'animation,
+                  ceux gagnés en route compris ; un récapitulatif dit ce qu'ils ont rapporté, et les clés en bonus.</span></div>
             </div>
           )}
           <div style={{ textAlign:"center", fontWeight:900, fontSize:20, color:"#fde047", letterSpacing:".04em",
@@ -169,6 +196,19 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
             animation:"bn-flash 1.4s ease-out 2" }}/>}
           {/* le resultat */}
           <div style={{ minHeight:46, textAlign:"center", display:"flex", flexDirection:"column", justifyContent:"center" }}>
+            {/* (12/11/2026) tous les tours d'un coup : l'avancement, puis le recapitulatif des lots */}
+            {batch && <div style={{ padding:"8px 10px", borderRadius:12, background:"rgba(0,0,0,.28)", color:"rgba(255,255,255,.92)", fontSize:12, lineHeight:1.45, textAlign:"left" }}>
+              <div style={{ fontWeight:900, color:"#fde047", fontSize:13.5, textAlign:"center", marginBottom:4 }}>
+                {batch.running ? `⚡ ${batch.n} tour${batch.n > 1 ? "s" : ""}…` : `⚡ ${batch.n} tour${batch.n > 1 ? "s" : ""} lancé${batch.n > 1 ? "s" : ""}`}</div>
+              {Object.entries(batch.tally).sort((a, b) => (a[0] === "none") - (b[0] === "none") || b[1].n - a[1].n).map(([k, v]) =>
+                <div key={k} style={{ display:"flex", gap:8 }}>
+                  <span style={{ width:20, textAlign:"center" }}>{SYM[k] || "✖️"}</span>
+                  <span style={{ flex:1, minWidth:0, color: k === "none" ? "rgba(255,255,255,.6)" : undefined }}>{v.label}</span>
+                  <b style={{ color:"#fde047", fontVariantNumeric:"tabular-nums" }}>×{v.n}</b></div>)}
+              {batch.hints.map((h, i) => <div key={i} style={{ marginTop:4, fontSize:11.5, color:"#fde68a" }}>💡 {h}</div>)}
+              {!batch.running && bonus?.length > 0 && <div style={{ marginTop:6, fontSize:11.5, color:"#fde68a" }}>
+                🎁 Et +{bonus.reduce((a, b) => a + b.n, 0)} clé{bonus.reduce((a, b) => a + b.n, 0) > 1 ? "s" : ""} en bonus : {bonus.map(b => `${b.why} (+${b.n})`).join(", ")}</div>}
+            </div>}
             {phase === "done" && res && (
               <div style={{ animation: win ? "bn-win .6s ease-in-out 3" : "none" }}>
                 <div style={{ fontSize: big ? 22 : 18, fontWeight:900, color: win ? "#fde047" : "rgba(255,255,255,.85)" }}>
@@ -192,7 +232,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 🎁 Et +{bonus.reduce((a, b) => a + b.n, 0)} clé{bonus.reduce((a, b) => a + b.n, 0) > 1 ? "s" : ""} en bonus :
                 {" "}{bonus.map(b => `${b.why} (+${b.n})`).join(", ")}</div>
             )}
-            {phase === "spinning" && <div style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,.85)" }}>Ça tourne…</div>}
+            {phase === "spinning" && !batch?.running && <div style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,.85)" }}>Ça tourne…</div>}
             {err && <div style={{ fontSize:12.5, color:"#fecaca", fontWeight:700 }}>{err}</div>}
           </div>
           {/* la legende : trois pareils = */}
@@ -208,6 +248,10 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
               background: spins > 0 && phase !== "spinning" ? "linear-gradient(180deg, #fde047, #f59e0b)" : "#a8a29e",
               boxShadow: spins > 0 ? "0 4px 0 #b45309" : "none" }}>
             {phase === "spinning" ? "…" : spins > 0 ? "TOURNER" : wheel?.family ? "Plus de tour : rendez-vous demain" : "Plus de tour : rendez-vous lundi"}</button>
+          {spins > 1 && phase !== "spinning" && <button onClick={spinAll}
+            data-tip="Lancer tous tes tours d'un coup, sans l'animation (ceux gagnés en route aussi), puis voir ce qu'ils ont rapporté"
+            style={{ width:"100%", marginTop:8, padding:"8px 0", borderRadius:12, border:"1.5px solid #fde047", cursor:"pointer",
+              fontSize:13, fontWeight:900, letterSpacing:".04em", color:"#fde047", background:"rgba(0,0,0,.25)" }}>⚡ TOUT LANCER ({spins} tours)</button>}
           {/* la fente a ticket : il en sort un quand on en gagne */}
           <div style={{ margin:"12px auto 0", width:150, position:"relative" }}>
             <div style={{ height:8, borderRadius:4, background:"#1c1917", boxShadow:"inset 0 2px 4px rgba(0,0,0,.9)",
