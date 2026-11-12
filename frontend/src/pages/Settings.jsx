@@ -1135,7 +1135,7 @@ function RecalculateSection() {
         Recalculer les coûts
       </h3>
       <CardHelp title="Recalculer les coûts">
-        Recalcule les coûts filament et électricité de tous les prints (utile après changement de prix ou d'import). Les groupes se mettent à jour automatiquement.
+        Recalcule les coûts filament, électricité et usure de tous les prints, et ceux des objets qui en naissent (utile après changement de prix ou d'import). Les groupes se mettent à jour automatiquement ; l'avancement se suit dans l'onglet Tâches.
       </CardHelp>
       <button onClick={run} disabled={loading}
         style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"wait":"pointer",

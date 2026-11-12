@@ -189,29 +189,9 @@ async def update_settings(
             mqtt_manager.reconnect(ip, pid, code)
 
     if elec_changed:
-        # Recalcul de tous les prints en arrière-plan
-        import threading, asyncio as _aio
-        def _recalc_all():
-            loop = _aio.new_event_loop()
-            async def _go():
-                from ....db.session import AsyncSessionLocal
-                from ....models.print_history import Print
-                from sqlalchemy import select as _sel
-                from ....services.print_tracker import recalculate_print
-                from .prints import _propagate_from_print
-                async with AsyncSessionLocal() as db2:
-                    pids = (await db2.execute(_sel(Print.id).where(Print.status.in_(["SUCCESS", "PARTIAL", "FAILED", "TO_REDO"])))).scalars().all()
-                for pid in pids:
-                    await recalculate_print(pid)
-                    try:      # (12/11/2026) les objets nes de cette impression (ou de son groupe) suivent leur cout
-                        async with AsyncSessionLocal() as db3:
-                            await _propagate_from_print(db3, pid)
-                            await db3.commit()
-                    except Exception:
-                        pass
-            try: loop.run_until_complete(_go())
-            finally: loop.close()
-        threading.Thread(target=_recalc_all, daemon=True).start()
+        # tous les couts et ceux des objets, en fond ; l'avancement dans Parametres › Taches (12/11/2026)
+        from ....services import cost_recalc
+        cost_recalc.start("Tarif électrique ou usure changés")
 
     return {"ok": True}
 

@@ -126,6 +126,17 @@ def jobs() -> list:
             add("mw_3d_warm", "Préparation des vues 3D", mw_3d.WARM)
     except Exception:
         pass
+    try:      # (12/11/2026) le recalcul des couts, la mesure et le prix de l'electricite
+        from ..services import cost_recalc
+        add("costs", "Recalcul des coûts des impressions (et de leurs objets)", cost_recalc.status())
+    except Exception:
+        pass
+    try:
+        from ..services import home_assistant as _ha
+        add("ha_backfill", "Électricité : mesure des impressions passées (Home Assistant)", _ha.BACKFILL)
+        add("ha_reprice", "Électricité : prix et libellés repris (Home Assistant)", _ha.REPRICE)
+    except Exception:
+        pass
     try:
         from ..services import mw_relink
         add("mw_relink", "Recherche des modèles MakerWorld manquants", mw_relink.status())

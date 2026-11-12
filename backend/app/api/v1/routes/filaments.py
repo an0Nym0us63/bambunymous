@@ -36,7 +36,8 @@ def _bg_recalc_by_filament(fid: int):
                 pids = (await db.execute(
                     _sel(FilamentUsage.print_id).where(FilamentUsage.spool_id.in_(sp_ids)).distinct()
                 )).scalars().all()
-            for pid in pids: await recalculate_print(pid)
+            from ....services import cost_recalc
+            cost_recalc.start("Prix d'un filament changé", pids)
         try: loop.run_until_complete(_go())
         finally: loop.close()
     threading.Thread(target=_run, daemon=True).start()
@@ -56,7 +57,8 @@ def _bg_recalc_by_spool(sid: int):
                 pids = (await db.execute(
                     _sel(FilamentUsage.print_id).where(FilamentUsage.spool_id == sid).distinct()
                 )).scalars().all()
-            for pid in pids: await recalculate_print(pid)
+            from ....services import cost_recalc
+            cost_recalc.start("Prix d'une bobine changé", pids)
         try: loop.run_until_complete(_go())
         finally: loop.close()
     threading.Thread(target=_run, daemon=True).start()

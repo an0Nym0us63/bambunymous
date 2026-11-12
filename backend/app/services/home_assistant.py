@@ -755,10 +755,13 @@ async def reprice_all() -> int:
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     from .print_tracker import _costs
+    import time as _time
     n = 0
     async with AsyncSessionLocal() as db:
         ids = (await db.execute(select(Print.id).where(Print.energy_slots.is_not(None)))).scalars().all()
+    REPRICE.update(running=True, done=0, total=len(ids), current=None, started=_time.time(), finished=None)
     for pid in ids:
+        REPRICE["done"] += 1
         try:
             async with AsyncSessionLocal() as db:
                 p = await db.get(Print, pid)
@@ -778,11 +781,15 @@ async def reprice_all() -> int:
             break                                      # Home Assistant injoignable : la suite attendra
         except Exception:
             logger.exception(f"[HA] reprix print #{pid}")
+    REPRICE.update(running=False, finished=_time.time())
     return n
 
 
 # ── Le rattrapage, et la boucle ──────────────────────────────────────────────────
 _RUN = {"task": None}
+# (12/11/2026) l'avancement, lu par Parametres › Taches (« Travaux lances a la demande »)
+BACKFILL: dict = {"running": False, "done": 0, "total": 0, "current": None, "started": None, "finished": None}
+REPRICE: dict = {"running": False, "done": 0, "total": 0, "current": None, "started": None, "finished": None}
 
 
 async def _backfill(days: int) -> None:
@@ -796,6 +803,8 @@ async def _backfill(days: int) -> None:
             Print.status.in_(["SUCCESS", "FAILED", "PARTIAL", "TO_REDO", "CANCELLED"])).order_by(Print.print_date.desc()))).scalars().all()
     st["total"] = len(ids)
     await _set(K_RUN, json.dumps(st))
+    import time as _time
+    BACKFILL.update(running=True, done=0, total=len(ids), current=f"{days} derniers jours", started=_time.time(), finished=None)
     for pid in ids:
         try:
             await measure(pid)
@@ -812,10 +821,12 @@ async def _backfill(days: int) -> None:
         except Exception as e:                         # noqa: BLE001
             st["error"] = type(e).__name__
         st["done"] += 1
+        BACKFILL["done"] = st["done"]
         if st["done"] % 5 == 0:
             await _set(K_RUN, json.dumps(st))
     st["running"] = False
     await _set(K_RUN, json.dumps(st))
+    BACKFILL.update(running=False, current=f"{st['ok']} mesurée(s) sur {st['total']}", finished=_time.time())
 
 
 def start_backfill(days: int) -> dict:

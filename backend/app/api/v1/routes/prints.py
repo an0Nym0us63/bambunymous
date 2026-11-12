@@ -2920,29 +2920,9 @@ async def recalculate_all_prints(_: str = Depends(get_current_user)):
     """Recalcule les coûts de tous les prints terminés (filament override + normal + électricité).
     Les groupes sont calculés à la volée → se mettent à jour automatiquement.
     """
-    import threading, asyncio as _aio
-    def _run():
-        loop = _aio.new_event_loop()
-        async def _go():
-            from ....services.print_tracker import recalculate_print
-            async with AsyncSessionLocal() as db:
-                pids = (await db.execute(
-                    select(Print.id).where(Print.status.in_(["SUCCESS","FAILED","IN_PROGRESS"]))
-                )).scalars().all()
-            total = len(pids)
-            for i, pid in enumerate(pids, 1):
-                await recalculate_print(pid)
-                if i % 10 == 0:
-                    import logging; logging.getLogger(__name__).info(f"[RECALC] {i}/{total} prints recalculés...")
-            # Repercuter les nouveaux couts sur les objets lies.
-            async with AsyncSessionLocal() as db:
-                for pid in pids:
-                    await _propagate_from_print(db, pid)
-                await db.commit()
-        try: loop.run_until_complete(_go())
-        finally: loop.close()
-    threading.Thread(target=_run, daemon=True).start()
-    return {"ok": True, "message": "Recalcul lancé en arrière-plan"}
+    from ....services import cost_recalc
+    started = cost_recalc.start("Recalcul demandé à la main")
+    return {"ok": True, "message": "Recalcul lancé en arrière-plan" if started else "Un recalcul tourne : celui-ci suivra"}
 
 
 @router.post("/groups/{group_id}/photos/upload")
