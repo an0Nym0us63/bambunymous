@@ -9,6 +9,7 @@ import client from "../api/client";
 import { FriendPicker, useFriendsPrinting } from "./Friends";
 import { useFriend } from "../store/friend";
 import { useUnseenNotifs } from "./NotifBell";
+import { useActiveCachettes } from "./Cachettes";
 
 // Violet du scrim natif de la coquille Android : le meme, pour que la pastille
 // se lise comme une continuite de l'application et non comme un accent de plus.
@@ -114,13 +115,16 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
   const visiting = useFriend((st) => st.friend);
   const unseen = useUnseenNotifs(!visiting);
   const showNotif = notifBadge && !visiting && unseen > 0;
+  // (12/11/2026) des objets caches a trouver en ce moment : une etincelle sur l'avatar, leur nombre dans le menu
+  const hidden = useActiveCachettes(!visiting).length;
   // sur l'accueil (le sien, pas chez un copain) : sa personnalisation (25/10/2026, plus de bouton dans le bandeau)
   const onHome = useLocation().pathname === "/" && !visiting;
   return (
     <>
       <button ref={btnRef} onClick={toggle} aria-label="Compte"
         data-tip={[busy ? `${busy} copain${busy > 1 ? "s" : ""} en train d'imprimer` : null,
-          showNotif ? `${unseen} notification${unseen > 1 ? "s" : ""} non vue${unseen > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ") || undefined}
+          showNotif ? `${unseen} notification${unseen > 1 ? "s" : ""} non vue${unseen > 1 ? "s" : ""}` : null,
+          hidden > 0 ? `${hidden} objet${hidden > 1 ? "s" : ""} caché${hidden > 1 ? "s" : ""} à trouver en ce moment` : null].filter(Boolean).join(" · ") || undefined}
         style={{ display:"flex", alignItems:"center", gap:9, flexShrink:0,
           background:"none", border:"none", padding:0, cursor:"pointer" }}>
         <span style={{ width:size, height:size, borderRadius:"50%", flexShrink:0,
@@ -134,6 +138,11 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               height: busy > 1 ? 15 : 10, padding: busy > 1 ? "0 3px" : 0, borderRadius:8, background:"#22c55e",
               color:"white", fontSize:9, fontWeight:800, lineHeight:"15px", textAlign:"center", boxSizing:"border-box",
               boxShadow:"0 0 0 2px var(--surface)" }}>{busy > 1 ? busy : ""}</span>
+          )}
+          {hidden > 0 && (
+            <span aria-hidden="true" style={{ position:"absolute", top:-4, left:-5, width:14, height:14, borderRadius:"50%", boxSizing:"border-box",
+              background:"linear-gradient(135deg, #F59E0B, #EC4899)", display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:8, lineHeight:1, boxShadow:"0 0 0 2px var(--surface), 0 0 8px rgba(245,158,11,0.6)", animation:"friendPulse 3s ease-in-out infinite" }}>✨</span>
           )}
           {showNotif && (
             <span style={{ position:"absolute", bottom:-4, right:-5, width:17, height:17, borderRadius:"50%", boxSizing:"border-box",
@@ -167,7 +176,7 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
             {/* les pages rangees dans le profil (05/11/2026, reglees dans Parametres › Affichage › Menu) : par defaut
                 Notifications (avec leur nombre : la cloche n'est pas toujours a cote), Succes et le guide */}
             {profileItems.filter(it => !(visiting && it.k === "notifications")).map(it => { const Icon = it.icon;
-              return <button key={it.k} onClick={() => { setRect(null); navigate(it.to); }}
+              return <React.Fragment key={it.k}><button onClick={() => { setRect(null); navigate(it.to); }}
                 style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
                   padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
                   cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left", position:"relative" }}>
@@ -176,7 +185,26 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
                   background:"#ef4444", color:"#fff", fontSize:10.5, fontWeight:800, lineHeight:"18px", textAlign:"center" }}>{unseen > 99 ? "99+" : unseen}</span>}
                 {it.k === "settings" && upd.any && <span data-tip={updatesTip(upd)} style={{ marginLeft:"auto", width:9, height:9, borderRadius:"50%",
                   background:"linear-gradient(135deg, #F59E0B, #F97316)" }}/>}
-              </button>; })}
+              </button>
+            {/* (12/11/2026) les objets caches qu'on peut trouver maintenant : la page Succes les met en avant */}
+                {it.k === "notifications" && hidden > 0 && <button onClick={() => { setRect(null); navigate("/achievements?cachettes=1"); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+                padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
+                cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
+              <span style={{ width:16, textAlign:"center" }}>✨</span> Objets cachés en ce moment
+              <span style={{ marginLeft:"auto", minWidth:18, height:18, padding:"0 6px", borderRadius:9, boxSizing:"border-box",
+                background:"linear-gradient(135deg, #F59E0B, #EC4899)", color:"#fff", fontSize:10.5, fontWeight:800, lineHeight:"18px", textAlign:"center" }}>{hidden}</span>
+            </button>}</React.Fragment>; })}
+            {/* Notifications pas dans ce menu (reglage, ou chez un copain) : la ligne vient apres les pages */}
+                {hidden > 0 && !profileItems.some(x => x.k === "notifications" && !visiting) && <button onClick={() => { setRect(null); navigate("/achievements?cachettes=1"); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+                padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
+                cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
+              <span style={{ width:16, textAlign:"center" }}>✨</span> Objets cachés en ce moment
+              <span style={{ marginLeft:"auto", minWidth:18, height:18, padding:"0 6px", borderRadius:9, boxSizing:"border-box",
+                background:"linear-gradient(135deg, #F59E0B, #EC4899)", color:"#fff", fontSize:10.5, fontWeight:800, lineHeight:"18px", textAlign:"center" }}>{hidden}</span>
+            </button>}
+
             {onHome && <button onClick={() => { setRect(null); window.dispatchEvent(new Event("bn-home-edit")); }}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
                 padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",

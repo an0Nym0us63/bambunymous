@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useEggsFound } from "../eggs";
 
 // Des petites choses cachees qui n'apparaissent qu'a certains moments (24/10/2026) : un jour de
@@ -133,4 +133,22 @@ export function Hide({ at, size = 10, style }) {
   return <>{here.map(c => <span key={c.egg} data-egg={c.egg} aria-hidden="true" onClick={e => e.stopPropagation()}
     style={{ display: "inline-block", fontSize: size, lineHeight: 1, opacity: 0.2, cursor: "default", userSelect: "none", WebkitUserSelect: "none",
       padding: "2px 3px", margin: "0 2px", flexShrink: 0, ...style }}>{c.e}</span>)}</>;
+}
+
+
+// (12/11/2026) les cachettes qu'on peut trouver EN CE MOMENT (celles qui dependent du jour ou de l'heure, pas encore
+// trouvees) : l'avatar le signale, le menu du profil les compte, la page Succes les met en avant
+export function activeCachettes(now = new Date(), found = new Set()) {
+  return [...CACHETTES, ...HIDES.filter(h => h.when)].filter(c => c.when(now) && !found.has(c.egg));
+}
+
+export function useActiveCachettes(on = true) {
+  const found = useEggsFound(st => st.found);
+  const [t, setT] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return undefined;
+    const i = setInterval(() => setT(Date.now()), 60000);
+    return () => clearInterval(i);
+  }, [on]);
+  return useMemo(() => (on ? activeCachettes(new Date(t), found) : []), [t, found, on]);
 }

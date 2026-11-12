@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import HiddenMark from "../components/HiddenMark";
-import Cachettes from "../components/Cachettes";
+import Cachettes, { useActiveCachettes } from "../components/Cachettes";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { currentFriend } from "../store/friend";
@@ -87,6 +87,13 @@ export default function Achievements({ embedded = false }) {
   const [pod, setPod] = useState(null);           // podium : moi et mes copains
   const [sp, setSp] = useSearchParams();
   const focus = sp.get("a") || "";
+  // (12/11/2026) les objets caches qu'on peut trouver maintenant : en tete de page, et en surbrillance dans les secrets
+  const nowHidden = useActiveCachettes(!currentFriend());
+  const nowSet = useMemo(() => new Set(nowHidden.map(c => c.egg)), [nowHidden]);
+  const hiddenRef = useRef(null);
+  useEffect(() => {
+    if (sp.get("cachettes") && nowHidden.length) setTimeout(() => hiddenRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+  }, [sp.get("cachettes"), nowHidden.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   const [openCats, setOpenCats] = useState(() => new Set([sp.get("cat")].filter(Boolean)));
   // sous-sections des Secrets : repliees par defaut
   const [openSubs, setOpenSubs] = useState(() => new Set());
@@ -254,6 +261,31 @@ export default function Achievements({ embedded = false }) {
           ))}
         </div>
       )}
+
+      {/* (12/11/2026) les objets caches trouvables en ce moment : ce qu'il y a a chercher, pas ou */}
+      {!atFriend && nowHidden.length > 0 && (() => {
+        // ceux de ces secrets deja en vue (indice revele par une cle, une loupe…) : leur tuile, en surbrillance
+        const seenNow = (data.items || []).filter(x => x.cat === "secret" && x.level < 0 && nowSet.has(x.id));
+        const openHidden = () => {
+          setOpenCats(new Set(["secret"]));
+          setOpenSubs(new Set(seenNow.map(x => x.sub || "unknown")));
+        };
+        return (
+        <button type="button" ref={hiddenRef} onClick={openHidden} className="card" style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+          cursor:"pointer", textAlign:"left", font:"inherit", color:"inherit", width:"100%",
+          border:"1px solid rgba(245,158,11,0.45)", background:"radial-gradient(90% 120% at 0% 0%, rgba(245,158,11,0.16), transparent 70%), var(--surface)",
+          boxShadow: sp.get("cachettes") ? "0 0 0 2px rgba(245,158,11,0.55), 0 0 22px rgba(245,158,11,0.35)" : "0 8px 22px -16px rgba(245,158,11,0.8)" }}>
+          <span style={{ fontSize:22 }}>✨</span>
+          <span style={{ flex:1, minWidth:180 }}>
+            <b style={{ fontSize:14, color:"var(--text)" }}>{nowHidden.length} objet{nowHidden.length > 1 ? "s" : ""} caché{nowHidden.length > 1 ? "s" : ""} à trouver en ce moment</b>
+            <span style={{ display:"block", fontSize:12, color:"var(--muted)", marginTop:2 }}>Selon le jour et l'heure, presque invisibles quelque part dans l'appli :
+              c'est le moment de fouiner, ils repartent quand leur moment est passé.
+              {seenNow.length > 0 ? ` ${seenNow.length} indice${seenNow.length > 1 ? "s" : ""} en vue sur ${nowHidden.length} : touche pour ${seenNow.length > 1 ? "les" : "le"} voir dans les Secrets.`
+                : " Aucun indice en vue : une clé ou une loupe en révèle un, dans les Secrets."}</span>
+          </span>
+          <span style={{ fontSize:20, fontWeight:900, color:"#F59E0B" }}>›</span>
+        </button>
+        ); })()}
 
       {/* Classement de la famille (secrets a chercher), sous celui des copains ; un clic : le detail */}
       {!atFriend && famBoard?.people?.length > 1 && (
@@ -509,7 +541,8 @@ export default function Achievements({ embedded = false }) {
                     })()}
                     {(!sb.id || openSubs.has(sb.id)) && (
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
-                        {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} rivals={rivalsOf(it)} onOpen={() => setDetail(it.id)}/>)}
+                        {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} rivals={rivalsOf(it)} onOpen={() => setDetail(it.id)}
+                          now={it.level < 0 && nowSet.has(it.id)}/>)}
                       </div>
                     )}
                   </div>
@@ -562,7 +595,7 @@ export default function Achievements({ embedded = false }) {
 
 // Une medaille de la grille d'une section : grisee tant qu'elle n'est pas
 // gagnee, avec un petit liseré de progression vers le palier suivant.
-function Tile({ it, onOpen, others, shared, rivals }) {
+function Tile({ it, onOpen, others, shared, rivals, now = false }) {
   const got = it.level >= 0;
   const top = got ? it.tiers[it.level] : it.tiers[0];
   const p = progress(it);
@@ -574,8 +607,12 @@ function Tile({ it, onOpen, others, shared, rivals }) {
     <button onClick={onOpen} title={near && others?.length ? `${it.name} · ${others.join(", ")} l'${others.length > 1 ? "ont" : "a"}` : it.name}
       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5,
       padding:"10px 4px 8px", borderRadius:12, cursor:"pointer", minWidth:0, position:"relative",
-      background: it.scoop ? `linear-gradient(160deg, rgba(236,72,153,0.16), ${top.color}14 60%)` : got ? `${top.color}14` : near ? "rgba(245,158,11,0.08)" : "transparent",
-      border:`1px ${near ? "dashed" : "solid"} ${it.scoop ? "#EC4899" : got ? top.color + "55" : near ? "#F59E0B" : "var(--border)"}` }}>
+      background: it.scoop ? `linear-gradient(160deg, rgba(236,72,153,0.16), ${top.color}14 60%)` : got ? `${top.color}14` : now ? "rgba(245,158,11,0.14)" : near ? "rgba(245,158,11,0.08)" : "transparent",
+      border:`1px ${near && !now ? "dashed" : "solid"} ${it.scoop ? "#EC4899" : got ? top.color + "55" : now || near ? "#F59E0B" : "var(--border)"}`,
+      ...(now ? { boxShadow:"0 0 0 1px #F59E0B, 0 0 16px rgba(245,158,11,0.45)", animation:"friendPulse 3s ease-in-out infinite" } : null) }}>
+      {/* (12/11/2026) trouvable en ce moment */}
+      {now && <span style={{ position:"absolute", bottom:-8, left:"50%", transform:"translateX(-50%)", fontSize:9.5, fontWeight:900, padding:"1px 6px",
+        borderRadius:20, whiteSpace:"nowrap", zIndex:1, color:"#fff", background:"linear-gradient(135deg, #F59E0B, #EC4899)", border:"1.5px solid var(--sheet-bg)" }}>✨ maintenant</span>}
       <span style={{ borderRadius:"50%", padding:2, boxShadow: near ? "0 0 0 2px #F59E0B, 0 0 12px rgba(245,158,11,0.55)" : "none" }}>
         <Medal tier={top} emoji={it.emoji} size={46} locked={!got}/></span>
       {it.family_all?.length > 0 && (
