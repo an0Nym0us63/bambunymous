@@ -434,7 +434,9 @@ export function PlanDashboard({ s, dur, now, onLegend, cells = false, compact = 
     const when = iso => { const d = new Date(iso), t = new Date(`${(now || "").slice(0, 10)}T12:00`), days = Math.round((new Date(`${iso.slice(0, 10)}T12:00`) - t) / 864e5);
       return [days === 0 ? "aujourd'hui" : days === 1 ? "demain" : d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }), hhmm(iso)]; };
     const cs = [["📋", `${s.plates}`, `plateau${s.plates > 1 ? "x" : ""} prévu${s.plates > 1 ? "s" : ""}`, null, "Les plateaux prévus"],
-      s.end && ["🏁", when(s.end)[1], `tout fini ${when(s.end)[0]}`, null, "Quand le dernier plateau de la file finira"],
+      // au telephone (13/11/2026) : sur deux cases, le jour et l'heure en grand (« tout fini mer. 2 déc. » etait coupe)
+      s.end && (compact ? ["🏁", `${when(s.end)[0]} · ${when(s.end)[1]}`, "tout fini", null, "Quand le dernier plateau de la file finira", 2]
+        : ["🏁", when(s.end)[1], `tout fini ${when(s.end)[0]}`, null, "Quand le dernier plateau de la file finira"]),
       ["🧵", `${s.loads}`, `bobine${s.loads > 1 ? "s" : ""} à charger`, s.loads ? "#EA580C" : null, "Les chargements de bobine que demande toute la file"],
       s.beds > 0 && ["🔲", `${s.beds}`, `changement${s.beds > 1 ? "s" : ""} de plateau`, "#0369A1", "Les changements de plateau d'impression que demande toute la file"],
       s.nights > 0 && ["🌙", `${s.nights}`, `nuit${s.nights > 1 ? "s" : ""} perdue${s.nights > 1 ? "s" : ""} · ${hm(s.idle_min * 60)}`, "#6366F1", "Les nuits où l'imprimante attend l'heure de lancement : « Optimiser » peut les remplir"],
@@ -444,11 +446,13 @@ export function PlanDashboard({ s, dur, now, onLegend, cells = false, compact = 
     ].filter(Boolean);
     // au telephone (06/11/2026) : en grille de trois, sur plusieurs lignes, dans l'ecran (elles defilaient au-dela du bord)
     return <div style={compact ? { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", rowGap: 8, minWidth: 0 } : { display: "flex", alignItems: "stretch", minWidth: 0 }}>
-      {cs.map(([ic, v, l, c, tip], i) => <div key={i} data-tip={tip} style={{ flex: compact ? undefined : "1 1 0", minWidth: 0, padding: compact ? "1px 8px" : "2px 12px",
-        borderLeft: (compact ? i % 3 : i) ? "1px solid var(--border)" : "none" }}>
-        <div style={{ fontSize: compact ? 14.5 : 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", lineHeight: 1.2 }}><span style={{ fontSize: compact ? 12 : 13, marginRight: 5 }}>{ic}</span>{v}</div>
+      {cs.map(([ic, v, l, c, tip, span = 1], i) => { const col = cs.slice(0, i).reduce((a, x) => a + (x[5] || 1), 0) % 3;
+        return <div key={i} data-tip={tip} style={{ flex: compact ? undefined : "1 1 0", minWidth: 0, padding: compact ? "1px 8px" : "2px 12px",
+        ...(compact && span > 1 ? { gridColumn: `span ${Math.min(span, 3 - col)}` } : null),
+        borderLeft: (compact ? col : i) ? "1px solid var(--border)" : "none" }}>
+        <div style={{ fontSize: compact ? 14.5 : 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis" }}><span style={{ fontSize: compact ? 12 : 13, marginRight: 5 }}>{ic}</span>{v}</div>
         <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>
-      </div>)}
+      </div>; })}
       {onLegend && <button type="button" onClick={onLegend} aria-label="Ce que disent les signes" data-tip="Ce que disent les signes et les couleurs"
         style={{ alignSelf: "center", flexShrink: 0, width: 28, height: 28, marginLeft: 8, borderRadius: "50%", border: "1px solid var(--border)", background: "var(--surface2)",
           color: "var(--muted)", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>?</button>}
