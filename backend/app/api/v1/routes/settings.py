@@ -108,6 +108,7 @@ class SettingsOut(BaseModel):
     PRINTER_MODELS: list = []
     ADMIN_USERNAME: str = "admin"
     COST_BY_HOUR: str = "0"
+    WEAR_BY_HOUR: str = "0"          # usure de l'imprimante, en euros par heure (12/11/2026)
 
 
 class SettingsUpdate(BaseModel):
@@ -119,6 +120,7 @@ class SettingsUpdate(BaseModel):
     ADMIN_USERNAME: Optional[str] = None
     ADMIN_PASSWORD: Optional[str] = None
     COST_BY_HOUR: Optional[str] = None
+    WEAR_BY_HOUR: Optional[str] = None
 
 
 @router.get("", response_model=SettingsOut)
@@ -135,6 +137,7 @@ async def get_settings(db: AsyncSession = Depends(get_db), _: str = Depends(get_
         PRINTER_NAME=all_s.get("PRINTER_NAME", ""),
         ADMIN_USERNAME=all_s.get("ADMIN_USERNAME", "admin"),
         COST_BY_HOUR=all_s.get("COST_BY_HOUR", "0"),
+        WEAR_BY_HOUR=all_s.get("WEAR_BY_HOUR", "0") or "0",
     )
 
 
@@ -157,21 +160,26 @@ async def update_settings(
                 await set_setting(db, field, value)
                 printer_changed = True
         else:
-            if field == "COST_BY_HOUR":
+            if field in ("COST_BY_HOUR", "WEAR_BY_HOUR"):
                 # « 0,20 » comme « 0.20 » : la virgule francaise faisait echouer
                 # le calcul du cout electrique (float("0,20")).
                 v = str(value or "").strip().replace(",", ".").replace(" ", "").replace("€", "")
                 try:
-                    value = str(float(v or 0))
+                    value = str(max(0.0, float(v or 0)))
                 except ValueError:
-                    raise HTTPException(400, "Tarif électrique invalide (ex. 0,20)")
+                    raise HTTPException(400, "Tarif invalide (ex. 0,20)")
+                # (12/11/2026) seulement s'il change : enregistrer la page relancait le recalcul de toutes les impressions
+                try:
+                    old = float(str(await get_setting(db, field) or 0).replace(",", ".") or 0)
+                except ValueError:
+                    old = None
+                if old != float(value):
+                    elec_changed = True
             # l'adresse ou l'identifiant changes seulement : enregistrer la page sans y toucher ne
             # relance pas la connexion a l'imprimante
             if field in ("PRINTER_IP", "PRINTER_ID") and str(await get_setting(db, field) or "") != str(value or ""):
                 printer_changed = True
             await set_setting(db, field, value)
-            if field == "COST_BY_HOUR":
-                elec_changed = True
 
     if printer_changed:
         ip   = await get_setting(db, "PRINTER_IP")
@@ -190,9 +198,17 @@ async def update_settings(
                 from ....models.print_history import Print
                 from sqlalchemy import select as _sel
                 from ....services.print_tracker import recalculate_print
+                from .prints import _propagate_from_print
                 async with AsyncSessionLocal() as db2:
-                    pids = (await db2.execute(_sel(Print.id).where(Print.status == "SUCCESS"))).scalars().all()
-                for pid in pids: await recalculate_print(pid)
+                    pids = (await db2.execute(_sel(Print.id).where(Print.status.in_(["SUCCESS", "PARTIAL", "FAILED", "TO_REDO"])))).scalars().all()
+                for pid in pids:
+                    await recalculate_print(pid)
+                    try:      # (12/11/2026) les objets nes de cette impression (ou de son groupe) suivent leur cout
+                        async with AsyncSessionLocal() as db3:
+                            await _propagate_from_print(db3, pid)
+                            await db3.commit()
+                    except Exception:
+                        pass
             try: loop.run_until_complete(_go())
             finally: loop.close()
         threading.Thread(target=_recalc_all, daemon=True).start()
@@ -468,6 +484,13 @@ async def ha_entities(kind: str = "", _: str = Depends(require_admin)):
         return await HA.entities(kind)
     except HA.HAError as e:
         _ha_err(e)
+
+
+@router.get("/ha/colors")
+async def ha_colors(_: str = Depends(get_current_user)):
+    """Les couleurs choisies pour les libelles du tarif (HC, Bleu HP…), pour la fiche et les stats."""
+    from ....services import home_assistant as HA
+    return {"colors": await HA.colors()}
 
 
 @router.get("/ha/live")

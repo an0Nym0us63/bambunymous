@@ -311,6 +311,7 @@ async def _migrate():
         ("prints",         "energy_source",    "TEXT"),
         ("prints",         "energy_slots",     "TEXT"),
         ("prints",         "energy_tries",     "INTEGER DEFAULT 0"),
+        ("prints",         "wear_cost",        "REAL DEFAULT 0"),
     ]
     async with engine.connect() as conn:
         for table, col, col_type in migrations:

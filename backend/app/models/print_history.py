@@ -48,7 +48,8 @@ class Print(Base):
     total_cost_filament         = Column(Float, default=0.0)  # prix bobine (override)
     total_cost_filament_normal  = Column(Float, default=0.0)  # prix filament de base
     electric_cost               = Column(Float, default=0.0)
-    total_cost                  = Column(Float, default=0.0)  # filament override + elec
+    wear_cost                   = Column(Float, default=0.0)  # usure de l'imprimante : duree x WEAR_BY_HOUR (12/11/2026)
+    total_cost                  = Column(Float, default=0.0)  # filament override + elec + usure
 
     number_of_items     = Column(Integer, default=1)
     sold_units          = Column(Integer, default=0)

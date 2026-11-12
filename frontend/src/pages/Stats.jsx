@@ -14,7 +14,7 @@ import HeaderAction from "../components/HeaderAction";
 import { WrappedBanner } from "../components/YearWrapped";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
-import { elecColor } from "../utils/elecColor";
+import { elecColor, useElecColors } from "../utils/elecColor";
 // les fiches viennent des autres pages, chargees a l'ouverture seulement (28/10/2026 : importees en dur, la page
 // Stats embarquait Impressions, Objets, Filaments et Succes entieres avant son premier affichage)
 import { PrintDetail, GroupBottomSheet, ObjectSheet, AccessorySheet, FilamentSheetFromSpool } from "../components/LazySheets";
@@ -1314,6 +1314,7 @@ const LAB_METRICS = [["prints", "Impressions", n => `${n}`], ["weight_g", "Poids
 // chaque libelle du tarif (heures creuses, jours rouges…) ; rien tant qu'aucune impression n'est mesuree
 function ElecStats({ period }) {
   const [d, setD] = useState(null);
+  useElecColors();
   useEffect(() => {
     client.get("/settings/ha/stats", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
       .then(r => setD(r.data)).catch(() => setD(null));

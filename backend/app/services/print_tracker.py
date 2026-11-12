@@ -959,6 +959,7 @@ async def _costs(db, p: Print):
     - cost (override) : grams × prix_bobine / poids_nominal
     - normal_cost     : grams × prix_filament / poids_nominal
     - electric_cost   : mesure par Home Assistant au tarif de chaque tranche (energy_cost) ; sinon durée_h × COST_BY_HOUR
+    - wear_cost       : durée_h × WEAR_BY_HOUR (usure de l'imprimante, 12/11/2026)
     """
     try:
         from ..services.settings_service import get_setting
@@ -1029,13 +1030,19 @@ async def _costs(db, p: Print):
         elec  = round(dur_h * rate, 4)
         if getattr(p, "energy_cost", None) is not None:     # mesuree (12/11/2026) : les vrais kWh, au bon prix
             elec = round(p.energy_cost, 4)
+        try:
+            wrate = float(str(await get_setting(db, "WEAR_BY_HOUR") or 0).replace(",", ".").strip() or 0)
+        except ValueError:
+            wrate = 0.0
+        wear = round(dur_h * max(0.0, wrate), 4)
+        p.wear_cost = wear
 
         p.total_weight_g             = total_w
         p.total_cost_filament        = round(total_c, 4)
         p.total_cost_filament_normal = round(total_cn, 4)
         p.electric_cost              = elec
-        p.total_cost                 = round(total_c + elec, 4)
-        logger.info(f"[COST] print #{p.id} : fil={total_c:.2f}€ fil_normal={total_cn:.2f}€ elec={elec:.2f}€ total={p.total_cost:.2f}€")
+        p.total_cost                 = round(total_c + elec + wear, 4)
+        logger.info(f"[COST] print #{p.id} : fil={total_c:.2f}€ fil_normal={total_cn:.2f}€ elec={elec:.2f}€ usure={wear:.2f}€ total={p.total_cost:.2f}€")
     except Exception as e:
         logger.error(f"_costs print #{getattr(p,'id','?')}: {e}", exc_info=True)
 

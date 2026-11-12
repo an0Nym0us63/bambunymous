@@ -45,6 +45,7 @@ class PrintOut(BaseModel):
     total_weight_g: float; total_cost_filament: float
     total_cost_filament_normal: float = 0.0
     electric_cost: float; total_cost: float
+    wear_cost: Optional[float] = 0.0         # usure de l'imprimante (12/11/2026)
     # mesure par Home Assistant (12/11/2026) : vide sans mesure
     energy_kwh: Optional[float] = None; energy_avg_w: Optional[float] = None; energy_cost: Optional[float] = None
     energy_source: Optional[str] = None; energy_labels: Optional[dict] = None
@@ -3136,8 +3137,8 @@ async def _propagate_object_costs(db, parent_type: str, parent_id: int):
         if not pr:
             return
         nb = max(1, pr.number_of_items or 1)
-        fab    = ((pr.total_cost_filament or 0) + (pr.electric_cost or 0)) / nb
-        normal = ((pr.total_cost_filament_normal or 0) + (pr.electric_cost or 0)) / nb
+        fab    = ((pr.total_cost_filament or 0) + (pr.electric_cost or 0) + (pr.wear_cost or 0)) / nb
+        normal = ((pr.total_cost_filament_normal or 0) + (pr.electric_cost or 0) + (pr.wear_cost or 0)) / nb
     elif parent_type == "group":
         g = await db.get(Group, parent_id)
         if not g:
@@ -3145,7 +3146,7 @@ async def _propagate_object_costs(db, parent_type: str, parent_id: int):
         members = (await db.execute(select(Print).where(Print.group_id == parent_id))).scalars().all()
         nb = max(1, g.number_of_items or 1)
         fab    = sum((m.total_cost or 0) for m in members) / nb
-        normal = sum(((m.total_cost_filament_normal or 0) + (m.electric_cost or 0)) for m in members) / nb
+        normal = sum(((m.total_cost_filament_normal or 0) + (m.electric_cost or 0) + (m.wear_cost or 0)) for m in members) / nb
     else:
         return
     objs = (await db.execute(

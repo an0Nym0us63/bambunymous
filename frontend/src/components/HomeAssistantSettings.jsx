@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
 import { showAlert } from "../utils/dialog";
 import { egg } from "../eggs";
+import { ELEC_PALETTE, elecDefault, setElecColors } from "../utils/elecColor";
 
 // Home Assistant (12/11/2026) : la prise de l'imprimante (etat, puissance, energie) et l'electricite reelle de chaque
 // impression, au tarif de l'abonnement (configure ici, ou lu chez Home Assistant). Le jeton se colle ici, jamais reaffiche.
@@ -36,7 +37,7 @@ export default function HomeAssistantSettings({ card, cardTitle }) {
   const [ents, setEnts] = useState({}), [ver, setVer] = useState(null), [live, setLive] = useState(null);
   const [el, setEl] = useState(null), [days, setDays] = useState("3650");
   const poll = useRef(null);
-  const take = d => { setS(d); setUrl(d.url || ""); setEl(e => e || d.elec); };
+  const take = d => { setS(d); setUrl(d.url || ""); setEl(e => e || d.elec); setElecColors(d.colors); };
   const load = () => client.get("/settings/ha").then(r => {
     take(r.data);
     clearTimeout(poll.current);
@@ -52,7 +53,7 @@ export default function HomeAssistantSettings({ card, cardTitle }) {
 
   const put = async (body) => {
     setBusy(true);
-    try { const r = await client.put("/settings/ha", body); setS(r.data); return r.data; }
+    try { const r = await client.put("/settings/ha", body); setS(r.data); setElecColors(r.data.colors); return r.data; }
     catch (e) { err(e); return null; }
     finally { setBusy(false); }
   };
@@ -158,6 +159,29 @@ export default function HomeAssistantSettings({ card, cardTitle }) {
         <div><button type="button" disabled={busy} onClick={saveElec} style={btn(true, busy)}>Enregistrer l'abonnement</button></div>
         {el.mode !== "hour" && <p style={note}>Chaque impression mesurée est comptée par tranches de 15 minutes, chacune à son prix : une impression de 22 h à 8 h est
           comptée en partie en heures pleines, en partie en heures creuses. Changer de tarif reprend le prix de toutes les impressions déjà mesurées.</p>}
+
+        {/* (12/11/2026) la couleur de chaque libelle : la barre de la fiche d'une impression et les stats */}
+        {(s.labels || []).length > 0 && <>
+          <p style={sub}>🎨 Couleurs des libellés</p>
+          <p style={note}>Pour la barre des tarifs sur la fiche d'une impression et pour les stats. Les libellés viennent de l'abonnement et des impressions déjà mesurées.</p>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {s.labels.map(l => { const cur = (s.colors || {})[l] || elecDefault(l), mine = !!(s.colors || {})[l];
+              return <div key={l} style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                <span style={{ display:"inline-flex", alignItems:"center", gap:6, minWidth:96, fontSize:12.5, fontWeight:800, color:"var(--text)" }}>
+                  <span style={{ width:14, height:14, borderRadius:4, background:cur, flexShrink:0 }}/>{l}</span>
+                <div role="radiogroup" aria-label={`Couleur de ${l}`} style={{ display:"grid", gridTemplateColumns:"repeat(8, 22px)", gap:4 }}>
+                  {ELEC_PALETTE.map(c => { const on = mine && cur.toLowerCase() === c.toLowerCase();
+                    return <button key={c} type="button" role="radio" aria-checked={on} aria-label={c} data-tip={c}
+                      onClick={() => put({ colors: { [l]: c } })}
+                      style={{ width:22, height:22, borderRadius:6, background:c, cursor:"pointer", padding:0,
+                        border: on ? "2px solid var(--text)" : "1px solid color-mix(in srgb, var(--text) 18%, transparent)",
+                        boxShadow: on ? `0 0 0 2px ${c}55` : "none" }}/>; })}
+                </div>
+                {mine && <button type="button" onClick={() => put({ colors: { [l]: null } })}
+                  style={{ ...btn(false), padding:"4px 9px", fontSize:11.5 }}>Par défaut</button>}
+              </div>; })}
+          </div>
+        </>}
 
         {/* le rattrapage */}
         {s.configured && <>

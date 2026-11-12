@@ -163,7 +163,7 @@ _DENY_WRITE = [re.compile(p) for p in (
     r"^/api/v1/share/telegram/(login|logout)", r"^/api/v1/notify/devices",
 )]
 # PATCH /settings : la connexion a l'imprimante et l'administrateur restent a l'appli ; le reste (tarif, nom) passe
-_SETTINGS_OPEN = {"COST_BY_HOUR", "PRINTER_NAME", "PRINTER_MODEL"}
+_SETTINGS_OPEN = {"COST_BY_HOUR", "WEAR_BY_HOUR", "PRINTER_NAME", "PRINTER_MODEL"}
 # (« key » seul n'est pas un secret : c'est la cle d'un plateau du planning, d'une alerte… ; les cles d'API sont « api_key »)
 _SECRET_KEY = re.compile(r"(pass(word|wd)?|secret|token|api_?key|access_?code|cookie|session|_hash$|private_?key)", re.I)
 _SECRET_VAL = re.compile(r"\b(sk-ant-[\w-]{8,}|fk_[\w-]{8,}|mcp_[\w-]{8,}|gh[pousr]_[\w]{12,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{6,})")
@@ -182,7 +182,7 @@ def guard(method: str, path: str, mode: str, body=None) -> None:
         if any(p.search(path) for p in _DENY_WRITE):
             raise ToolError("Cette écriture n'est pas ouverte au MCP (comptes, copains, connexions et identifiants) : fais-la dans l'appli.")
         if path == API + "/settings" and m == "PATCH" and (not isinstance(body, dict) or set(body) - _SETTINGS_OPEN):
-            raise ToolError("Ici, seuls COST_BY_HOUR, PRINTER_NAME et PRINTER_MODEL : la connexion à l'imprimante et le compte admin restent à l'appli.")
+            raise ToolError("Ici, seuls COST_BY_HOUR, WEAR_BY_HOUR, PRINTER_NAME et PRINTER_MODEL : la connexion à l'imprimante et le compte admin restent à l'appli.")
 
 
 def redact(v, key: str = ""):

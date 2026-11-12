@@ -2192,6 +2192,8 @@ export default function Settings() {
   const [saved,   setSaved]   = useState(false);
   const [loading, setLoading] = useState(true);
   const [resetting,    setResetting]    = useState(false);
+  const [wear, setWear] = useState(""), [wear0, setWear0] = useState(""), [cost0, setCost0] = useState("");
+  const [ha, setHa] = useState(null);     // Home Assistant mesure-t-il l'electricite ? (le tarif horaire passe en repli)
   const [version, setVersion] = useState(null);
 
   useEffect(() => {
@@ -2205,9 +2207,11 @@ export default function Settings() {
       setPmodels(data.PRINTER_MODELS ?? []);
       setPauto(data.PRINTER_MODEL_AUTO ?? "");
       setUser(data.ADMIN_USERNAME ?? "admin");
-      setCost(data.COST_BY_HOUR ?? "0");
+      setCost(data.COST_BY_HOUR ?? "0"); setCost0(data.COST_BY_HOUR ?? "0");
+      setWear(data.WEAR_BY_HOUR ?? "0"); setWear0(data.WEAR_BY_HOUR ?? "0");
       setLoading(false);
     });
+    client.get("/settings/ha").then(({ data }) => setHa(data)).catch(() => {});
   }, []);
 
   const handleSave = async (e) => {
@@ -2220,9 +2224,12 @@ export default function Settings() {
     if (pname)  payload.PRINTER_NAME   = pname;
     payload.PRINTER_MODEL = pmodel;     // vide = automatique
     // Les identifiants ne sont plus geres ici : voir "Mon compte" et "Utilisateurs".
-    if (cost)   payload.COST_BY_HOUR   = cost;
+    // (12/11/2026) seulement s'ils changent : chacun relance le calcul du cout de toutes les impressions
+    if (cost && cost !== cost0) payload.COST_BY_HOUR = cost;
+    if (wear !== wear0) payload.WEAR_BY_HOUR = wear || "0";
     try {
       await client.patch("/settings", payload);
+      setCost0(cost); setWear0(wear);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch(err) {
@@ -2415,14 +2422,26 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Électricité */}
+        {/* Électricité, et l'usure de l'imprimante (12/11/2026) */}
         <div className="card" style={card}>
-          <div style={cardTitle}>Électricité</div>
-          <div style={{ maxWidth:200 }}>
-            {F("Tarif (€/h)", cost, setCost, { placeholder:"0.20" })}
-          </div>
-          <p style={{ fontSize:11.5, color:"var(--muted)", margin:"8px 0 0", lineHeight:1.4 }}>Une estimation : la durée × ce tarif. Avec une prise branchée
-            dans Home Assistant et un abonnement choisi (Connexions › Home Assistant), chaque impression compte ses vrais kWh, à leur prix.</p>
+          <div style={cardTitle}>Électricité et usure</div>
+          {(() => { const real = !!(ha?.configured && ha?.elec?.mode && ha.elec.mode !== "hour");
+            return <>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))", gap:12 }}>
+                <div style={{ opacity: real ? 0.6 : 1 }}>
+                  {F(real ? "Tarif électrique (€/h) · repli" : "Tarif électrique (€/h)", cost, setCost, { placeholder:"0.20" })}
+                </div>
+                {F("Usure de l'imprimante (€/h)", wear, setWear, { placeholder:"0.10" })}
+              </div>
+              {real
+                ? <p style={{ fontSize:11.5, color:"#16a34a", fontWeight:700, margin:"8px 0 0", lineHeight:1.4 }}>⚡ Non utilisé : l'électricité est suivie en réel par
+                    Home Assistant (les kWh de chaque impression, au prix de ton abonnement). Ce tarif ne sert plus que de repli, pour une impression
+                    qui n'a pas pu être mesurée.</p>
+                : <p style={{ fontSize:11.5, color:"var(--muted)", margin:"8px 0 0", lineHeight:1.4 }}>Une estimation : la durée × ce tarif. Avec une prise branchée
+                    dans Home Assistant et un abonnement choisi (Connexions › Home Assistant), chaque impression compte ses vrais kWh, à leur prix.</p>}
+              <p style={{ fontSize:11.5, color:"var(--muted)", margin:"6px 0 0", lineHeight:1.4 }}>L'usure (buse, plateau, courroies, entretien…) : la durée × ce
+                montant, détaillée à côté de l'électricité et comptée dans le coût de chaque impression, donc dans celui des objets qui en naissent.</p>
+            </>; })()}
         </div>
 
 

@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 logger = logging.getLogger(__name__)
 
 K_URL, K_TOKEN, K_CFG, K_ELEC, K_TEMPO, K_RUN = "HA_URL", "HA_TOKEN", "HA_CFG", "ELEC_TARIFF", "TEMPO_DAYS", "HA_BACKFILL"
+K_COLORS = "ELEC_COLORS"                         # {libelle: couleur} choisies dans Parametres (12/11/2026)
 MODES = ("hour", "base", "hchp", "tempo", "ha")
 AUTO_DAYS = 3650                                 # le rattrapage d'office, au premier branchement : tout
 SLOT = 15 * 60                                   # une tranche : 15 minutes
@@ -90,11 +91,39 @@ async def configured() -> bool:
     return bool(await _get(K_URL, "") and await _get(K_TOKEN, "") and (c["energy"] if c["meter"] == "energy" else c["power"]))
 
 
+async def colors() -> dict:
+    return {k: v for k, v in _j(await _get(K_COLORS, ""), {}).items() if isinstance(v, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v)}
+
+
+async def known_labels() -> list:
+    """Les libelles qu'on connait : ceux de l'abonnement choisi, puis ceux des impressions mesurees (les plus recentes)."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    e = await elec()
+    out = {"base": ["Base"], "hchp": ["HC", "HP"],
+           "tempo": [f"{c.capitalize()} {h}" for c in TEMPO for h in ("HC", "HP")]}.get(e["mode"], [])[:]
+    try:
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(select(Print.energy_slots).where(Print.energy_slots.is_not(None))
+                                     .order_by(Print.id.desc()).limit(300))).scalars().all()
+        for raw in rows:
+            for r in _j(raw, []):
+                if len(r) >= 4 and r[3] and r[3] not in out:
+                    out.append(r[3])
+    except Exception:
+        logger.exception("[HA] libelles")
+    for k in await colors():
+        if k not in out:
+            out.append(k)
+    return out[:40]
+
+
 async def settings_get() -> dict:
     c, e = await cfg(), await elec()
     run = _j(await _get(K_RUN, ""), {})
     return {"url": await _get(K_URL, ""), "has_token": bool(await _get(K_TOKEN, "")), **c, "elec": e,
-            "configured": await configured(), "backfill": run}
+            "configured": await configured(), "backfill": run, "colors": await colors(), "labels": await known_labels()}
 
 
 _ENT = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
@@ -121,6 +150,15 @@ async def settings_set(body: dict) -> dict:
     if body.get("meter") in ("energy", "power"):
         c["meter"] = body["meter"]
     await _set(K_CFG, json.dumps(c))
+    if isinstance(body.get("colors"), dict):        # {libelle: "#rrggbb"} ; null : la couleur par defaut
+        col = await colors()
+        for k, v in body["colors"].items():
+            k = str(k)[:40]
+            if v is None:
+                col.pop(k, None)
+            elif isinstance(v, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v):
+                col[k] = v
+        await _set(K_COLORS, json.dumps(col))
     # (12/11/2026) la prise vient d'etre branchee : on remonte d'office tout ce que Home Assistant a garde (le detail sur
     # une dizaine de jours, puis les statistiques a l'heure) ; une impression d'avant la prise n'a rien et passe
     if not was and await configured() and not _j(await _get(K_RUN, ""), {}).get("at"):

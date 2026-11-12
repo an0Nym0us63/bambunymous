@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { elecColor } from "../utils/elecColor";
+import { elecColor, useElecColors } from "../utils/elecColor";
 import { usePromotedTabs, tabLabel } from "../utils/navMenu";
 import { colorBg, parseColorsList, finishOf } from "../utils/colors";
 import HiddenMark from "../components/HiddenMark";
@@ -1597,7 +1597,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
     catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
   const costFil = p.total_cost_filament || 0, costNormal = p.total_cost_filament_normal || 0, costElec = p.electric_cost || 0;
-  const totalBobine = costFil + costElec, totalNormal = costNormal + costElec;
+  const costWear = p.wear_cost || 0;                   // usure de l'imprimante (12/11/2026)
+  const totalBobine = costFil + costElec + costWear, totalNormal = costNormal + costElec + costWear;
   const [stL, stC, stI] = V2_STATUS[p.status] || [p.status || "—", "#94a3b8", "•"];
   const [day, hour] = whenFr(utcDate(p.print_date));
   const dur = p.duration_seconds || p.estimated_seconds;
@@ -1729,7 +1730,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
           flexDirection: "column", gap: 7, fontSize: 12.5, background: "radial-gradient(80% 60% at 100% 0%, #16A34A18, transparent 70%), var(--surface2)" }}>
           {/* le prix reel en couleur, puis le prix normal entre parentheses */}
           {[["🧵", "Filament", eur2(costFil), eur2(costNormal), "#F97316", "#FDBA74"], ["⚡", "Électricité", eur2(costElec), null, "#EAB308", "#FDE047"],
-            ["💶", "Total", eur2(totalBobine), eur2(totalNormal), "#16A34A", "#4ADE80"]].map(([ic, l, v, s, c1, c2]) => (
+            costWear > 0 && ["🛠", "Usure", eur2(costWear), null, "#64748B", "#94A3B8"],
+            ["💶", "Total", eur2(totalBobine), eur2(totalNormal), "#16A34A", "#4ADE80"]].filter(Boolean).map(([ic, l, v, s, c1, c2]) => (
             <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: l === "Total" ? "6px 0 0" : 0,
               borderTop: l === "Total" ? "1px dashed var(--border)" : "none" }}>
               <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
@@ -2024,10 +2026,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   const totalW = prints.reduce((s, x) => s + (x.total_weight_g || 0), 0);
   // le prix reel (total_cost) et, entre parentheses, le prix normal (filament au tarif catalogue + electricite)
   const totalCost = prints.reduce((s, x) => s + (x.total_cost || 0), 0);
-  const totalNormal = prints.reduce((s, x) => s + (x.total_cost_filament_normal || 0) + (x.electric_cost || 0), 0);
+  const totalNormal = prints.reduce((s, x) => s + (x.total_cost_filament_normal || 0) + (x.electric_cost || 0) + (x.wear_cost || 0), 0);
   // (10/11/2026) le detail comme sur la fiche d'une impression : le filament (ce qui n'est pas l'electricite, pour que
   // les lignes fassent le total) et l'electricite
-  const totalElec = prints.reduce((s, x) => s + (x.electric_cost || 0), 0), totalFil = totalCost - totalElec, totalFilN = totalNormal - totalElec;
+  const totalElec = prints.reduce((s, x) => s + (x.electric_cost || 0), 0);
+  const totalWear = prints.reduce((s, x) => s + (x.wear_cost || 0), 0);     // usure de l'imprimante (12/11/2026)
+  const totalFil = totalCost - totalElec - totalWear, totalFilN = totalNormal - totalElec - totalWear;
   const filsMap = {};
   prints.forEach(x => (x.filament_usage || []).forEach(f => {
     const key = f.spool_id || f.color_hex || f.filament_name || "?";
@@ -2235,7 +2239,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         <div style={{ padding: "10px 12px", borderRadius: 16, border: "1px solid color-mix(in srgb, #16A34A 22%, var(--border))", display: "flex",
           flexDirection: "column", gap: 7, fontSize: 12.5, background: "radial-gradient(80% 60% at 100% 0%, #16A34A18, transparent 70%), var(--surface2)" }}>
           {[["🧵", "Filament", eur2(totalFil), eur2(totalFilN), "#F97316", "#FDBA74"], ["⚡", "Électricité", eur2(totalElec), null, "#EAB308", "#FDE047"],
-            ["💶", "Total", eur2(totalCost), eur2(totalNormal), "#16A34A", "#4ADE80"]].map(([ic, l, v, s, c1, c2]) => (
+            totalWear > 0 && ["🛠", "Usure", eur2(totalWear), null, "#64748B", "#94A3B8"],
+            ["💶", "Total", eur2(totalCost), eur2(totalNormal), "#16A34A", "#4ADE80"]].filter(Boolean).map(([ic, l, v, s, c1, c2]) => (
             <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: l === "Total" ? "6px 0 0" : 0,
               borderTop: l === "Total" ? "1px dashed var(--border)" : "none" }}>
               <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
@@ -3242,6 +3247,7 @@ const LIST_CACHE = { key: null, data: null };
 // puissance moyenne, la part de chaque libelle du tarif ; « ≈ » quand elle vient des statistiques horaires
 function EnergyLine({ p, isAdmin, onMeasured }) {
   const [busy, setBusy] = useState(false);
+  useElecColors();
   const measure = async () => {
     setBusy(true);
     try { await client.post(`/settings/ha/measure/${p.id}`); onMeasured?.(); }
@@ -3266,11 +3272,17 @@ function EnergyLine({ p, isAdmin, onMeasured }) {
         style={{ marginLeft: "auto", fontSize: 11, padding: "2px 8px", borderRadius: 7, border: "1px solid var(--border)", background: "none",
           color: "var(--muted)", cursor: busy ? "wait" : "pointer", fontWeight: 700 }}>{busy ? "…" : "↻"}</button>}
     </div>
-    {labs.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-      {labs.map(([l, v]) => <span key={l} data-tip={kwh(v)} style={{ padding: "1px 8px", borderRadius: 999, fontSize: 11, fontWeight: 800,
-        background: `color-mix(in srgb, ${elecColor(l)} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${elecColor(l)} 35%, transparent)`,
-        color: "var(--text)" }}>{l} · {tot ? Math.round(v / tot * 100) : 0} %</span>)}
-    </div>}
+    {/* (12/11/2026) la part de chaque libelle (HC, Bleu HP…) en une barre, aux couleurs choisies dans les parametres */}
+    {labs.length > 0 && tot > 0 && <>
+      <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--surface)", gap: 1 }}>
+        {labs.map(([l, v]) => <span key={l} data-tip={`${l} · ${kwh(v)} · ${Math.round(v / tot * 100)} %`}
+          style={{ width: `${v / tot * 100}%`, minWidth: 3, background: elecColor(l) }}/>)}
+      </div>
+      <div style={{ display: "flex", gap: "3px 10px", flexWrap: "wrap", fontSize: 11, fontWeight: 700 }}>
+        {labs.map(([l, v]) => <span key={l} data-tip={kwh(v)} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: elecColor(l) }}/>{l} · {Math.round(v / tot * 100)} %</span>)}
+      </div>
+    </>}
   </div>;
 }
 

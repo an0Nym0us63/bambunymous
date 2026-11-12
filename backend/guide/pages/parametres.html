@@ -37,9 +37,10 @@
     <dt>Modèle</dt><dd><span class="ui">Automatique</span> (déduit du numéro de série, le modèle trouvé est indiqué entre parenthèses) ou un modèle précis. Il sert à MakerWorld : profil fait pour ton imprimante, compatibilité, fichier ouvert dans Studio.</dd>
     <dt>Nom affiché</dt><dd>Le nom de ton imprimante dans l'appli.</dd>
   </dl>
-  <h4>Carte « Électricité »</h4>
+  <h4>Carte « Électricité et usure »</h4>
   <dl class="opts">
-    <dt>Tarif (€/h)</dt><dd>Ce que coûte une heure d'impression en électricité (par défaut 0). La virgule (« 0,20 »), le symbole € et les espaces sont acceptés. Il entre dans le coût de chaque impression tant qu'elle n'est pas <b>mesurée</b> : avec une prise branchée dans <a href="#parametres-links-ha">Home Assistant</a> et un abonnement choisi, ce sont ses vrais kWh, à leur prix.</dd>
+    <dt>Tarif (€/h)</dt><dd>Ce que coûte une heure d'impression en électricité (par défaut 0). La virgule (« 0,20 »), le symbole € et les espaces sont acceptés. Il entre dans le coût de chaque impression tant qu'elle n'est pas <b>mesurée</b> : avec une prise branchée dans <a href="#parametres-links-ha">Home Assistant</a> et un abonnement choisi, ce sont ses vrais kWh, à leur prix. La carte le dit alors (« Non utilisé : suivi réel par Home Assistant ») et le champ, grisé, devient « repli » : il ne sert plus qu'à une impression qui n'a pas pu être mesurée.</dd>
+    <dt>Usure de l'imprimante (€/h)</dt><dd>Ce que coûte une heure d'impression en usure (buse, plateau, courroies, entretien ; par défaut 0). La durée × ce montant s'ajoute au coût de chaque impression, détaillée sur sa ligne <span class="ui">🛠 Usure</span>, et passe dans le coût des objets qui en naissent (à leur part : une impression de 4 pièces en donne un quart à chacune). Changer l'un de ces deux montants recalcule toutes les impressions et leurs objets.</dd>
   </dl>
   <p>Touche <span class="ui">Sauvegarder</span> : le bouton affiche <span class="ui">Sauvegardé ✓</span> quelques secondes.</p>
   <ul>
@@ -341,6 +342,7 @@
         </dl>
         Chaque impression est comptée par <b>tranches de 15 minutes</b>, chacune à son prix et son libellé : une impression de 22 h à 8 h l'est en partie en heures pleines, en partie en heures creuses. Changer de tarif reprend le prix de toutes les impressions déjà mesurées (leurs kWh ne bougent pas).</li>
       <li><b>La mesure</b> : deux minutes après la fin d'une impression, l'appli lit chez Home Assistant l'historique de la prise entre son début et sa fin (une tâche de fond rattrape toutes les 30 min celles des 7 derniers jours qui l'auraient manquée). <b>Au premier branchement</b>, elle remonte d'elle-même toutes les impressions passées que Home Assistant peut encore mesurer : le détail sur une dizaine de jours, puis ses statistiques à l'heure (gardées sans limite pour un compteur ; une impression plus courte qu'une heure en prend sa part, marquée « ≈ »). Une impression d'avant la prise passe, sans erreur. <b>⏪ Les impressions passées</b> relance ce rattrapage sur le nombre de jours voulu.</li>
+      <li><b>🎨 Couleurs des libellés</b> : chaque libellé connu (ceux de l'abonnement, puis ceux des impressions déjà mesurées : HC, Bleu HP…) a sa ligne ; touche une couleur du tableau pour la lui donner, <span class="ui">Par défaut</span> revient à la sienne. Elle colore la barre des tarifs sur la fiche d'une impression et les stats.</li>
     </ol>
   </section>
   <section id="parametres-links-copains">
