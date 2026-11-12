@@ -2194,7 +2194,29 @@ export default function Settings() {
   const [resetting,    setResetting]    = useState(false);
   const [wear, setWear] = useState(""), [wear0, setWear0] = useState(""), [cost0, setCost0] = useState("");
   const [ha, setHa] = useState(null);
-  const [recalc, setRecalc] = useState(false);   // (12/11/2026) le recalcul des couts en fond, apres un changement de tarif ou d'usure     // Home Assistant mesure-t-il l'electricite ? (le tarif horaire passe en repli)
+  const [recalc, setRecalc] = useState(false);   // (12/11/2026) le recalcul des couts en fond, apres un changement de tarif ou d'usure
+  const [rateMsg, setRateMsg] = useState(null);
+  // (12/11/2026) le tarif electrique et l'usure s'enregistrent seuls, en quittant le champ (ou Entree) : avec le seul bouton
+  // « Sauvegarder » du bas de page, une usure changee ne partait jamais et rien n'etait recalcule
+  const saveRate = async (field, v, v0, set0) => {
+    const val = String(v ?? "").trim() || "0";
+    if (val === String(v0 ?? "").trim()) return;
+    try {
+      await client.patch("/settings", { [field]: val });
+      set0(val);
+      setRateMsg(`✓ ${field === "WEAR_BY_HOUR" ? "Usure enregistrée" : "Tarif enregistré"} : recalcul du coût de toutes les impressions et de leurs objets en fond`);
+      setTimeout(() => { setRateMsg(null); window.dispatchEvent(new CustomEvent("bn-prints-changed", { detail: {} })); }, 20000);
+    } catch (e) { setRateMsg(null); showAlert(e.response?.data?.detail || e.message); }
+  };
+  const rateInput = (label, value, set, field, v0, set0, ph) => (
+    <div>
+      <label style={lbl}>{label}</label>
+      <input type="text" inputMode="decimal" value={value} placeholder={ph} onChange={e => set(e.target.value)} style={inp}
+        onFocus={e => e.target.style.borderColor="#3b82f6"}
+        onBlur={e => { e.target.style.borderColor="var(--border)"; saveRate(field, value, v0, set0); }}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}/>
+    </div>
+  );     // Home Assistant mesure-t-il l'electricite ? (le tarif horaire passe en repli)
   const [version, setVersion] = useState(null);
 
   useEffect(() => {
@@ -2435,9 +2457,9 @@ export default function Settings() {
             return <>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))", gap:12 }}>
                 <div style={{ opacity: real ? 0.6 : 1 }}>
-                  {F(real ? "Tarif électrique (€/h) · repli" : "Tarif électrique (€/h)", cost, setCost, { placeholder:"0.20" })}
+                  {rateInput(real ? "Tarif électrique (€/h) · repli" : "Tarif électrique (€/h)", cost, setCost, "COST_BY_HOUR", cost0, setCost0, "0.20")}
                 </div>
-                {F("Usure de l'imprimante (€/h)", wear, setWear, { placeholder:"0.10" })}
+                {rateInput("Usure de l'imprimante (€/h)", wear, setWear, "WEAR_BY_HOUR", wear0, setWear0, "0.10")}
               </div>
               {real
                 ? <p style={{ fontSize:11.5, color:"#16a34a", fontWeight:700, margin:"8px 0 0", lineHeight:1.4 }}>⚡ Non utilisé : l'électricité est suivie en réel par
@@ -2445,7 +2467,8 @@ export default function Settings() {
                     qui n'a pas pu être mesurée.</p>
                 : <p style={{ fontSize:11.5, color:"var(--muted)", margin:"8px 0 0", lineHeight:1.4 }}>Une estimation : la durée × ce tarif. Avec une prise branchée
                     dans Home Assistant et un abonnement choisi (Connexions › Home Assistant), chaque impression compte ses vrais kWh, à leur prix.</p>}
-              <p style={{ fontSize:11.5, color:"var(--muted)", margin:"6px 0 0", lineHeight:1.4 }}>L'usure (buse, plateau, courroies, entretien…) : la durée × ce
+              {rateMsg && <p style={{ fontSize:12, color:"#16a34a", fontWeight:800, margin:"8px 0 0", lineHeight:1.4 }}>{rateMsg}</p>}
+              <p style={{ fontSize:11.5, color:"var(--muted)", margin:"6px 0 0", lineHeight:1.4 }}>Ces deux montants s'enregistrent seuls dès que tu quittes le champ. L'usure (buse, plateau, courroies, entretien…) : la durée × ce
                 montant, détaillée à côté de l'électricité et comptée dans le coût de chaque impression, donc dans celui des objets qui en naissent.</p>
             </>; })()}
         </div>
