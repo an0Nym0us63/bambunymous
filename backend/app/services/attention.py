@@ -663,20 +663,26 @@ async def _filaments_unused(db) -> list[Alert]:
     signaler deux fois ne servirait a rien.
     """
     cutoff = datetime.utcnow() - timedelta(days=UNUSED_DAYS)
-    # le dernier usage de chaque filament, sur ses bobines actives (le MAX du SQL : les vides ne comptent pas)
+    # le dernier usage de chaque filament, sur ses bobines actives (le MAX du SQL : les vides ne comptent pas) ; et
+    # (12/11/2026) son arrivee : la bobine la plus recente, sinon l'ajout du filament -- un filament tout juste recu
+    # n'a jamais servi, il ne « dort » pas depuis six mois pour autant
     lasts: dict = {}
     for s, f in await _pairs(db):
-        e = lasts.setdefault(f.id, [f, None])
+        e = lasts.setdefault(f.id, [f, None, getattr(f, "created_at", None)])
         if s.last_used_at is not None and (e[1] is None or s.last_used_at > e[1]):
             e[1] = s.last_used_at
-    rows = [(f, last) for f, last in lasts.values() if last is None or last < cutoff]
+        got = getattr(s, "created_at", None)
+        if got is not None and (e[2] is None or got > e[2]):
+            e[2] = got
+    rows = [(f, last, got) for f, last, got in lasts.values()
+            if max(x for x in (last, got, datetime.min) if x is not None) < cutoff]
     out = []
-    for f, last in rows:
+    for f, last, got in rows:
         if last:
             days = (datetime.utcnow() - last).days
             value = f"{days // 30} mois"
         else:
-            value = "jamais"
+            value = f"jamais · reçu il y a {(datetime.utcnow() - got).days // 30} mois" if got else "jamais"
         out.append(Alert(
             key=f"unused:filament:{f.id}",
             category="unused",
