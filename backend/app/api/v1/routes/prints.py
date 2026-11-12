@@ -113,6 +113,10 @@ def _purged_count_model(did) -> int:
 
 def _print_to_out(p: Print, gcache: Optional[dict] = None, snaps: Optional[dict] = None) -> dict:
     d = {col.name: getattr(p, col.name) for col in p.__table__.columns}
+    # (12/11/2026) l'electricite mesuree : la part de chaque libelle (un champ calcule, absent des colonnes : la barre
+    # des tarifs ne s'affichait jamais) ; les tranches brutes restent en base (lourdes : 288 Ko pour 64 impressions)
+    d["energy_labels"] = p.energy_labels
+    d.pop("energy_slots", None)
     d["filament_usage"] = [_usage_to_dict(u) for u in (p.filament_usage or [])]
     # snaps : les captures deja lues en lignes simples, par impression (la liste) ; sinon la relation
     d["snapshots"] = snaps.get(p.id, []) if snaps is not None else [

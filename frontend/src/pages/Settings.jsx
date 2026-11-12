@@ -2193,7 +2193,8 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [resetting,    setResetting]    = useState(false);
   const [wear, setWear] = useState(""), [wear0, setWear0] = useState(""), [cost0, setCost0] = useState("");
-  const [ha, setHa] = useState(null);     // Home Assistant mesure-t-il l'electricite ? (le tarif horaire passe en repli)
+  const [ha, setHa] = useState(null);
+  const [recalc, setRecalc] = useState(false);   // (12/11/2026) le recalcul des couts en fond, apres un changement de tarif ou d'usure     // Home Assistant mesure-t-il l'electricite ? (le tarif horaire passe en repli)
   const [version, setVersion] = useState(null);
 
   useEffect(() => {
@@ -2230,6 +2231,11 @@ export default function Settings() {
     try {
       await client.patch("/settings", payload);
       setCost0(cost); setWear0(wear);
+      if (payload.COST_BY_HOUR != null || payload.WEAR_BY_HOUR != null) {
+        // le serveur recalcule toutes les impressions et leurs objets en fond : les listes ouvertes se relisent ensuite
+        setRecalc(true);
+        setTimeout(() => { setRecalc(false); window.dispatchEvent(new CustomEvent("bn-prints-changed", { detail: {} })); }, 20000);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch(err) {
@@ -2453,6 +2459,8 @@ export default function Settings() {
           {saving ? <RefreshCw size={15} style={{ animation:"spin 1s linear infinite" }} /> : <Save size={15} />}
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
+        {recalc && <p style={{ fontSize:12, fontWeight:700, color:"#16a34a", margin:"-6px 0 0" }}>⟳ Recalcul du coût de toutes les impressions et de leurs objets, en fond
+          (quelques secondes). Une fiche déjà ouverte se met à jour à sa prochaine ouverture.</p>}
       </form>
       {/* le decalage d'humidite de chaque AMS (03/11/2026) : enregistre tout de suite, hors du formulaire */}
       <div style={{ marginTop:16 }}><HumidityOffsetCard card={card} cardTitle={cardTitle}/></div>

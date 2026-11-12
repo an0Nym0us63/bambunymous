@@ -572,12 +572,108 @@ async def _resolver(t0: datetime, t1: datetime):
     # mode « ha » : le prix et le libelle en cours, lus dans leur historique
     if not e["price_entity"]:
         return lambda t: (None, None)
-    pst = await _api(f"/states/{e['price_entity']}")
-    div = 100.0 if re.search(r"c(t|ts|ents?)?\s*(€|eur)|c€", _unit(pst).lower()) else 1.0
-    price = _step([(t, (_f(v) / div) if _f(v) is not None else None) for t, v in await _history(e["price_entity"], t0, t1)])
-    label = _step([(t, v if v not in (None, "unknown", "unavailable", "") else None)
-                   for t, v in await _history(e["label_entity"], t0, t1)]) if e["label_entity"] else (lambda t: None)
-    return lambda t: (price(t), label(t))
+    div = await _price_div(e["price_entity"])
+    ppts = [(t, (_f(v) / div) if _f(v) is not None else None) for t, v in await _history(e["price_entity"], t0, t1)]
+    lpts = [(t, v if v not in (None, "unknown", "unavailable", "") else None)
+            for t, v in await _history(e["label_entity"], t0, t1)] if e["label_entity"] else []
+    price, label = _step(ppts), _step(lpts) if lpts else (lambda t: None)
+    # (12/11/2026) avant ce que Home Assistant garde (une dizaine de jours) : ce que l'historique recent apprend --
+    # le prix de chaque libelle, sa couleur Tempo et ses heures creuses -- applique a la couleur du jour et a l'heure
+    first = ppts[0][0] if ppts else None
+    if first is not None and first <= t0 + timedelta(minutes=5):
+        return lambda t: (price(t), label(t))
+    past = await _past_resolver(t0, t1)
+    if first is None:
+        return past
+    return lambda t: (price(t), label(t)) if t >= first else past(t)
+
+
+async def _price_div(eid: str) -> float:
+    pst = await _api(f"/states/{eid}")
+    return 100.0 if re.search(r"c(t|ts|ents?)?\s*(€|eur)|c€", _unit(pst).lower()) else 1.0
+
+
+_LEARN = {"at": 0.0, "v": None}
+
+
+def _hc_of(label: str):
+    s = str(label or "").lower()
+    if re.search(r"\bhc\b|creuse", s):
+        return True
+    if re.search(r"\bhp\b|pleine", s):
+        return False
+    return None
+
+
+async def _learn() -> dict:
+    """Ce que les 14 derniers jours apprennent (12/11/2026), garde une heure : {libelle: {price, color, hc}} et les
+    quarts d'heure (heure locale) passes en heures creuses. Le prix d'un libelle : le plus frequent sur ses periodes."""
+    import time as _time
+    from collections import Counter
+    if _LEARN["v"] is not None and _time.monotonic() - _LEARN["at"] < 3600:
+        return _LEARN["v"]
+    e, tz = await elec(), _tz()
+    t1 = datetime.now(timezone.utc)
+    t0 = t1 - timedelta(days=14)
+    div = await _price_div(e["price_entity"])
+    ppts = [(t, (_f(v) / div) if _f(v) is not None else None) for t, v in await _history(e["price_entity"], t0, t1)]
+    lpts = [(t, v) for t, v in await _history(e["label_entity"], t0, t1)
+            if v not in (None, "unknown", "unavailable", "")] if e["label_entity"] else []
+    price = _step(ppts)
+    prices, hcq, hpq = {}, Counter(), Counter()
+    for i, (t, lab) in enumerate(lpts):
+        end = lpts[i + 1][0] if i + 1 < len(lpts) else t1
+        p = price(t + (end - t) / 2)
+        if p is not None:
+            prices.setdefault(lab, Counter())[round(p, 5)] += 1
+        hc = _hc_of(lab)
+        q = t
+        while q < end and hc is not None:               # chaque quart d'heure local de ce libelle
+            loc = q.astimezone(tz)
+            (hcq if hc else hpq)[(loc.hour * 60 + loc.minute) // 15] += 1
+            q += timedelta(minutes=15)
+    labels = {lab: {"price": c.most_common(1)[0][0], "color": _color(lab.split()[-1]) or next((x for x in TEMPO if x in lab.lower()), None),
+                    "hc": _hc_of(lab)} for lab, c in prices.items()}
+    quarters = {q for q in range(96) if hcq[q] > hpq[q]} if hcq else None
+    v = {"labels": labels, "hcq": quarters, "flat": round(Counter(p for _t, p in ppts if p is not None).most_common(1)[0][0], 5) if ppts else None}
+    _LEARN.update(at=_time.monotonic(), v=v)
+    return v
+
+
+async def _past_resolver(t0: datetime, t1: datetime):
+    """Le prix et le libelle d'un instant que Home Assistant n'a plus (12/11/2026) : la couleur Tempo du jour (si tes
+    libelles en ont), heures creuses ou pleines (les quarts d'heure appris, sinon les plages de l'abonnement), puis le
+    libelle appris qui correspond, et son prix. Sans libelle appris : le prix le plus frequent, sans libelle."""
+    e, tz = await elec(), _tz()
+    try:
+        L = await _learn()
+    except HAError:
+        return lambda t: (None, None)
+    labels = L["labels"]
+    if not labels:
+        return lambda t: (L["flat"], None)
+    tempo = any(x["color"] for x in labels.values())
+    rng = _ranges(e["hc_ranges"])
+
+    def day(t):
+        return (t.astimezone(tz) - timedelta(hours=6)).date().isoformat()
+    known = {}
+    if tempo:
+        ds, d = [], t0
+        while d <= t1 + timedelta(hours=1):
+            ds.append(day(d))
+            d += timedelta(hours=6)
+        known = await _tempo_api(sorted(set(ds)))
+
+    def at(t):
+        loc = t.astimezone(tz)
+        hc = (((loc.hour * 60 + loc.minute) // 15) in L["hcq"]) if L["hcq"] else _is_hc(loc, rng)
+        col = known.get(day(t)) if tempo else None
+        cand = [(k, v) for k, v in labels.items() if (v["hc"] is None or v["hc"] == hc) and (not tempo or v["color"] == col)]
+        if not cand and tempo:                          # couleur inconnue ce jour-la : le bleu, le plus courant
+            cand = [(k, v) for k, v in labels.items() if (v["hc"] is None or v["hc"] == hc) and v["color"] == "bleu"]
+        return (cand[0][1]["price"], cand[0][0]) if cand else (L["flat"], None)
+    return at
 
 
 # ── La mesure d'une impression ───────────────────────────────────────────────────
@@ -738,6 +834,13 @@ async def loop() -> None:
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     await _tasks.sleep("home_assistant", 300)
+    try:      # (12/11/2026) une fois : le passe recoit le prix et le libelle appris de l'historique recent
+        if await configured() and (await elec())["mode"] == "ha" and not await _get("HA_REPRICE_PAST", ""):
+            n = await reprice_all()
+            await _set("HA_REPRICE_PAST", datetime.now().isoformat(timespec="seconds"))
+            logger.info(f"[HA] prix et libelles du passe : {n} impression(s) reprise(s)")
+    except Exception:
+        logger.exception("[HA] prix du passe")
     while True:
         try:
             if await configured():

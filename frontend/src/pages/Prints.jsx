@@ -2248,6 +2248,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
               <span style={{ flex: 1, fontWeight: 800, color: "var(--muted)", fontSize: 12 }}>{l}</span>
               <span style={{ fontWeight: 900, fontSize: l === "Total" ? 15 : 13.5, ...v2grad(c1, c2) }}>{v}</span>
               {s ? <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 60 }}>({s})</span> : <span style={{ minWidth: 60 }}/>}</div>))}
+          {/* (12/11/2026) l'electricite mesuree de ses impressions, additionnee : kWh, puissance moyenne, barre des tarifs */}
+          <EnergyLine p={groupEnergy(prints)}/>
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
             <span style={{ fontWeight: 800, color: "#16a34a" }}>{nbItems} élément{nbItems > 1 ? "s" : ""}</span>
             {nbItems > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalCost / nbItems)}/u ({eur2(totalNormal / nbItems)}/u)</span>}
@@ -3243,6 +3245,20 @@ const flattenItems = (items, sortF) => items.flatMap(it => it.type === "print" ?
 // de suite, puis la relit discretement (rien de perdu : la liste a jour la remplace des qu'elle arrive)
 const LIST_CACHE = { key: null, data: null };
 
+// (12/11/2026) l'electricite d'un groupe : ses impressions mesurees additionnees (vide si aucune ne l'est)
+function groupEnergy(prints) {
+  const m = (prints || []).filter(x => x.energy_kwh != null);
+  if (!m.length) return { energy_kwh: null };
+  const kwh = m.reduce((a, x) => a + (x.energy_kwh || 0), 0);
+  const h = m.reduce((a, x) => a + ((x.duration_seconds || x.estimated_seconds || 0) + (x.paused_seconds || 0)) / 3600, 0);
+  const priced = m.filter(x => x.energy_cost != null), labels = {};
+  m.forEach(x => Object.entries(x.energy_labels || {}).forEach(([k, v]) => { labels[k] = (labels[k] || 0) + v; }));
+  return { energy_kwh: kwh, energy_avg_w: h > 0 ? kwh * 1000 / h : null, energy_labels: labels,
+    energy_cost: priced.length ? priced.reduce((a, x) => a + x.energy_cost, 0) : null,
+    energy_source: m.some(x => /horaire/.test(x.energy_source || "")) ? "statistiques horaires" : "historique",
+    status: "SUCCESS", group: m.length < prints.length ? `${m.length} impression${m.length > 1 ? "s" : ""} mesurée${m.length > 1 ? "s" : ""} sur ${prints.length}` : null };
+}
+
 // (12/11/2026) l'electricite d'une impression, mesuree chez Home Assistant (Parametres › Connexions) : les kWh, la
 // puissance moyenne, la part de chaque libelle du tarif ; « ≈ » quand elle vient des statistiques horaires
 function EnergyLine({ p, isAdmin, onMeasured }) {
@@ -3268,6 +3284,7 @@ function EnergyLine({ p, isAdmin, onMeasured }) {
       <b data-tip={`Mesuré par Home Assistant (${p.energy_source || "historique"})`} style={{ color: "#CA8A04" }}>{approx ? "≈ " : ""}{kwh(p.energy_kwh)}</b>
       {p.energy_avg_w != null && <span>· {Math.round(p.energy_avg_w)} W en moyenne</span>}
       {p.energy_cost != null && p.energy_kwh > 0 && <span>· {(p.energy_cost / p.energy_kwh).toLocaleString("fr-FR", { maximumFractionDigits: 4 })} €/kWh</span>}
+      {p.group && <span style={{ color: "var(--muted)" }}>· {p.group}</span>}
       {isAdmin && <button type="button" onClick={measure} disabled={busy} data-tip="Relire la mesure chez Home Assistant"
         style={{ marginLeft: "auto", fontSize: 11, padding: "2px 8px", borderRadius: 7, border: "1px solid var(--border)", background: "none",
           color: "var(--muted)", cursor: busy ? "wait" : "pointer", fontWeight: 700 }}>{busy ? "…" : "↻"}</button>}
