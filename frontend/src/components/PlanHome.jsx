@@ -6,7 +6,7 @@ import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw, useCanMwHome } from "../store/auth";
 import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors, platePics } from "./PlanDay";
-import { JobSheet, LowStockBanner, BlockedList, DryList, ReadyNow } from "./PlanPanels";
+import { JobSheet, LowStockBanner, BlockedList, DryList, ReadyNow, PlanPopup } from "./PlanPanels";
 import { sheetRef } from "./planActs";
 import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
 import Lightbox from "./Lightbox";
@@ -213,8 +213,12 @@ export function PlanZoom({ p: p0 }) {
   const [p, setP] = useState(p0);
   const [sel, setSel] = useState(null);
   const [sheet, setSheet] = useState(null);
+  const [readyPop, setReadyPop] = useState(false);
   const edit = useCanMw();                            // ranger : droit MakerWorld, jamais chez un copain
   useEffect(() => { setP(p0); }, [p0]);
+  // (13/11/2026) au telephone, « Tout de suite » est un bouton en haut qui ouvre sa fenetre (la liste en ligne obligeait a
+  // defiler toute la vue) ; sur ordinateur, la section reste dans la vue
+  const phone = typeof window !== "undefined" && window.innerWidth < 640;
   if (!p) return null;
   const send = async (url, body, method = "post") => {
     try { const r = await client[method](url, body); setP(x => ({ ...r.data, today_items: x?.today_items })); return r.data; }
@@ -252,6 +256,14 @@ export function PlanZoom({ p: p0 }) {
     <StateHead p={p}/>
     {/* l'etat dit autre chose que son mot (un retard, une avance) : la phrase ; « Dans les temps » ne se repete plus */}
     {p.status?.text && p.status.state !== "ontime" && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: -4 }}>{p.status.text}</div>}
+    {phone && (p.ready || []).length > 0 && <button type="button" onClick={() => setReadyPop(true)} style={{ display: "flex", alignItems: "center", gap: 9,
+      padding: "10px 12px", borderRadius: 14, border: "1px solid color-mix(in srgb, #0D9488 40%, var(--border))", cursor: "pointer", textAlign: "left",
+      background: "color-mix(in srgb, #0D9488 9%, var(--surface))", fontFamily: "inherit" }}>
+      <span style={{ fontSize: 20 }}>⚡</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 900, color: "#0D9488" }}>Tout de suite : {p.ready.length} plateau{p.ready.length > 1 ? "x" : ""}</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>sans changer de bobine · à placer après celle en cours</span></span>
+      <span style={{ fontSize: 16, color: "#0D9488", fontWeight: 900 }}>›</span></button>}
     {(p.jobs || [])[0] && <NextUp p={p} onSheet={j => setSheet(sheetRef(j))}/>}
     <DayStrip day={(p.now || "").slice(0, 10)} done={p.today_items || []} jobs={(p.jobs || []).filter(j => onDay(j, (p.now || "").slice(0, 10)))} settings={p.settings} now={p.now} live={live}/>
     <NowNextTiles pd={p} wide onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={setSel}/>
@@ -270,10 +282,14 @@ export function PlanZoom({ p: p0 }) {
         {j && line("🧵", "#6366F1", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{` · ${plateTxt(j)}`} : <SwapLinks j={j}/>.</>, j)}
         {ro && line("🔄", "#B45309", `${dayLabel(ro.runout[0].at.slice(0, 10), p.now)} vers ${hhmm(ro.runout[0].at)}`, <>Pendant {ro.title} : <FilLink id={ro.runout[0].id} label={ro.runout[0].name}/>{runoutTxt(ro.runout[0]).slice(3 + ro.runout[0].name.length)}. Prépare une autre bobine.</>, ro)}
       </>; })()}
-    {(p.ready || []).length > 0 && <>{sec("Tout de suite, sans changer de bobine")}
+    {!phone && (p.ready || []).length > 0 && <>{sec("Tout de suite, sans changer de bobine")}
       <ReadyNow items={p.ready} jobs={p.jobs} now={p.now} live={p.live} edit={edit} max={6} onOpen={setSel}
         onNext={(key, after) => send("/makerworld/plan/next", { key, after }).then(Boolean)}
         onDay={(key, day) => send("/makerworld/plan/place-day", { key, day }).then(Boolean)}/></>}
+    {readyPop && <PlanPopup title={`Tout de suite, sans changer de bobine (${(p.ready || []).length})`} icon="⚡" color="#0D9488" onClose={() => setReadyPop(false)}>
+      <ReadyNow items={p.ready} jobs={p.jobs} now={p.now} live={p.live} edit={edit} onOpen={j => { setReadyPop(false); setSel(j); }}
+        onNext={(key, after) => send("/makerworld/plan/next", { key, after }).then(Boolean)}
+        onDay={(key, day) => send("/makerworld/plan/place-day", { key, day }).then(Boolean)}/></PlanPopup>}
     {sec("Les prochains jours")}
     {days.map(d => <div key={d} style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface2)", padding: 9, display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
