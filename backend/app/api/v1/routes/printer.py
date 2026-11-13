@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
@@ -576,11 +577,11 @@ async def printer_status(_: str = Depends(get_current_user)):
         fila_switch=getattr(s, "fila_switch", {}) or {},
         printer_model=await _model(),
     )
-    _hotend_finishes(out)
+    await _hotend_finishes(out)
     return out
 
 
-def _hotend_finishes(out):
+async def _hotend_finishes(out):
     """La finition du filament d'une buse du rack : celle de la bobine d'AMS de meme filament (identifiant Bambu)
     et de meme couleur, sinon de meme filament. Pour que la buse s'affiche comme la bobine (marbre, silk...)."""
     from ....services.mw_3d import finish_of
@@ -598,11 +599,46 @@ def _hotend_finishes(out):
             v = (f if f and f != "none" else None, mt, si.colors_array if mt else None)
             by_id.setdefault(t.tray_info_idx, v)
             by_col.setdefault((t.tray_info_idx, str(t.color or "")[:6].upper()), v)
+    todo = []
     for h in out.hotend_rack.hotends:
         if not h.empty and h.filament_id:
             v = by_col.get((h.filament_id, str(h.color or "").lstrip("#")[:6].upper())) or by_id.get(h.filament_id)
             if v:
                 h.fila_finish, h.multicolor_type, h.colors_array = v
+            else:
+                todo.append(h)
+    if todo:
+        # (14/11/2026) le filament de la buse n'est plus dans un AMS (un Silk, un Glow deja sortis) : on le cherche dans
+        # les filaments enregistres, meme code Bambu et meme couleur (ou l'une de ses couleurs), sinon meme code, sinon le profil Bambu
+        try:
+            from sqlalchemy import select
+            from ....db.session import AsyncSessionLocal
+            from ....models.filament import Filament
+            codes = {h.filament_id for h in todo}
+            async with AsyncSessionLocal() as db:
+                rows = (await db.execute(select(Filament.profile_id, Filament.color, Filament.colors_array, Filament.multicolor_type,
+                                                Filament.fila_finish, Filament.fila_type, Filament.name, Filament.material)
+                                         .where(Filament.profile_id.in_(codes)))).all()
+            for h in todo:
+                hc = str(h.color or "").lstrip("#")[:6].upper()
+                cands = [r for r in rows if r[0] == h.filament_id]
+                same = [r for r in cands if str(r[1] or "").lstrip("#")[:6].upper() == hc
+                        or hc in [x.strip().lstrip("#")[:6].upper() for x in str(r[2] or "").split(",")]]
+                r = (same or cands or [None])[0]
+                if not r:
+                    # pas dans la base : le nom du profil Bambu de ce code (« Bambu PLA Silk »)
+                    from ....services import bambu_profiles
+                    f = finish_of((bambu_profiles.of(h.filament_id) or {}).get("name"), color=h.color)
+                    if f and f != "none":
+                        h.fila_finish = f
+                    continue
+                f = (r[4] if r[4] and r[4] != "none" else None) or finish_of(r[5], r[6], r[7], color=h.color)
+                mt = r[3] if same and r[3] in ("gradient", "coaxial") and r[2] and "," in str(r[2]) else None
+                if (f and f != "none") or mt:
+                    h.fila_finish = f if f and f != "none" else None
+                    h.multicolor_type, h.colors_array = mt, (r[2] if mt else None)
+        except Exception:
+            logging.getLogger(__name__).exception("[RACK] finition des buses")
 
 
 # ── Bobines posees pour le sechage (emplacement vide) ─────────────────────────
