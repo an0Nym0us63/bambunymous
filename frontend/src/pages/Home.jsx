@@ -2013,6 +2013,13 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
   // la ligne du bas reste hors impression : les temperatures (le plateau qui refroidit…)
   const bottom = !side && (status?.connected || (live && showLayer && status.total_layers > 0));
   const layerInline = showLayer && status?.total_layers > 0 && side;
+  // l'etape, toujours : « Impression » quand elle imprime, sinon chauffe, calibration, raison d'une pause…
+  const stage = <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
+    borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f`, flexShrink: 0 }}>
+    <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color, ...(s.plain ? { animation: "livePulse 2s infinite" } : {}) }}/>
+    {s.plain ? "Impression" : s.label}</span>;
+  // (13/11/2026) avec la colonne de droite, la prise et l'etape y montent, a cote du filament : le nom garde la place
+  const sideCol = side && status?.connected;
   return (
     <div ref={box} onClick={() => setPop(true)} style={{ display: "flex", flexDirection: "column", gap: 5, height: "100%", minWidth: 0, minHeight: 0, overflow: "hidden", cursor: "pointer" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minHeight: 0, minWidth: 0 }}>
@@ -2026,13 +2033,9 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
               textOverflow: "ellipsis", lineHeight: 1.2 }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
-            {/* (12/11/2026) la prise (Home Assistant) : discrete, sur la ligne du nom qui se raccourcit pour elle */}
-            {W >= 300 && <PlugChip size={W < 380 ? 10.5 : 11.5} compact={W < 380}/>}
-            {/* l'etape, toujours : « Impression » quand elle imprime, sinon chauffe, calibration, raison d'une pause… */}
-            <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
-              borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f`, flexShrink: 0 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color, ...(s.plain ? { animation: "livePulse 2s infinite" } : {}) }}/>
-              {s.plain ? "Impression" : s.label}</span>
+            {/* (12/11/2026) la prise (Home Assistant) : discrete, sur la ligne du nom qui se raccourcit pour elle (sans colonne de droite) */}
+            {!sideCol && W >= 300 && <PlugChip size={W < 380 ? 10.5 : 11.5} compact={W < 380}/>}
+            {!sideCol && stage}
           </div>
           {live ? <>
             {/* une seule ligne : ce qui ne tient pas est coupe, jamais renvoye a la ligne */}
@@ -2051,12 +2054,16 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
             <Words text={info ? [info.print_date && agoFr(info.print_date), info.duration_seconds && fmtTime(Math.round(info.duration_seconds / 60)),
               info.total_weight_g && `${Math.round(info.total_weight_g)} g`].filter(Boolean).join(" · ") || "Dernière impression" : "Prête à imprimer"}/></div>}
         </div>
-        {side && status?.connected && (
+        {sideCol && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
-            {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
-              <span style={{ width: 14, height: 14, borderRadius: "50%", ...(trayBg(tray, null, 14) || { background: "#888888" }),
-                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
-              <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+              <PlugChip size={11.5}/>
+              {stage}
+              {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", ...(trayBg(tray, null, 14) || { background: "#888888" }),
+                  boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
+                <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
+            </div>
             {temps(12, 10)}
             {plateChip(12)}
           </div>

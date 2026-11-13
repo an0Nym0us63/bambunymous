@@ -13,7 +13,10 @@ const HOME_PREFIXES = ["/auth", "/friends", "/users", "/settings", "/notify",
 // Le ping d'activite part chez le copain visite : son journal suit ma visite. La disposition de ses AMS aussi
 // (03/11/2026 : ses AMS s'affichaient dans l'ordre des miens, sous /settings comme mes reglages).
 // (06/11/2026) son fil du jour et ses copains aussi : ses tuiles les montrent comme chez lui
-const RELAYED = ["/users/activity/ping", "/settings/ams-order", "/notify/me/history", "/friends/shared/printing"];
+// (13/11/2026) sa prise Home Assistant aussi : chez lui je voyais MA puissance sur sa tuile, MA courbe et MES kWh dans ses
+// stats (sous /settings comme mes reglages) ; s'il n'a pas de prise, rien ne s'affiche, comme chez lui
+const RELAYED = ["/users/activity/ping", "/settings/ams-order", "/notify/me/history", "/friends/shared/printing",
+  "/settings/ha/live", "/settings/ha/curve", "/settings/ha/stats", "/settings/ha/colors"];
 const isHome = (url) => !RELAYED.some(p => url.startsWith(p)) && HOME_PREFIXES.some(p => url === p || url.startsWith(p.endsWith("/") ? p : p + "/") || url.startsWith(p + "?"));
 // Chez un copain, on regarde, on ne touche a rien (06/11/2026 : un ami venu chez moi changeait SON menu et SA disposition
 // d'accueil en croyant regler les miens, l'ecriture partant chez lui). Seules passent les ecritures qui ne concernent que
