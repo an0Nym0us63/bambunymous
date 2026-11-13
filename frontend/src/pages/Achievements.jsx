@@ -1931,12 +1931,13 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
             : `👀 ${others.join(", ")} ${others.length > 1 ? "l'ont" : "l'a"} déjà débloqué : à toi de le trouver !`}</p>
       )}
       {/* secret pas encore gagne : ce que les cles ont revele, et la suite */}
-      {sheet && unique && !got && it.hint && (
+      {sheet && unique && (!got || (it.masked && it.loupable)) && it.hint && (
         <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", fontStyle:"italic" }}>💡 Indice : {it.hint}</p>
       )}
       {/* famille : la loupe devoile un secret pas encore gagne par etapes (30/10/2026) : la categorie, la vignette et le
           titre, puis l'indice, puis le descriptif ; le bouton dit la suivante et son prix */}
-      {sheet && unique && !got && (it.house || it.loupable) && it.loupe_next && loupes != null && (
+      {/* (13/11/2026) un secret que la maison a, au descriptif cache : la loupe aussi (masked + loupable) */}
+      {sheet && unique && (!got || (it.masked && it.loupable)) && (it.house || it.loupable) && it.loupe_next && loupes != null && (
         <button type="button" onClick={() => onLoupe("next")} disabled={loupes < it.loupe_next.cost}
           style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:20, border:"none",
             cursor: loupes >= it.loupe_next.cost ? "pointer" : "default", fontWeight:800, fontSize:12.5, color:"#fff",

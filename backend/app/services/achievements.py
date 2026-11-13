@@ -6091,6 +6091,10 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
             if aid in HOUSE_SECRET_IDS and it["level"] < 0:
                 # un secret de la maison qu'elle n'a pas encore : la loupe y vaut aussi
                 it = _loupe_shown(it, BY_ID[aid], max(int(it.get("reveal") or 0), loupe_level(loupes, aid)))
+            elif aid in HOUSE_SECRET_IDS and it.get("masked"):
+                # (13/11/2026) la maison l'a, son descriptif est cache a ce compte : la loupe va jusqu'au bout pour lui
+                # aussi (l'indice, puis le descriptif ; titre et vignette sont deja la). Il restait cache, sans loupe
+                it = {**_loupe_shown(it, BY_ID[aid], max(3, loupe_level(loupes, aid))), "level": it["level"]}
             items.append(it)
             continue
         a, k = BY_ID[aid], aid[4:]
@@ -6303,8 +6307,7 @@ async def use_loupe(username: str, aid: str, what: str = "next") -> dict:
         if aid[4:] in ((await _eggs_by()).get(username) or {}):
             raise ValueError("Tu l'as déjà")
     elif aid in HOUSE_SECRET_IDS:
-        if aid in await my_uniques():
-            raise ValueError("La maison l'a déjà")
+        pass                     # (13/11/2026) la maison l'a ou non : son indice et son descriptif se prennent a la loupe
     else:
         raise ValueError("Pas de loupe pour ce secret")
     me = await loupes(username)
@@ -6316,6 +6319,8 @@ async def use_loupe(username: str, aid: str, what: str = "next") -> dict:
         base = _reveal_level(st, aid)
         if aid in FAMILY_IDS and aid[4:] in await eggs_found():
             base = max(base, FREE_FROM_FRIENDS)
+        if aid in HOUSE_SECRET_IDS and aid in await my_uniques():
+            base = max(base, FREE_FROM_FRIENDS)      # la maison l'a : titre et vignette deja montres
         cur = max(base, loupe_level(me, aid))
         step = loupe_step(cur)
         if not step:
