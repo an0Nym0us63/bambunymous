@@ -652,7 +652,7 @@ async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
     try:
         return await P.optimize_plan(str(body.get("day") or "") or None, str(body.get("from") or "") or None,
                                      str(body.get("mode") or "") or None, bool(body.get("preview")), bool(body.get("keep")),
-                                     bool(body.get("merge")))
+                                     bool(body.get("merge")), None if body.get("started") is None else bool(body.get("started")))
     except P.PlanError as e:
         raise HTTPException(400, str(e))
 

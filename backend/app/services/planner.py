@@ -2203,7 +2203,7 @@ def plan_metrics(r: dict, d: dict, now: datetime) -> dict:
 
 
 async def optimize_plan(day: str | None = None, start: str | None = None, mode: str | None = None,
-                        preview: bool = False, keep: bool = False, merge_ok: bool = False) -> dict:
+                        preview: bool = False, keep: bool = False, merge_ok: bool = False, started: bool | None = None) -> dict:
     """« Optimiser » : toute la file, ou un seul jour (ses travaux remis dans un ordre qui enchaine les couleurs).
     start (06/11/2026) : « a partir de » ce jour ; ce qui est prevu avant reste a sa place, dans son ordre, et seule la
     suite est reordonnee (couleurs, nuits, dates limites)."""
@@ -2222,6 +2222,10 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
                 except PlanError:
                     pass
     d, now, jobs, _, loaded, live, busy = await _context(None)
+    if started is not None:                           # (13/11/2026) « finir d'abord ce qui est entame », choisi pour cette fois
+        for j in jobs:
+            if j.get("started"):
+                j["boost"] = bool(started)
     if merged_new and preview:
         n0 = len(d["merge"])
         for i_, ks in enumerate(merged_new):

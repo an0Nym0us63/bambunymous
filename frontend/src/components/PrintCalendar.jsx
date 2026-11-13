@@ -609,7 +609,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
         {opt("⏭", "Tout plus tard", "Les plateaux non figés à l'heure quittent la journée et repartent en fin de file.", nf, laterDay)}
         <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginTop: 2 }}>Chaque action se défait d'un coup avec « Annuler », en haut du planning.</div>
       </PlanPopup>; })()}
-    {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} onPick={(from, mode, keep, merge) => { setPop(null); optimizeFrom(from, mode, keep, merge).then(r => r && setOptPrev(r)); }}
+    {pop === "optimize" && <OptimizePick today={today} mode0={pd?.settings?.opt_mode} started0={!!pd?.settings?.finish_started} onPick={(from, mode, keep, merge, started) => { setPop(null); optimizeFrom(from, mode, keep, merge, started).then(r => r && setOptPrev(r)); }}
       onClose={() => setPop(null)}/>}
     {pop === "legend" && <PlanPopup title="Ce que disent les signes" icon="?" color="#6366F1" onClose={() => setPop(null)}><Legend/></PlanPopup>}
     {pop === "advice" && <PlanPopup title={`Conseils (${pd?.advice?.length || 0})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
@@ -670,7 +670,7 @@ function OptimizePreview({ p, onApply, onClose }) {
   </PlanPopup>;
 }
 
-function OptimizePick({ today, mode0, onPick: pick, onClose }) {
+function OptimizePick({ today, mode0, started0, onPick: pick, onClose }) {
   const [free, setFree] = useState("");
   const [mode, setMode] = useState(mode0 || "mix");
   // bouger le moins possible (06/11/2026) : garde dans ce navigateur
@@ -679,7 +679,9 @@ function OptimizePick({ today, mode0, onPick: pick, onClose }) {
   // regrouper d'office les plateaux d'un meme modele quand c'est sur (06/11/2026) : garde dans ce navigateur
   const [mergeOk, setMergeS] = useState(() => { try { return localStorage.getItem("bn_opt_merge") === "1"; } catch { return false; } });
   const setMerge = v => { setMergeS(v); try { localStorage.setItem("bn_opt_merge", v ? "1" : "0"); } catch { /* rien */ } };
-  const onPick = from => pick(from, mode, keep, mergeOk);
+  // finir d'abord ce qui est entame (13/11/2026) : d'office comme dans les consignes du planning, a changer pour cette fois
+  const [started, setStarted] = useState(!!started0);
+  const onPick = from => pick(from, mode, keep, mergeOk, started);
   const cur = OPT_MODES.find(m => m[0] === mode) || OPT_MODES[0];
   const plus = n => { const t = new Date(`${today}T12:00`); t.setDate(t.getDate() + n);
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
@@ -714,6 +716,12 @@ function OptimizePick({ today, mode0, onPick: pick, onClose }) {
       <span><span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)" }}>🧩 Regrouper les plateaux d'un même modèle</span>
         <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>Quand ils tiennent sans hésiter sur un seul plateau
           (confiance haute) : un seul lancement. À regrouper ensuite dans Bambu Studio.</span></span></label>
+    <label style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 12px", borderRadius: 12, marginBottom: 10, cursor: "pointer",
+      border: `1px solid ${started ? "color-mix(in srgb, #6366F1 45%, var(--border))" : "var(--border)"}`, background: started ? "color-mix(in srgb, #6366F1 8%, var(--surface))" : "var(--surface)" }}>
+      <input type="checkbox" checked={started} onChange={e => setStarted(e.target.checked)} style={{ marginTop: 2 }}/>
+      <span><span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)" }}>🏁 Finir d'abord ce qui est entamé</span>
+        <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", lineHeight: 1.35 }}>Un modèle dont un plateau est déjà imprimé
+          passe devant ceux pas encore commencés (comme une priorité haute). D'office selon les consignes du planning.</span></span></label>
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {opt("all", "✨", "Toute la file", "Dès maintenant", null)}
       {opt("tomorrow", "🌅", "Sans toucher à aujourd'hui", `À partir de demain, ${fr(plus(1))}`, plus(1))}

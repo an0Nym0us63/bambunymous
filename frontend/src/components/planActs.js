@@ -137,10 +137,10 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   // quelques secondes de calcul (06/11/2026) : on le dit, puis ce qui a ete fait
   // l'apercu d'abord (06/11/2026) : le serveur calcule, rend les chiffres avant et apres, et l'ordre propose ; rien ne
   // change tant qu'on n'a pas touche « Appliquer » (applyOptimized). keep : bouger le moins possible
-  const optimizeFrom = async (from, mode, keep, merge) => {
+  const optimizeFrom = async (from, mode, keep, merge, started) => {
     toast("✨ Optimisation en cours… quelques secondes", "info", 9000);
     try {
-      const r = await client.post("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}), preview: true, keep: !!keep, merge: !!merge });
+      const r = await client.post("/makerworld/plan/optimize", { ...(from ? { from } : {}), ...(mode ? { mode } : {}), preview: true, keep: !!keep, merge: !!merge, ...(started != null ? { started: !!started } : {}) });
       toast("✨ Voilà ce que ça donnerait", "ok", 1500);
       return r.data;
     } catch (e) { showAlert(e.response?.data?.detail || e.message); return null; }
