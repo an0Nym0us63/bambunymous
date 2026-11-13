@@ -12,7 +12,8 @@ Deux sortes de propositions :
   pendant quelques heures, et dont une bobine commence a dater : le secher pendant que les autres impriment.
 
 Temperature et duree : celles du profil Bambu du filament (filament_dev_ams_drying_*, rapatriees dans dry_temp /
-dry_hours), sinon une valeur usuelle par matiere ; bornees par ce que l'unite sait faire (65 °C pour un AMS 2 Pro, 85 °C
+dry_hours), sinon celle que Bambu conseille pour sa matiere (lue dans les profils des filaments en base, meme pour une
+autre marque), sinon une valeur usuelle (8 h, 12 h pour le TPU et les techniques) ; bornees par ce que l'unite sait faire (65 °C pour un AMS 2 Pro, 85 °C
 pour un HT).
 
 Quand : le plus tard possible avant l'impression (la bobine est fraiche), a un moment ou l'on est la pour poser la
@@ -46,6 +47,30 @@ USUAL_HT = {"ABS": 80, "ASA": 80, "PC": 80, "PA": 85, "PAHT": 85, "PA6": 85, "PP
 # ce qui va de preference dans l'AMS HT
 TECH = {"TPU", "PA", "PAHT", "PA6", "PPA", "PC", "PPS", "ABS", "ASA", "PET"}
 MAX_T = {"ams": 65, "ht": 85}
+# la duree (13/11/2026) : celle du filament, sinon celle que Bambu conseille pour sa matiere (_FAM_H, la mediane des
+# profils de cette matiere en base), sinon 8 h, et 12 h pour le TPU et les techniques
+DEF_H, TECH_H = 8.0, 12.0
+LONG_H = {"TPU", "PA", "PAHT", "PA6", "PA12", "PPA", "PPS", "PC"}
+_FAM_H: dict = {}
+
+
+def default_hours(fam: str) -> float:
+    return TECH_H if fam in LONG_H else DEF_H
+
+
+async def load_family_hours(db) -> dict:
+    """Relit, par matiere, la duree de sechage des profils des filaments en base (la mediane)."""
+    global _FAM_H
+    from sqlalchemy import select
+    from ..models.filament import Filament
+    by: dict = {}
+    for m, ft, h in (await db.execute(select(Filament.material, Filament.fila_type, Filament.dry_hours)
+                                      .where(Filament.dry_hours.isnot(None), Filament.dry_hours > 0))).all():
+        by.setdefault(family(m, ft), []).append(float(h))
+    _FAM_H = {k: sorted(v)[len(v) // 2] for k, v in by.items() if k != "?"}
+    return _FAM_H
+
+
 HORIZON = timedelta(days=3)            # on prepare les sechages des trois prochains jours
 OPP_WINDOW = timedelta(hours=48)
 
@@ -84,9 +109,10 @@ def recipe(f: dict, ht: bool) -> tuple[int, float, str]:
     t, h = f.get("dry_t"), f.get("dry_h")
     src = "profil Bambu"
     if not t or not h:
-        ut, uh = USUAL.get(fam, (55, 8))
+        ut, _ = USUAL.get(fam, (55, 8))
         if ht and fam in USUAL_HT:
             ut = USUAL_HT[fam]
+        uh = _FAM_H.get(fam) or default_hours(fam)
         t, h, src = t or ut, h or uh, "valeur usuelle"
     t = int(min(int(t), MAX_T["ht" if ht else "ams"]))
     return t, float(h), src
@@ -479,6 +505,7 @@ async def annotate(jobs: list, d: dict, now: datetime, present=None) -> dict:
         from .storage_places import in_printer
         async with AsyncSessionLocal() as db:
             await DR.load(db)
+            await load_family_hours(db)
             rows = (await db.execute(select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id)
                                      .where(Spool.id.in_([int(x) for x in sids if x])))).all()
             # le stock (11/11/2026) : les bobines rangees, a secher dans le temps libre d'un AMS

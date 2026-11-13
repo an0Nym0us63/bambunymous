@@ -21,21 +21,66 @@ _SPOOL_INFO_CACHE: dict = {}  # même clé → dict spool_info
 _LOGGED_TRAYS: dict = {}      # (ams, case) → ce qu'on en a ecrit au journal (on ne le reecrit que s'il change)
 _LOGGED_RACK: dict = {}
 _DRYING_AMS: dict = {}        # ams_id en séchage -> {t0, dated} (détection de transition, durée du cycle)
-# (11/11/2026) une bobine n'est datee « sechee » qu'une fois le cycle alle assez loin : les trois quarts de la duree
-# reglee (au moins une heure), ou 4 h si l'AMS ne dit pas sa duree. Un sechage arrete au bout d'une heure ne compte pas
+# Une bobine n'est datee « sechee » qu'une fois sechee assez longtemps POUR ELLE (13/11/2026) : les trois quarts de la
+# duree conseillee pour son filament (son profil Bambu, sinon ce que Bambu conseille pour sa matiere, sinon 8 h, 12 h
+# pour le TPU et les techniques : dry_plan.recipe), au moins une heure. Avant (11/11), les trois quarts de la duree REGLEE sur l'AMS : un cycle de 2 h lance pour secher l'air datait
+# des bobines de PLA qui en demandent 8.
 DRY_MIN_SHARE = 0.75
 DRY_MIN_H = 1.0
-DRY_DEFAULT_H = 4.0
+DRY_CHECK_S = 300                 # on regarde les bobines d'un AMS qui seche toutes les 5 min (et a la fin du cycle)
 
 
-def dry_enough(dur_h, left_min, since_s) -> bool:
-    """Le cycle a-t-il assez dure pour compter ? dur_h : duree reglee (h, 0 inconnue) ; left_min : temps restant (min) ;
+def dry_done_min(dur_h, left_min, since_s) -> float:
+    """Minutes deja sechees dans ce cycle. dur_h : duree reglee (h, 0 inconnue) ; left_min : temps restant (min) ;
     since_s : depuis quand on le voit secher (s, un redemarrage le remet a zero : la duree reglee prime)."""
     if dur_h and dur_h > 0:
-        need = max(DRY_MIN_H, DRY_MIN_SHARE * dur_h) * 60
-        done = max(dur_h * 60 - (left_min or 0), since_s / 60)
-        return done >= min(need, dur_h * 60)
-    return since_s >= DRY_DEFAULT_H * 3600
+        return min(dur_h * 60, max(dur_h * 60 - (left_min or 0), since_s / 60))
+    return since_s / 60
+
+
+def dry_need_min(material, fila_type, dry_t, dry_h) -> float:
+    """Minutes de sechage qu'il faut a ce filament pour compter comme seche."""
+    from ..services import dry_plan
+    _, h, _ = dry_plan.recipe({"family": dry_plan.family(material, fila_type), "dry_t": dry_t, "dry_h": dry_h}, False)
+    return max(DRY_MIN_H, DRY_MIN_SHARE * h) * 60
+
+
+def _date_dried(spool_ids: list, done_min: float, dated: set):
+    """Date (last_dried_at = maintenant) celles de ces bobines qui ont seche assez longtemps pour leur filament ;
+    les datees vont dans « dated » (une fois par cycle). Thread dedie."""
+    import asyncio
+    from datetime import datetime as _dt
+    async def _run():
+        from sqlalchemy.orm import selectinload
+        from sqlalchemy import select
+        from ..db.session import AsyncSessionLocal as _ASL
+        from ..models.filament import Spool as _Sp
+        from ..services import dry_plan
+        now = _dt.utcnow()
+        async with _ASL() as _db:
+            await dry_plan.load_family_hours(_db)
+            rows = (await _db.execute(select(_Sp).options(selectinload(_Sp.filament))
+                                      .where(_Sp.id.in_(list(spool_ids))))).scalars().all()
+            ok = []
+            for sp in rows:
+                if sp.archived:
+                    continue
+                f = sp.filament
+                need = dry_need_min(getattr(f, "material", None), getattr(f, "fila_type", None),
+                                    getattr(f, "dry_temp", None), getattr(f, "dry_hours", None))
+                if done_min >= need:
+                    sp.last_dried_at = now
+                    ok.append(sp.id)
+            if ok:
+                await _db.commit()
+                dated.update(ok)
+                logger.info(f"[DRY] {done_min:.0f} min de séchage → date sur bobines {ok}")
+    try:
+        lp = asyncio.new_event_loop()
+        try: lp.run_until_complete(_run())
+        finally: lp.close()
+    except Exception as e:
+        logger.error(f"[DRY] date des bobines séchées : {e}")
 
 def _persist_last_dried(spool_ids: list):
     """Pose last_dried_at = maintenant sur les bobines données (thread dédié)."""
@@ -954,14 +999,14 @@ class MQTTManager:
                     ams.trays.append(t)
                 _new_ams = [a for a in _new_ams if a.id != ams.id] + [ams]
 
-                # ── Séchage : au debut d'un cycle, le journal des succes ; les bobines qui y sont (last_dried_at) ne
-                # sont datees qu'une fois le cycle alle assez loin (11/11/2026, dry_enough : avant, des le debut ; un
-                # sechage arrete au bout d'une heure les comptait seches). Une fois par cycle (_DRYING_AMS).
+                # ── Séchage : au debut d'un cycle, le journal des succes ; chaque bobine qui y est (last_dried_at) n'est
+                # datee qu'une fois sechee assez longtemps pour son filament (13/11/2026, dry_need_min ; avant, des le
+                # debut, puis aux trois quarts de la duree reglee). Une fois par cycle et par bobine (_DRYING_AMS).
                 _is_drying = (getattr(ams, "dry_time", 0) or 0) > 0
                 _was_drying = ams.id in _DRYING_AMS
                 if _is_drying and not _was_drying:
                     import time as _dtm
-                    _DRYING_AMS[ams.id] = {"t0": _dtm.time(), "dated": False}
+                    _DRYING_AMS[ams.id] = {"t0": _dtm.time(), "dated": set(), "sids": set(), "done": 0.0, "chk": 0.0}
                     try:        # journal des succes : un cycle, sa duree reglee (h) ou restante (min)
                         from ..services import ach_log as _alog
                         _alog.dry(ams.id, (getattr(ams, "dry_duration", 0) or 0)
@@ -969,26 +1014,32 @@ class MQTTManager:
                     except Exception:
                         pass
                 _cyc = _DRYING_AMS.get(ams.id) if _is_drying else None
-                if _cyc and not _cyc["dated"]:
+                if _cyc:
                     import time as _dtm
-                    if not dry_enough(getattr(ams, "dry_duration", 0) or 0, getattr(ams, "dry_time", 0) or 0, _dtm.time() - _cyc["t0"]):
-                        _cyc = None
-                if _cyc and not _cyc["dated"]:
-                    _cyc["dated"] = True
-                    _sids = [t.spool_id for t in ams.trays if getattr(t, "spool_id", None)]
+                    _tnow = _dtm.time()
+                    _cyc["done"] = dry_done_min(getattr(ams, "dry_duration", 0) or 0, getattr(ams, "dry_time", 0) or 0,
+                                                _tnow - _cyc["t0"])
+                    _sids = {t.spool_id for t in ams.trays if getattr(t, "spool_id", None)}
                     # ... et celles simplement POSEES dans cet AMS (emplacement vide).
                     try:
                         from ..services import drying_slots as _dslots
-                        _sids += [x for x in _dslots.spools_in_ams(ams.id) if x not in _sids]
+                        _sids |= set(_dslots.spools_in_ams(ams.id))
                     except Exception:
                         pass
-                    if _sids:
-                        logger.info(f"[DRY] AMS {ams.id} en séchage → date sur bobines {_sids}")
+                    _cyc["sids"] |= _sids
+                    _todo = _sids - _cyc["dated"]
+                    if _todo and _tnow - _cyc["chk"] >= DRY_CHECK_S:
+                        _cyc["chk"] = _tnow
                         import threading as _dth
-                        _dth.Thread(target=_persist_last_dried, args=(list(_sids),),
+                        _dth.Thread(target=_date_dried, args=(list(_todo), _cyc["done"], _cyc["dated"]),
                                     daemon=True).start()
                 if not _is_drying and _was_drying:
-                    _DRYING_AMS.pop(ams.id, None)
+                    _end = _DRYING_AMS.pop(ams.id, None)
+                    _todo = (_end["sids"] - _end["dated"]) if _end else set()
+                    if _todo:              # fin du cycle : ce qu'il a fait en tout compte
+                        import threading as _dth
+                        _dth.Thread(target=_date_dried, args=(list(_todo), _end["done"], _end["dated"]),
+                                    daemon=True).start()
 
             state.ams_list = _new_ams
 
