@@ -35,6 +35,7 @@ import { ShowcaseBanner } from "../components/ShowcaseManager";
 import { mwImg } from "../components/MwImg";
 import { toast } from "../store/toast";
 import ShareSheet from "../components/ShareSheet";
+import SliceSettingsSheet from "../components/SliceSettingsSheet";
 import { LiveUsageCard } from "../components/LiveUsage";
 import { FSheet, fBtn, lighten } from "../components/FicheKit";
 import { useIsAdmin } from "../store/auth";
@@ -1461,6 +1462,7 @@ async function download3mf(pid, kind, group = false) {
 // la fiche recharge ses donnees et replie ce qui etait ouvert (cout, identifiants, champs en edition).
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = null, onNext = null }) {
   const [sharing, setSharing] = useState(false);
+  const [settings3mf, setSettings3mf] = useState(false);
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [p, setP] = useState(pProp);
@@ -1621,6 +1623,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       // documents du modele, fichiers joints -- a la place de leurs entrees eparses
       !visiting && { icon: "🗂", label: "Fichiers associés", hint: [p.model_3mf && "3MF tranché", p.source_3mf && "3MF d'origine", p.has_vue3d && "vues 3D", "documents, fichiers joints"].filter(Boolean).join(" · "),
         tone: "#8B5CF6", onClick: () => setFiles(true) },
+      // (13/11/2026) les reglages du 3MF en clair : parois, remplissage, buses, filaments, supports...
+      !visiting && (p.model_3mf || p.source_3mf || p.design_id) && { icon: "⚙️", label: "Détail des réglages",
+        hint: "Parois, remplissage, couches, buses, températures, supports, changements… lus dans le 3MF", tone: "#6366F1", onClick: () => setSettings3mf(true) },
       // la vignette du plateau, reprise du 3MF (31/10/2026 : supprimee par erreur, elle ne revenait pas)
       isAdmin && (p.model_3mf || p.source_3mf) && { icon: "🖼", label: "Reprendre la vignette du 3MF", hint: p.model_3mf ? "l'image du plateau, depuis le 3MF tranché" : "l'image du plateau, depuis le 3MF d'origine",
         tone: "#0EA5E9", onClick: async () => {
@@ -1858,6 +1863,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {objCreate && <ObjectCreateSheet parentType="print" parentId={p.id} defaultName={objCreate.name} costFabrication={objCreate.cost}
         onDone={() => { setRefreshKey(k => k + 1); onChanged?.(); }} onClose={() => setObjCreate(null)}/>}
       {sharing && <ShareSheet kind="print" id={p.id} onClose={() => setSharing(false)}/>}
+      {settings3mf && <SliceSettingsSheet printId={p.id} title={p.translated_name || p.file_name} onClose={() => setSettings3mf(false)}/>}
       {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray}
         multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={() => setSpoolPicker(null)}
         onMapped={() => { setSpoolPicker(null); reload(); onChanged?.(); }}/>}

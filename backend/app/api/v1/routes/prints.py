@@ -3981,6 +3981,35 @@ async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced
     return FileResponse(str(f), media_type="application/vnd.ms-package.3dmanufacturing-3dmodel+xml", filename=f"{name}{suffix}.3mf")
 
 
+@router.get("/{print_id}/settings3mf")
+async def print_settings3mf(print_id: int, _: str = Depends(get_current_user)):
+    """(13/11/2026) Les reglages du 3MF en clair (« Detail des reglages » de la fiche) : le 3MF tranche, sinon celui
+    d'origine (son premier plateau utile)."""
+    from ....services import slice_settings
+    from ....services.mw_source import print_file
+    from ....services.archive import local_or_archive
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+    if not p:
+        raise HTTPException(404, "Impression introuvable")
+    tries = []
+    if p.model_3mf:
+        tries.append(("sliced", local_or_archive(p.model_3mf), int(p.plate_id) if str(p.plate_id or "").isdigit() else None))
+    tries.append(("source", None, None))
+    last = None
+    for kind, f, plate in tries:
+        if kind == "source":
+            f = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id, p.task_name)
+        if not f or not f.is_file():
+            continue
+        try:
+            out = await asyncio.to_thread(slice_settings.summarize, f, plate)
+            return {**out, "from": kind}
+        except Exception as e:          # 3MF abime ou sans reglages : on essaie l'autre
+            last = e
+    raise HTTPException(404, f"Pas de réglages lisibles dans les 3MF de cette impression{f' ({last})' if last else ''}")
+
+
 # ── Les fichiers associes (03/11/2026) : ce qu'on joint soi-meme a une impression ou a un groupe (un document, un 3MF
 # de plus, une photo de la notice, n'importe quoi) ; ranges dans son dossier, nommes « Joint-<nom> » (la sauvegarde sur le
 # NAS les copie avec le reste, dans « Fichiers joints » ; ils partent avec l'impression ou le groupe) ──
