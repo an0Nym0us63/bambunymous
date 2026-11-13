@@ -553,7 +553,7 @@ def _objects(z: zipfile.ZipFile, plate: int, sliced_objs: list) -> list:
                     "source_offset_z", "matrix", "mesh_stat", "face_count", "volume_type", "source_in_inches", "id"}
             for ob in root.findall("object"):
                 meta = {m.get("key"): m.get("value") for m in ob.findall("metadata")}
-                extra = {k: v for k, v in meta.items() if k not in skip and not k.startswith("source_")}
+                extra = {k: v for k, v in meta.items() if k and k not in skip and not k.startswith("source_")}
                 if extra:
                     own[meta.get("name")] = extra
         except ET.ParseError:
@@ -590,8 +590,15 @@ def summarize(path: Path, plate: int | None = None) -> dict:
             raise ValueError("3MF sans réglages de projet")
         ps = json.loads(z.read("Metadata/project_settings.config").decode("utf-8", "replace"))
         plate, meta, fils, nozzles_used, sobjs = _plate_info(z, plate)
-        gc = _gcode_facts(z, plate or 1)
-        objects = _objects(z, plate or 1, sobjs)
+        # le G-code et les objets sont un plus : un detail illisible ne doit pas priver de tout le reste
+        try:
+            gc = _gcode_facts(z, plate or 1)
+        except Exception:
+            gc = {}
+        try:
+            objects = _objects(z, plate or 1, sobjs)
+        except Exception:
+            objects = []
         version = None
         if "Metadata/slice_info.config" in z.namelist():
             m = re.search(rb'X-BBL-Client-Version" value="([^"]+)"', z.read("Metadata/slice_info.config"))

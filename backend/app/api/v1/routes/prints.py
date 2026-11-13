@@ -3996,18 +3996,20 @@ async def print_settings3mf(print_id: int, _: str = Depends(get_current_user)):
     if p.model_3mf:
         tries.append(("sliced", local_or_archive(p.model_3mf), int(p.plate_id) if str(p.plate_id or "").isdigit() else None))
     tries.append(("source", None, None))
-    last = None
+    found = []
     for kind, f, plate in tries:
         if kind == "source":
             f = print_file(p.design_id, p.mw_profile_id, p.mw_plates, p.id, p.task_name)
         if not f or not f.is_file():
             continue
+        found.append(kind)
         try:
             out = await asyncio.to_thread(slice_settings.summarize, f, plate)
             return {**out, "from": kind}
         except Exception as e:          # 3MF abime ou sans reglages : on essaie l'autre
-            last = e
-    raise HTTPException(404, f"Pas de réglages lisibles dans les 3MF de cette impression{f' ({last})' if last else ''}")
+            logging.getLogger(__name__).warning("settings3mf %s (%s) : %r", print_id, kind, e)
+    # (13/11/2026) rien a lire : ce n'est pas une erreur, la fenetre l'explique
+    return {"missing": "unreadable" if found else "none", "found": found, "has_model": bool(p.design_id)}
 
 
 # ── Les fichiers associes (03/11/2026) : ce qu'on joint soi-meme a une impression ou a un groupe (un document, un 3MF

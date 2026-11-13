@@ -102,7 +102,7 @@ export default function SliceSettingsSheet({ printId, title, onClose }) {
   const [only, setOnly] = useState(false), [q, setQ] = useState(""), [open, setOpen] = useState(readOpen), [filOpen, setFilOpen] = useState({});
   useEffect(() => {
     client.get(`/prints/${printId}/settings3mf`, { timeout: 180000 })
-      .then(r => { setD(r.data); egg("reglages_lus"); })
+      .then(r => { setD(r.data); if (!r.data?.missing) egg("reglages_lus"); })
       .catch(e => setErr(e.response?.data?.detail || e.message));
   }, [printId]);
   const toggle = id => setOpen(o => { const n = { ...o, [id]: !o[id] }; try { localStorage.setItem(LS, JSON.stringify(n)); } catch { /* rien */ } return n; });
@@ -144,9 +144,9 @@ export default function SliceSettingsSheet({ printId, title, onClose }) {
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".08em", textTransform: "uppercase", color: C }}>🪪 Carte d'identité du réglage</div>
           <div style={{ fontSize: 16.5, fontWeight: 900, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
-          {d && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.45 }}>
+          {d && !d.missing && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", lineHeight: 1.45 }}>
             🖨 {h.printer || "Imprimante"}{h.process ? ` · ${h.process}` : ""}</div>}
-          {d && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+          {d && !d.missing && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
             <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
               {d.from === "sliced" ? "3MF tranché" : "3MF d'origine"}{d.plate ? ` · plateau ${d.plate}` : ""}</span>
             {h.version && <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>Bambu Studio {h.version}</span>}
@@ -155,9 +155,21 @@ export default function SliceSettingsSheet({ printId, title, onClose }) {
           </div>}
         </div>
       </div>
+      {d?.missing && <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: 14, borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+        <span style={{ fontSize: 28, lineHeight: 1 }}>{d.missing === "none" ? "📭" : "📦"}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>
+            {d.missing === "none" ? "Pas de 3MF pour cette impression" : "Pas de réglages dans ce 3MF"}</div>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>
+            {d.missing === "none"
+              ? <>Le détail se lit dans le 3MF tranché (gardé quand l'impression part de Bambu Studio) ou, à défaut, dans le 3MF d'origine{d.has_model ? " récupéré sur MakerWorld" : ""}. Aucun des deux n'est gardé pour celle-ci{d.has_model ? " : il sera lu dès que le 3MF d'origine aura été récupéré" : ""}.</>
+              : <>Le 3MF gardé ({d.found.map(k => k === "sliced" ? "tranché" : "d'origine").join(", ")}) ne contient pas de projet Bambu Studio lisible : c'est sans doute un simple modèle, sans ses réglages d'impression.</>}
+          </div>
+        </div>
+      </div>}
       {!d && !err && <div style={{ fontSize: 13, color: "var(--muted)", display: "flex", gap: 8, alignItems: "center" }}><span className="mw-spin" style={{ width: 14, height: 14 }}/> Lecture du 3MF…</div>}
       {err && <div style={{ fontSize: 13, color: "#DC2626", fontWeight: 700 }}>{err}</div>}
-      {d && <>
+      {d && !d.missing && <>
         {/* la carte : l'essentiel en images */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 158px), 1fr))", gap: 8 }}>
           <Tile art={<LayersArt h={h.layer} first={h.first_layer}/>} label="Couches" value={`${fr(h.layer)} mm`}
