@@ -2034,7 +2034,7 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
             "undo": ({"why": d["undo"][-1].get("why"), "at": d["undo"][-1].get("at")} if d["undo"] else None),
             "prio": d["prio"], "jobs": r["jobs"], "days": r["days"], "advice": adv + madv, "advice_at": _ADVICE["at"],
             "status": status, "drying": drying,
-            "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "check": await _check_view(r["jobs"]),
+            "deadlines": dls, "colors": colors(r["jobs"]), "loaded": sorted(loaded), "ready": ready_now(r["jobs"], d), "check": await _check_view(r["jobs"]),
             "blocked": [{k: b.get(k) for k in ("key", "design_id", "title", "cover", "thumb", "plate", "plate_name", "plates_total", "copy", "qty",
                                                 "seconds", "retained", "why", "fils")} for b in r.get("blocked") or []],
             "done_plates": d.get("_done") or {},
@@ -2660,6 +2660,63 @@ async def later(key: str, whole: bool = False) -> dict:
         raise PlanError("Plateau inconnu du planning")
     keep = [k for k in order if k not in set(move)]
     return await arrange({"order": keep + move, "pins": {k: None for k in move}}, "Plus tard")
+
+
+def ready_now(jobs: list, d: dict) -> list:
+    """Ce qui peut partir tout de suite sans changer de bobine (13/11/2026) : tous les filaments du plateau sont dans un
+    AMS, en quantite suffisante. Un par plateau de modele (son premier exemplaire au planning), avec combien
+    d'exemplaires tiennent dans ce qui est charge ; dans l'ordre du planning. Le plateau d'impression a changer est dit."""
+    ams = d.get("_ams") or {}
+    cur = (d.get("_bed_now") or {}).get("kind")
+    out, seen = [], set()
+    copies: dict = {}
+    for j in jobs:
+        copies[(j["design_id"], j.get("plate"))] = copies.get((j["design_id"], j.get("plate")), 0) + 1
+    for j in sorted(jobs, key=lambda x: x.get("start") or ""):
+        fils = j.get("fils") or []
+        if not fils or any(not f.get("filament_id") for f in fils):
+            continue
+        need: dict = {}
+        for f in fils:
+            need[f["filament_id"]] = need.get(f["filament_id"], 0.0) + float(f.get("g") or 0)
+        if any(fid not in ams for fid in need):
+            continue
+        n = min((int((ams[fid].get("g") or 0) // g) if g > 0 else 99) for fid, g in need.items())
+        k = (j["design_id"], j.get("plate"))
+        if n < 1 or k in seen:
+            continue
+        seen.add(k)
+        bed = j.get("bed")
+        out.append({"key": j["key"], "n": min(n, copies[k]), "copies": copies[k],
+                    **({"bed_change": {"from": cur, "to": bed}} if bed and cur and bed != cur else {})})
+        if len(out) >= 40:
+            break
+    return out
+
+
+async def put_next(key: str, after: str | None = None) -> dict:
+    """« Tout de suite » (13/11/2026) : le plateau passe juste apres l'impression en cours (devant le premier plateau
+    libre du planning), ou juste apres un plateau choisi ({after}) ; il est pose sur le jour de sa nouvelle place."""
+    d = await _load()
+    if key in d["locked"]:
+        raise PlanError("Ce plateau est figé : défige-le d'abord pour le déplacer")
+    r = await plan()
+    js = sorted(r["jobs"], key=lambda x: x.get("start") or "")
+    by = {x["key"]: x for x in js}
+    if key not in by:
+        raise PlanError("Plateau introuvable dans le planning (non planifiable ?)")
+    order = [x["key"] for x in js if x["key"] != key]
+    if after:
+        ref = by.get(after)
+        if not ref or after == key:
+            raise PlanError("Plateau de référence introuvable dans le planning")
+        at, day = order.index(after) + 1, ref["day"]
+    else:
+        first = next((x for x in js if x["key"] != key and x["key"] not in d["locked"]), None)
+        at = order.index(first["key"]) if first else len(order)
+        day = first["day"] if first else (r.get("now") or datetime.utcnow().isoformat())[:10]
+    order.insert(at, key)
+    return await arrange({"order": order, "pins": {key: day}}, "Après un plateau" if after else "Tout de suite")
 
 
 def _replace(order: list, old: list, new: list) -> list:

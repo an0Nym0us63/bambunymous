@@ -645,6 +645,16 @@ async def mw_plan_later(body: dict = Body({}), _: str = Depends(require_mw)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/plan/next")
+async def mw_plan_next(body: dict = Body({}), _: str = Depends(require_mw)):
+    """« Tout de suite » : le plateau ({key}) juste apres l'impression en cours, ou apres un plateau ({after})."""
+    from ....services import planner as P
+    try:
+        return await P.put_next(str(body.get("key") or ""), str(body.get("after") or "") or None)
+    except P.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/plan/optimize")
 async def mw_plan_optimize(body: dict = Body({}), _: str = Depends(require_mw)):
     """Enchainer les memes couleurs : toute la file, ou un jour ({day}), ou a partir d'un jour ({from})."""

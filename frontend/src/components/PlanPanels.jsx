@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import client from "../api/client";
 import { egg } from "../eggs";
 import { toast } from "../store/toast";
-import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor, UsedFils, ObjectRest, MergedList } from "./PlanDay";
+import { PlateThumb, plateTxt, jobName, doneTxt, dueTxt, hhmm, unretained, UNRET, runoutTxt, bedTxt, FilLink, FilLinks, finIc, LoadLinks, platePics, plateColor, UsedFils, ObjectRest, MergedList, FilDot, BED_NAMES } from "./PlanDay";
 import Lightbox from "./Lightbox";
 import { useStackZ } from "../utils/zstack";
 import { useSwipeClose } from "../utils/swipeClose";
@@ -746,6 +746,64 @@ export function DryList({ items, edit, onOpen, jobs, now }) {
 }
 
 // les plateaux que le stock ne permet pas de poser
+// « Tout de suite » (13/11/2026) : ce qui peut partir sans changer de bobine (tous ses filaments sont dans un AMS, en
+// quantite suffisante ; pd.ready, calcule par le serveur), et le placer juste apres l'impression en cours, apres un
+// autre plateau ou sur un autre jour. onNext(key, after|null) et onDay(key, day) rendent une promesse (vrai si fait).
+export function ReadyNow({ items, jobs, now, live, edit, onNext, onDay, onOpen, max }) {
+  const C = "#0D9488";
+  const [open, setOpen] = useState(null);         // { key, what: "after" | "day" }
+  const by = Object.fromEntries((jobs || []).map(j => [j.key, j]));
+  const list = (items || []).map(it => ({ ...it, j: by[it.key] })).filter(x => x.j).slice(0, max || 40);
+  const seq = [...(jobs || [])].sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+  const first = seq.find(x => !x.locked);
+  const today = (now || "").slice(0, 10);
+  const btn = (c, on) => ({ padding: "4px 10px", borderRadius: 10, border: `1px solid color-mix(in srgb, ${c} 45%, var(--border))`, cursor: "pointer",
+    background: on ? `color-mix(in srgb, ${c} 14%, var(--surface))` : "var(--surface)", color: c, fontSize: 11.5, fontWeight: 900, fontFamily: "inherit" });
+  const done = ok => { if (ok) { setOpen(null); egg("planning_tout_de_suite"); } };
+  if (!list.length) return <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.45 }}>
+    Rien dans la file ne se fait avec ce qui est chargé : chaque plateau demande au moins une bobine à changer (ou il n'en reste pas assez).</div>;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>
+      Tous leurs filaments sont déjà dans les AMS, en quantité suffisante : ils partent sans toucher une bobine. Dans l'ordre du planning ;
+      place celui que tu veux juste après {live ? "l'impression en cours" : "maintenant"}, après un autre plateau ou sur un autre jour.</div>
+    {list.map(({ key, n, copies, bed_change, j }) => {
+      const isNext = first?.key === key, o = open?.key === key ? open.what : null;
+      return <div key={key} style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, borderRadius: 12,
+        border: `1px solid color-mix(in srgb, ${C} 35%, var(--border))`, background: `color-mix(in srgb, ${C} 6%, var(--surface))` }}>
+        <button type="button" onClick={() => onOpen?.(j)} style={{ display: "flex", gap: 9, alignItems: "center", padding: 0, border: "none", background: "none",
+          cursor: onOpen ? "pointer" : "default", textAlign: "left", font: "inherit", minWidth: 0 }}>
+          <PlateThumb j={j} size={42}/>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.title}</span>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: C }}>{plateTxt(j)} · {hm(j.seconds)}{j.weight_g ? ` · ${Math.round(j.weight_g)} g` : ""}
+              {copies > 1 ? ` · ${n === copies ? `les ${copies} exemplaires` : `${n} exemplaire${n > 1 ? "s" : ""} sur ${copies}`}` : ""}</span>
+            <span style={{ display: "flex", flexWrap: "wrap", gap: "2px 8px", fontSize: 11, fontWeight: 700, color: "var(--text2)", marginTop: 2 }}>
+              {(j.fils || []).map((f, i) => <span key={i} style={{ display: "inline-flex", alignItems: "center", minWidth: 0 }}><FilDot id={f.filament_id}/>{f.name}</span>)}</span>
+            <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: 2 }}>
+              {isNext ? `✓ déjà le prochain (${when(j.start, now)})` : `prévu ${when(j.start, now)}`}{j.locked ? " · 🔒 figé" : ""}
+              {bed_change ? ` · 🔲 plateau à changer : ${BED_NAMES[bed_change.to] || bed_change.to}` : ""}</span>
+          </span>
+        </button>
+        {edit && !j.locked && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {!isNext && <button type="button" style={btn(C, false)} onClick={() => onNext(key, null).then(done)}
+            data-tip={live ? "Il passe juste après l'impression en cours, devant le reste du planning" : "Il passe en tête du planning, à lancer maintenant"}>
+            ⏭ {live ? "Juste après celle en cours" : "Maintenant"}</button>}
+          <button type="button" style={btn("#6366F1", o === "after")} onClick={() => setOpen(o === "after" ? null : { key, what: "after" })}
+            data-tip="Le placer juste après un plateau du planning">↪ Après…</button>
+          <button type="button" style={btn("#B45309", o === "day")} onClick={() => setOpen(o === "day" ? null : { key, what: "day" })}
+            data-tip="Le placer sur un autre jour : le planning lui cherche la meilleure place de la journée">📅 Un autre jour…</button>
+        </div>}
+        {o === "after" && <select autoFocus defaultValue="" onChange={e => e.target.value && onNext(key, e.target.value).then(done)}
+          style={{ padding: "7px 9px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", maxWidth: "100%" }}>
+          <option value="" disabled>Après quel plateau ?</option>
+          {seq.filter(x => x.key !== key).slice(0, 25).map(x => <option key={x.key} value={x.key}>{when(x.start, now)} · {x.title}{x.plates_total > 1 ? ` (plateau ${x.plate})` : ""}</option>)}
+        </select>}
+        {o === "day" && <input type="date" autoFocus min={today} onChange={e => e.target.value && onDay(key, e.target.value).then(done)}
+          style={{ padding: "7px 9px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", alignSelf: "flex-start" }}/>}
+      </div>; })}
+  </div>;
+}
+
 export function BlockedList({ items, onOpen }) {
   return <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
     <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", lineHeight: 1.45 }}>

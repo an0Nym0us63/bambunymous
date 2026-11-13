@@ -11,7 +11,7 @@ import MwImg, { thumbSrc } from "./MwImg";
 import { currentFriend } from "../store/friend";
 import { usePlanActs, sheetRef } from "./planActs";
 import { TimeGrid, WeekAgenda, weekOf } from "./CalendarViews";
-import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner, DryList } from "./PlanPanels";
+import { UndoPill, PlanPopup, JobSheet, PoolGrouped, PoolSummary, ModelSheet, poolGroups, BlockedList, LowStockBanner, DryList, ReadyNow } from "./PlanPanels";
 import { PlanDashboard, Legend, dayEnd, hhmm, dayInfo, toneColor, PlanTipCard } from "./PlanDay";
 import { PrintTipCard } from "./CalendarViews";
 import { tipCard } from "./TipHost";
@@ -542,6 +542,8 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
         tip="Plateaux que le stock et les commandes ne permettent pas de poser">non planifiable{pd.blocked.length > 1 ? "s" : ""}</BarBtn>}
       {showPlan && pd?.drying?.length > 0 && <BarBtn c="#EA580C" n={pd.drying.length} onClick={() => setPop("drying")}
         tip="Les bobines à sécher avant les impressions qui s'en servent, et les AMS à sécher pendant qu'ils ne servent pas">♨ séchage{pd.drying.length > 1 ? "s" : ""}</BarBtn>}
+      {showPlan && pd?.ready?.length > 0 && <BarBtn c="#0D9488" n={pd.ready.length} onClick={() => setPop("ready")}
+        tip="Ce que tu peux imprimer tout de suite sans changer de bobine, et le placer juste après l'impression en cours">⚡ Tout de suite</BarBtn>}
       {showPlan && !side && pd?.jobs?.length > 0 && <BarBtn c="#16A34A" n={pd.jobs.length} onClick={() => setPop("pool")} tip="La file : chaque plateau prévu, par objet">La file</BarBtn>}
       <BarBtn c="#B45309" n={(pd?.settings?.away?.length || 0) + (pd?.settings?.days_off?.length || 0) || null} onClick={() => setPop("away")}
         tip="Absences de quelques heures, jours et périodes où tu n'es pas là (vacances…)">🚶 Absences</BarBtn>
@@ -559,6 +561,7 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       {showPlan && pd?.jobs?.some(j => j.low_info?.length) && <BarBtn c="#DC2626" n={pd.jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0)} onClick={() => setPop("low")} label="Sous le seuil">📉</BarBtn>}
       {showPlan && pd?.blocked?.length > 0 && <BarBtn c="#DC2626" n={pd.blocked.length} onClick={() => setPop("blocked")} label="Non planifiables">⛔</BarBtn>}
       {showPlan && pd?.drying?.length > 0 && <BarBtn c="#EA580C" n={pd.drying.length} onClick={() => setPop("drying")} label="Séchages">♨</BarBtn>}
+      {showPlan && pd?.ready?.length > 0 && <BarBtn c="#0D9488" n={pd.ready.length} onClick={() => setPop("ready")} label="Tout de suite, sans changer de bobine">⚡</BarBtn>}
       {showPlan && !side && pd?.jobs?.length > 0 && <BarBtn c="#16A34A" n={pd.jobs.length} onClick={() => setPop("pool")} label="La file">📋</BarBtn>}
       <BarBtn c="#B45309" n={(pd?.settings?.away?.length || 0) + (pd?.settings?.days_off?.length || 0) || null} onClick={() => setPop("away")} label="Absences et congés">🚶</BarBtn>
       <BarBtn c={setOpen ? "#6366F1" : "var(--text2)"} onClick={() => setSetOpen(v => !v)} label="Réglages">⚙</BarBtn>
@@ -622,6 +625,11 @@ export default function PrintCalendar({ onOpenPrint } = {}) {
       <LowStockBanner jobs={pd?.jobs} now={pd?.now} inPopup onOpen={j => setJobSel(j)}/></PlanPopup>}
     {pop === "drying" && <PlanPopup title={`Séchages à prévoir (${pd?.drying?.length || 0})`} icon="♨" color="#EA580C" onClose={() => setPop(null)}>
       <DryList items={pd?.drying} edit={edit} jobs={pd?.jobs} now={pd?.now} onOpen={j => { setPop(null); setJobSel(j); }}/></PlanPopup>}
+    {pop === "ready" && <PlanPopup title={`Tout de suite, sans changer de bobine (${pd?.ready?.length || 0})`} icon="⚡" color="#0D9488" onClose={() => setPop(null)}>
+      <ReadyNow items={pd?.ready} jobs={pd?.jobs} now={pd?.now} live={pd?.live} edit={edit}
+        onNext={(key, after) => send("/makerworld/plan/next", { key, after }, "post")}
+        onDay={(key, day) => send("/makerworld/plan/place-day", { key, day }, "post")}
+        onOpen={j => { setPop(null); setJobSel(j); }}/></PlanPopup>}
     {pop === "blocked" && <PlanPopup title="Non planifiables" icon="⛔" color="#DC2626" onClose={() => setPop(null)}>
       <BlockedList items={pd?.blocked || []} onOpen={b => setJobSel(b)}/></PlanPopup>}
     {pop === "pool" && <PlanPopup title={`La file · ${pd?.jobs?.length || 0} plateaux`} icon="📋" color="#22C55E" onClose={() => setPop(null)}>

@@ -6,7 +6,7 @@ import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw, useCanMwHome } from "../store/auth";
 import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors, platePics } from "./PlanDay";
-import { JobSheet, LowStockBanner, BlockedList, DryList } from "./PlanPanels";
+import { JobSheet, LowStockBanner, BlockedList, DryList, ReadyNow } from "./PlanPanels";
 import { sheetRef } from "./planActs";
 import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
 import Lightbox from "./Lightbox";
@@ -100,6 +100,7 @@ function AlertChips({ p, big }) {
     {chip(blocked, "⛔", "non planifiable", "#DC2626")}
     {chip(low, "📉", "sous le seuil", "#DC2626")}
     {chip(adv, "💡", "conseil", "#D97706")}
+    {chip((p.ready || []).length, "⚡", "tout de suite", "#0D9488")}
     {chip(locked, "🔒", "figé", "#4F46E5")}
   </div>;
 }
@@ -269,6 +270,10 @@ export function PlanZoom({ p: p0 }) {
         {j && line("🧵", "#6366F1", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{` · ${plateTxt(j)}`} : <SwapLinks j={j}/>.</>, j)}
         {ro && line("🔄", "#B45309", `${dayLabel(ro.runout[0].at.slice(0, 10), p.now)} vers ${hhmm(ro.runout[0].at)}`, <>Pendant {ro.title} : <FilLink id={ro.runout[0].id} label={ro.runout[0].name}/>{runoutTxt(ro.runout[0]).slice(3 + ro.runout[0].name.length)}. Prépare une autre bobine.</>, ro)}
       </>; })()}
+    {(p.ready || []).length > 0 && <>{sec("Tout de suite, sans changer de bobine")}
+      <ReadyNow items={p.ready} jobs={p.jobs} now={p.now} live={p.live} edit={edit} max={6} onOpen={setSel}
+        onNext={(key, after) => send("/makerworld/plan/next", { key, after }).then(Boolean)}
+        onDay={(key, day) => send("/makerworld/plan/place-day", { key, day }).then(Boolean)}/></>}
     {sec("Les prochains jours")}
     {days.map(d => <div key={d} style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface2)", padding: 9, display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
