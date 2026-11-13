@@ -897,6 +897,7 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
   const [gap, setGap] = useState(String(s?.gap ?? 15));
   const [optMode, setOptMode] = useState(s?.opt_mode || "mix");
   const [autoNew, setAutoNew] = useState(s?.auto_new || "off");
+  const [finStarted, setFinStarted] = useState(!!s?.finish_started);
   const [daysOff, setDaysOff] = useState(s?.days_off || []);
   const [run, setRun] = useState(s?.run || null);
   const [launch, setLaunch] = useState(s?.launch || null);
@@ -918,7 +919,7 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
       de <input type="time" value={v.from} onChange={e => set({ ...v, from: e.target.value })} style={tin}/>
       à <input type="time" value={v.to} onChange={e => set({ ...v, to: e.target.value })} style={tin}/></div>}
   </div>;
-  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, days_off: daysOff, load_win: loadWin, dur_mode: durMode, dur_pct: parseInt(durPct) || 0, away, we, dry }); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { await onSave({ gap: Math.max(0, parseInt(gap) || 0), run, launch, opt_mode: optMode, auto_new: autoNew, finish_started: finStarted, days_off: daysOff, load_win: loadWin, dur_mode: durMode, dur_pct: parseInt(durPct) || 0, away, we, dry }); } finally { setBusy(false); } };
   const modes = (v, set, extra) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
     {[...(extra ? [extra] : []), ...OPT_MODES].map(([k, ic, l, tip]) => <button key={k} type="button" data-tip={tip} onClick={() => set(k)}
       style={{ ...seg, ...(v === k ? segOn : {}) }}>{ic} {l}</button>)}</div>;
@@ -1031,6 +1032,11 @@ export function PlanSettings({ s, dur, onSave, onClose, part = "global", edit = 
       <div style={lab}>✨ Mode d'optimisation proposé</div>
       {modes(optMode, setOptMode)}
       <div style={hint}>Celui que « Optimiser la file » propose d'office ; tu peux en choisir un autre à chaque fois.</div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 13, fontWeight: 800, cursor: edit ? "pointer" : "default" }}>
+        <input type="checkbox" checked={finStarted} disabled={!edit} onChange={e => setFinStarted(e.target.checked)}/>
+        🏁 Finir d'abord ce qui est entamé</label>
+      <div style={hint}>Un modèle dont un plateau est déjà imprimé (ou en cours) compte comme une priorité haute pour l'optimiseur, quel que soit le
+        mode : ses plateaux restants passent devant les modèles pas encore commencés, sans rater de date limite.</div>
     </div>
     <div>
       <div style={lab}>➕ Nouveaux plateaux</div>

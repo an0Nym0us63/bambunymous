@@ -48,7 +48,9 @@ KEY = "PRINT_PLAN"
 HORIZON_DAYS = 60
 SHIFT_MIN = 180          # un plateau « decale » : son depart a bouge d'au moins 3 h (06/11/2026)
 DEFAULTS = {"gap": 15, "run": None, "launch": None, "opt_mode": "mix", "auto_new": "off", "days_off": [], "load_win": [],
-            "dur_mode": "off", "dur_pct": 0, "plates": [], "away": [], "we": None, "dry": None}
+            "dur_mode": "off", "dur_pct": 0, "plates": [], "away": [], "we": None, "dry": None, "finish_started": False}
+# finish_started (13/11/2026) : finir d'abord ce qui est entame ; un modele dont un plateau est deja imprime (ou en cours)
+# compte pour l'optimiseur comme une priorite haute (au moins), pour ne pas laisser trainer des objets a moitie faits
 # dry (11/11/2026) : les sechages du planning, voir services/dry_plan.py ({mode, fresh}) ; None : les reglages par defaut
 # away (06/11/2026) : des absences de quelques heures, [{date, from, to}] ; rien ne se lance pendant, elles s'effacent une
 # fois passees. we : d'autres horaires le week-end (et les jours feries, au choix) : {on, run, launch, holidays}
@@ -260,6 +262,8 @@ async def set_settings(body: dict) -> dict:
         d["dry"] = DP.clean_settings(body.get("dry"))
     if body.get("opt_mode") in MODES:
         d["opt_mode"] = body["opt_mode"]
+    if "finish_started" in body:
+        d["finish_started"] = bool(body.get("finish_started"))
     # les nouveaux plateaux (un modele retenu, un exemplaire de plus) : en fin de file, ou places selon un mode
     if body.get("auto_new") in ("off",) + MODES:
         d["auto_new"] = body["auto_new"]
@@ -333,6 +337,13 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                             "prio_m": int(d.get("prio", {}).get(did) or 0), "prio_p": int(d.get("prio", {}).get(f"{did}:{idx}") or 0),
                             "bed_want": beds.get(idx), "iid": (m.get("profile") or {}).get("instance_id"),
                             "dev_model": (m.get("profile") or {}).get("dev_model")})
+        # entame (13/11/2026) : un plateau de ce modele deja imprime ou en cours ; « finir d'abord » le pousse devant
+        if any(obj["plates"].values()):
+            for j in out:
+                if j["design_id"] == did:
+                    j["started"] = True
+                    if d.get("finish_started"):
+                        j["boost"] = True
     return out, changed
 
 
@@ -1314,20 +1325,27 @@ PRIO_W = {2: 60.0, 1: 25.0, 0: 1.0, -1: 0.4, -2: 0.15}
 PRIOS = (-2, -1, 0, 1, 2)
 
 
+def _eff(j) -> int:
+    """La priorite qui compte pour l'optimiseur : celle du modele, au moins haute pour un entame quand « finir d'abord
+    ce qui est entame » est coche (13/11/2026)."""
+    p = j.get("prio_m") or 0
+    return max(p, 1) if j.get("boost") else p
+
+
 def _pw(j) -> float:
-    return PRIO_W.get(j.get("prio_m") or 0, 1.0)
+    return PRIO_W.get(_eff(j), 1.0)
 
 
 def prio_cost(r: dict, now: datetime) -> float:
     """Le cout des priorites d'un planning : chaque heure ou un plateau prioritaire attend sa fin coute plus, ou moins pour
     une priorite basse. Tout en normale : 0 (rien ne change pour qui ne s'en sert pas)."""
     return sum((_pw(j) - 1) * (datetime.fromisoformat(j["end"]) - now).total_seconds() / 3600
-               for j in r["jobs"] if j.get("prio_m"))
+               for j in r["jobs"] if _eff(j))
 
 
 def _by_prio(seq: list) -> list:
     """Le point de depart des optimiseurs : les retenus devant, puis par priorite (stable : l'ordre de la file sinon)."""
-    return sorted(seq, key=lambda j: (not j.get("retained", True), -(j.get("prio_m") or 0), -(j.get("prio_p") or 0)))
+    return sorted(seq, key=lambda j: (not j.get("retained", True), -_eff(j), -(j.get("prio_p") or 0)))
 
 
 def mode_score(r: dict, d: dict, now: datetime, mode: str) -> float:
@@ -2254,7 +2272,7 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
     sw = {}
     if mode == "debit":
         # le plus d'impressions chaque jour : les plus courtes d'abord (dans l'ordre de priorite des retenus)
-        best = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), -(j.get("prio_m") or 0), j["seconds"]))
+        best = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), -_eff(j), j["seconds"]))
     elif mode == "nuits":
         best = _soft_grouped(_by_prio(free))          # l'ordre actuel ; les nuits se remplissent ensuite
     else:
@@ -2289,8 +2307,8 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
         # (le dernier plateau de Scrat, priorite haute, restait au 16/11), ni remplir les nuits (Torii lance a 18 h 30,
         # fini a 1 h 51, rien jusqu'a 9 h) : un prioritaire essaie aussi des places loin devant, et les nuits se
         # remplissent ; chaque fois, seulement si ca gagne plus que ce que coute ce qui bouge
-        pri = sorted((j for j in jobs if j["key"] in movable and j["key"] not in d["pins"] and (j.get("prio_m") or 0) > 0),
-                     key=lambda j: -(j.get("prio_m") or 0))
+        pri = sorted((j for j in jobs if j["key"] in movable and j["key"] not in d["pins"] and _eff(j) > 0),
+                     key=lambda j: -_eff(j))
         for j in pri:
             k = j["key"]
             i = order.index(k)
@@ -2319,11 +2337,11 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
         # le mode intelligent (06/11/2026) : plusieurs departs (les couleurs enchainees, l'ordre actuel, les plus courtes
         # d'abord) ; les departs bruts se comparent vite, le remplissage des nuits (le plus long) se fait sur le meilleur
         o0 = head + [j["key"] for j in _soft_grouped(jobs) if j["key"] not in hs]
-        spt = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), -(j.get("prio_m") or 0), j["seconds"]))
+        spt = sorted(_soft_grouped(free), key=lambda j: (not j.get("retained", True), -_eff(j), j["seconds"]))
         o1 = _replace(base, [j["key"] for j in free], [j["key"] for j in spt])
         # avec des priorites : aussi l'ordre de la file trie par priorite
         o2 = _replace(base, [j["key"] for j in free], [j["key"] for j in _soft_grouped(_by_prio(free))])
-        cands = [(cur, order), floor[:2]] + [(score(o), o) for o in (o0, o1) + ((o2,) if any(j.get("prio_m") or j.get("prio_p") for j in free) else ())]
+        cands = [(cur, order), floor[:2]] + [(score(o), o) for o in (o0, o1) + ((o2,) if any(_eff(j) or j.get("prio_p") for j in free) else ())]
         cur, order = min(cands, key=lambda c: c[0])
         if Rules(d).limits:
             nf = night_fill(jobs, order, d, now, busy, loaded, movable, why=sw, budget=4)
