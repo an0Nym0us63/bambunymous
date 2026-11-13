@@ -6316,7 +6316,10 @@ async def use_loupe(username: str, aid: str, what: str = "next") -> dict:
     if what == "next":
         a = BY_ID[aid]
         st = await _state_get() or {}
-        base = _reveal_level(st, aid)
+        # (13/11/2026) ce que CE compte voit deja : les etapes offertes par un copain, pas celles payees en cles par la
+        # maison (cachees aux autres comptes depuis le 11/11, hide_spending). Les compter faisait croire le secret
+        # deja devoile : la loupe repondait « ok » sans rien reveler ni rien prendre (les cachettes de madame)
+        base = _reveal_level({**st, "keys": {}}, aid)
         if aid in FAMILY_IDS and aid[4:] in await eggs_found():
             base = max(base, FREE_FROM_FRIENDS)
         if aid in HOUSE_SECRET_IDS and aid in await my_uniques():
@@ -7902,14 +7905,14 @@ async def _podium_compute(me_name: str) -> dict:
     import asyncio
     from . import friends as F
     people = [{"id": "me", "name": me_name, "me": True, "status": "ok", **summary(await view())}]
-    mine = ",".join(await my_uniques())
+    mine = mine_headers(await my_uniques())
 
     async def one(f):
         head = {"id": f["id"], "name": f.get("name") or f"Copain {f['id']}", "me": False}
         try:
             # 5 s pour joindre un copain (eteint : on n'attend plus 30 s), 25 s pour qu'il reponde
             r = await asyncio.to_thread(F._get, f["url"], f["key"], "achievements", None, (5, 25),
-                                        {"X-BN-Achievements": mine})
+                                        mine)
             if r.status_code == 404:
                 return {**head, "status": "outdated"}
             if r.status_code >= 400:
@@ -8105,6 +8108,61 @@ async def my_levels() -> dict:
         if lv and aid in BY_ID:
             out[aid] = max(lv)
     return out
+
+
+# Mes medailles uniques envoyees au copain que je visite (13/11/2026) : la liste en clair dans un en-tete depassait les
+# 8 Ko qu'acceptent les serveurs web (nginx) devant certains BambuNymous, qui repondaient 400 a toute la page des succes.
+# Une case par medaille unique du catalogue (~170 caracteres), avec l'empreinte du catalogue ; s'il differe chez lui, la
+# liste compressee (si elle reste courte) ; la liste en clair seulement si elle est courte (un copain pas a jour).
+_UNIQ_IDS: list = []
+
+
+def _uniq_catalog() -> list:
+    if not _UNIQ_IDS:
+        _UNIQ_IDS.extend(sorted(a["id"] for a in CATALOG if len(a["tiers"]) == 1))
+    return _UNIQ_IDS
+
+
+def mine_headers(ids) -> dict:
+    import base64, hashlib, zlib
+    cat = _uniq_catalog()
+    have = set(ids)
+    bits = bytearray((len(cat) + 7) // 8)
+    for i, aid in enumerate(cat):
+        if aid in have:
+            bits[i // 8] |= 1 << (i % 8)
+    h = hashlib.sha1(",".join(cat).encode()).hexdigest()[:10]
+    out = {"X-BN-Ach-Bits": f"{h}:{base64.urlsafe_b64encode(bytes(bits)).decode()}"}
+    plain = ",".join(sorted(have))
+    z = base64.urlsafe_b64encode(zlib.compress(plain.encode(), 9)).decode()
+    if len(z) <= 4000:
+        out["X-BN-Ach-Z"] = z
+    if len(plain) <= 3000:
+        out["X-BN-Achievements"] = plain
+    return out
+
+
+def mine_from_headers(headers) -> set:
+    """Les medailles uniques du visiteur, lues dans ce que mine_headers a envoye."""
+    import base64, hashlib, zlib
+    bits = headers.get("x-bn-ach-bits") or ""
+    if ":" in bits:
+        h, b = bits.split(":", 1)
+        cat = _uniq_catalog()
+        if h == hashlib.sha1(",".join(cat).encode()).hexdigest()[:10]:
+            try:
+                raw = base64.urlsafe_b64decode(b + "=" * (-len(b) % 4))
+                return {aid for i, aid in enumerate(cat) if i // 8 < len(raw) and raw[i // 8] >> (i % 8) & 1}
+            except Exception:
+                pass
+    z = headers.get("x-bn-ach-z") or ""
+    if z:
+        try:
+            plain = zlib.decompress(base64.urlsafe_b64decode(z + "=" * (-len(z) % 4)), bufsize=65536).decode()
+            return {x.strip() for x in plain.split(",") if x.strip()}
+        except Exception:
+            pass
+    return {x.strip() for x in (headers.get("x-bn-achievements") or "").split(",") if x.strip()}
 
 
 async def my_uniques() -> list:

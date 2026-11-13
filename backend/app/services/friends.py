@@ -140,8 +140,8 @@ async def proxy(fid: str, path: str, params: dict, headers=None):
     if p == "achievements":
         # mes medailles uniques : chez lui, je lirai le descriptif de celles-la
         try:
-            from .achievements import my_uniques
-            extra["X-BN-Achievements"] = ",".join(await my_uniques())
+            from .achievements import my_uniques, mine_headers
+            extra.update(mine_headers(await my_uniques()))
         except Exception:
             pass
     r = await asyncio.to_thread(_get, f["url"], f["key"], p, params, 60, extra)

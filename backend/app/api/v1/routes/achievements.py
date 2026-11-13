@@ -613,7 +613,7 @@ async def achievements_view(request: Request, fresh: bool = False, slim: int = 0
     # seul un acces par cle de copain (relaye par son serveur) dit ce qu'il a
     mine = set()
     if by_key:
-        mine = {x.strip() for x in (request.headers.get(MINE_HEADER) or "").split(",") if x.strip()}
+        mine = A.mine_from_headers(request.headers)        # (13/11/2026) compacte : la liste en clair depassait 8 Ko
     return _json(A.mask_secrets(v, mine), slim, view)
 
 
