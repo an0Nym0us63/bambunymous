@@ -1064,6 +1064,38 @@ def _variant_counts(rows: list, entries: list, m: dict, iid) -> dict:
     return counts
 
 
+async def _adopt_printed_profiles(cfg: dict, designs: dict, details: dict, done_plates: dict) -> None:
+    """Imprime avec un autre profil que celui retenu (14/11/2026) : si rien n'a encore ete imprime avec le profil retenu
+    (depuis l'arrivee du modele ou sa remise a zero), la file adopte le profil vraiment imprime (le dernier). Sinon le
+    plateau fait n'etait compte nulle part (les plateaux de deux profils ne se correspondent pas) et le planning
+    reproposait celui qu'on venait d'imprimer. Un modele a plusieurs profils retenus (variantes) n'est pas touche."""
+    ids = lambda p: {str(p.get("instance_id") or ""), str(p.get("profile_id") or "")} - {""}
+    changed = False
+    for did in designs:
+        pl = cfg["plans"].get(did) or {}
+        iid = str(pl.get("instance_id") or "")
+        if not iid or any(k.startswith(f"{did}~") for k in cfg["plans"]):
+            continue
+        profs = (details.get(did) or {}).get("profiles") or []
+        cur = next((p for p in profs if str(p.get("instance_id")) == iid), None)
+        if not cur:
+            continue
+        since = since_of(cfg, did)
+        ents = _after(done_plates.get(str(did), []), since) if since else done_plates.get(str(did), [])
+        if not ents or any(e.get("prof") in ids(cur) for e in ents):
+            continue
+        other = [(e.get("at") or "", p) for e in ents for p in profs if p is not cur and e.get("prof") in ids(p)]
+        if not other:
+            continue
+        p = max(other, key=lambda x: x[0])[1]
+        cfg["plans"][did] = {"instance_id": str(p.get("instance_id")), "plates": None, "picks": {}, "plate_picks": {},
+                             "qty": _qty(pl.get("qty", 1))}
+        changed = True
+        logger.info(f"[FILE] {did} : imprimé avec le profil {p.get('instance_id')} et pas {iid} : il devient le profil retenu")
+    if changed:
+        await _save(cfg)
+
+
 async def _compute(fresh: bool = False) -> dict:
     """fresh (« Relire maintenant », 02/11/2026) : les collections relues chez MakerWorld, pas dans le cache de 2 h ;
     un modele ajoute sur le site apparait tout de suite."""
@@ -1092,6 +1124,7 @@ async def _compute(fresh: bool = False) -> dict:
     ams = await _ams_stock()
     done_plates = await _printed_plates(list(designs))
 
+    await _adopt_printed_profiles(cfg, designs, details, done_plates)
     models, stock_of = [], {}
     stock_all = None                                  # tout le stock, lu seulement si un choix sort des propositions
     lines = []
