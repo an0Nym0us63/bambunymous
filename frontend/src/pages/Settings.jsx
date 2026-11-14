@@ -1006,6 +1006,87 @@ function AchievementsExportSection() {
   );
 }
 
+// Des noms pour tous les groupes (14/11/2026) : un nom propose par groupe, a passer en revue avant de renommer
+function GroupNamesSection() {
+  const [st, setSt] = React.useState(null);
+  const [pick, setPick] = React.useState({});      // id -> nom choisi (ou tape)
+  const [off, setOff] = React.useState({});        // id -> decoche
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+  const load = React.useCallback(async () => {
+    try { const { data } = await client.get("/prints/group-names/all"); setSt(data); return data; } catch { return null; }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    if (!st?.running) return undefined;
+    const t = setTimeout(load, 3000);
+    return () => clearTimeout(t);
+  }, [st, load]);
+  const start = async () => {
+    setMsg(null); setPick({}); setOff({});
+    try { const { data } = await client.post("/prints/group-names/all"); setSt(data); } catch (e) { setMsg(e.response?.data?.detail || e.message); }
+  };
+  const items = st?.items || [];
+  const chosen = items.filter(it => !off[it.id]).map(it => ({ id: it.id, name: (pick[it.id] ?? it.names[0] ?? "").trim() })).filter(x => x.name);
+  const apply = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const { data } = await client.post("/prints/group-names/apply", { renames: chosen });
+      setMsg(`✓ ${data.renamed} groupe${data.renamed > 1 ? "s" : ""} renommé${data.renamed > 1 ? "s" : ""}`);
+      if (data.renamed) egg("groupe_nom_suggere");
+      await load();
+    } catch (e) { setMsg(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+  const chip = (on) => ({ padding:"3px 9px", borderRadius:20, cursor:"pointer", fontFamily:"inherit", fontSize:11.5, fontWeight:800,
+    border:`1px solid ${on ? "#3b82f6" : "var(--border)"}`, background: on ? "color-mix(in srgb, #3b82f6 12%, var(--surface))" : "var(--surface)",
+    color: on ? "#2563eb" : "var(--text2)" });
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Renommer les groupes</h3>
+      <CardHelp title="Renommer les groupes">
+        Propose un nom pour chaque groupe, d'après les noms français de ses impressions et la fiche MakerWorld (par Claude
+        quand la traduction par Claude est cochée). Rien n'est renommé tant que tu n'as pas validé : coche, choisis ou corrige,
+        puis renomme. Les groupes dont le nom proposé est déjà le leur ne sont pas listés.
+      </CardHelp>
+      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <button onClick={start} disabled={!!st?.running} style={{ padding:"8px 16px", borderRadius:10, fontSize:13, fontWeight:700, border:"none",
+          cursor: st?.running ? "wait" : "pointer", background:"#3b82f6", color:"#fff" }}>
+          {st?.running ? `Calcul… ${st.done} / ${st.total || "?"}` : items.length ? "⟳ Recalculer" : "💡 Proposer un nom pour chaque groupe"}</button>
+        {st?.by && !st.running && st.finished && <span style={{ fontSize:11.5, color:"var(--muted)" }}>{st.by === "claude" ? "🤖 par Claude" : "💡 calcul simple"}</span>}
+        {st?.error && <span style={{ fontSize:12, color:"#ef4444" }}>{st.error}</span>}
+        {msg && <span style={{ fontSize:12, fontWeight:700, color: msg.startsWith("✓") ? "#16a34a" : "#ef4444" }}>{msg}</span>}
+      </div>
+      {!st?.running && st?.finished && !items.length && <p style={{ fontSize:12, color:"var(--muted)", margin:"10px 0 0" }}>Rien à proposer : chaque groupe porte déjà le nom proposé.</p>}
+      {items.length > 0 && <>
+        <div style={{ display:"flex", alignItems:"center", gap:10, margin:"12px 0 6px", flexWrap:"wrap" }}>
+          <span style={{ fontSize:12, fontWeight:800, color:"var(--text2)" }}>{items.length} groupe{items.length > 1 ? "s" : ""} · {chosen.length} coché{chosen.length > 1 ? "s" : ""}</span>
+          <button type="button" style={chip(false)} onClick={() => setOff({})}>Tout cocher</button>
+          <button type="button" style={chip(false)} onClick={() => setOff(Object.fromEntries(items.map(it => [it.id, true])))}>Tout décocher</button>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:460, overflowY:"auto", paddingRight:2 }}>
+          {items.map(it => { const cur = pick[it.id] ?? it.names[0] ?? "";
+            return <div key={it.id} style={{ display:"flex", gap:8, alignItems:"flex-start", padding:"8px 10px", borderRadius:12,
+              border:"1px solid var(--border)", background: off[it.id] ? "var(--surface)" : "var(--surface2)", opacity: off[it.id] ? 0.6 : 1 }}>
+              <input type="checkbox" checked={!off[it.id]} onChange={e => setOff(o => ({ ...o, [it.id]: !e.target.checked }))} style={{ marginTop:3 }}/>
+              <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:5 }}>
+                <span style={{ fontSize:11.5, color:"var(--muted)", textDecoration:"line-through", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.name || "(sans nom)"}</span>
+                <input value={cur} onChange={e => setPick(p => ({ ...p, [it.id]: e.target.value }))}
+                  style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 9px", fontSize:13, fontWeight:700,
+                    color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" }}/>
+                {it.names.length > 1 && <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                  {it.names.map(n => <button key={n} type="button" style={chip(n === cur)} onClick={() => setPick(p => ({ ...p, [it.id]: n }))}>{n}</button>)}</div>}
+              </div>
+            </div>; })}
+        </div>
+        <button onClick={apply} disabled={busy || !chosen.length} style={{ marginTop:10, padding:"9px 18px", borderRadius:10, fontSize:13, fontWeight:800,
+          border:"none", cursor: busy || !chosen.length ? "default" : "pointer", background: chosen.length ? "#16a34a" : "var(--border)", color:"#fff" }}>
+          {busy ? "…" : `🏷️ Renommer ${chosen.length} groupe${chosen.length > 1 ? "s" : ""}`}</button>
+      </>}
+    </div>
+  );
+}
+
 function TranslateNamesSection() {
   const [running, setRunning] = React.useState(null);   // null = pas encore su
   const [err, setErr] = React.useState(null);
@@ -2558,6 +2639,7 @@ export default function Settings() {
         <RecalculateSection/>
         <DiagExportSection/>
         <TranslateNamesSection/>
+        <GroupNamesSection/>
         <RfidDebugSection/>
         <AchievementsExportSection/>
       </div></AdminOnly>

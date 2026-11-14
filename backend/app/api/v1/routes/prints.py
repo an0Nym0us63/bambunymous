@@ -968,6 +968,38 @@ async def suggest_group_names(body: dict = Body({}), _: str = Depends(get_curren
     return await group_names(list(ids))
 
 
+@router.get("/group-names/all")
+async def group_names_all(_: str = Depends(require_admin)):
+    """Les noms proposes pour tous les groupes (14/11/2026) : avancement et resultats du dernier calcul."""
+    from ....services.translate import _GROUPS_RUN
+    return _GROUPS_RUN
+
+
+@router.post("/group-names/all")
+async def group_names_all_start(_: str = Depends(require_admin)):
+    from ....services.translate import start_groups_bulk
+    return start_groups_bulk()
+
+
+@router.post("/group-names/apply")
+async def group_names_apply(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Renommer les groupes choisis : {renames: [{id, name}]}."""
+    from ....services.translate import _GROUPS_RUN
+    done = []
+    async with AsyncSessionLocal() as db:
+        for r in (body.get("renames") or [])[:2000]:
+            name = str(r.get("name") or "").strip()[:200]
+            if not name or not str(r.get("id") or "").isdigit():
+                continue
+            g = await db.get(Group, int(r["id"]))
+            if g:
+                g.name = name
+                done.append(int(r["id"]))
+        await db.commit()
+    _GROUPS_RUN["items"] = [x for x in _GROUPS_RUN.get("items") or [] if x["id"] not in done]
+    return {"renamed": len(done)}
+
+
 @router.get("/groups")
 async def list_groups(_: str = Depends(get_current_user)):
     """Retourne les groupes (id BambuNymous + nom + nb de prints + date), pour distinguer

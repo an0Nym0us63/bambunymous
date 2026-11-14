@@ -225,6 +225,96 @@ async def group_names(print_ids: list) -> dict:
     return {"names": local, "by": "local"}
 
 
+# ── Tous les groupes d'un coup (14/11/2026) ─────────────────────────────────
+# Un nom propose pour chaque groupe, a passer en revue (Parametres › Outils) : rien n'est renomme sans le dire.
+# En fond, avec son avancement ; par Claude (15 groupes par demande) s'il traduit, sinon le calcul simple.
+_GROUPS_RUN = {"running": False, "done": 0, "total": 0, "items": [], "by": None, "error": None, "started": None, "finished": None}
+
+_GROUPS_SCHEMA = {"type": "object", "properties": {"items": {"type": "array", "items": {
+    "type": "object", "properties": {"ref": {"type": "string"}, "names": {"type": "array", "items": {"type": "string"}}},
+    "required": ["ref", "names"], "additionalProperties": False}}}, "required": ["items"], "additionalProperties": False}
+
+
+async def _groups_bulk() -> None:
+    import asyncio
+    import json as _json
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print, Group
+    st = _GROUPS_RUN
+    try:
+        async with AsyncSessionLocal() as db:
+            groups = (await db.execute(select(Group.id, Group.name))).all()
+            rows = (await db.execute(select(Print.group_id, Print.translated_name, Print.file_name, Print.design_id)
+                                     .where(Print.group_id.isnot(None)))).all()
+        by = {}
+        for gid, t, f, d in rows:
+            e = by.setdefault(gid, {"names": [], "dids": []})
+            n = (t or f or "").strip()
+            if n and n not in e["names"] and len(e["names"]) < 30:
+                e["names"].append(n)
+            if d and d not in e["dids"]:
+                e["dids"].append(d)
+        todo = []
+        for gid, name in groups:
+            e = by.get(gid)
+            if not e or not e["names"]:
+                continue
+            mw = [t for t in dict.fromkeys(_mw_context(d, None).get("titre_makerworld") for d in e["dids"][:5]) if t]
+            todo.append({"id": gid, "name": name or "", "names": e["names"], "mw": mw})
+        st.update(total=len(todo), done=0, items=[])
+        key = await _keys()
+        st["by"] = "claude" if key.get("claude") else "local"
+        for i in range(0, len(todo), 15):
+            chunk = todo[i:i + 15]
+            got = None
+            if key.get("claude"):
+                def ask(chunk=chunk):
+                    try:
+                        import anthropic
+                        c = anthropic.Anthropic(api_key=key["claude"], timeout=90.0, max_retries=2)
+                        r = c.messages.create(model=CLAUDE_MODEL, max_tokens=3000, system=_GROUP_SYSTEM.replace(
+                            "Propose 3 noms", "Pour chaque groupe (sa reference \"ref\" telle quelle), propose 3 noms"),
+                            messages=[{"role": "user", "content": _json.dumps({"groupes": [
+                                {"ref": str(g["id"]), "nom_actuel": g["name"], "impressions": g["names"][:20],
+                                 "titres_makerworld": g["mw"][:3]} for g in chunk]}, ensure_ascii=False)}],
+                            output_config={"format": {"type": "json_schema", "schema": _GROUPS_SCHEMA}})
+                        try:
+                            from .ai_tags import _count
+                            asyncio.run(_count(r.usage))
+                        except Exception:
+                            pass
+                        text = next((b.text for b in r.content if b.type == "text"), "")
+                        return {it.get("ref"): [n.strip()[:80] for n in it.get("names") or [] if n and n.strip()]
+                                for it in (_json.loads(text) if text else {}).get("items") or []}
+                    except Exception as e:
+                        logger.warning(f"[TRAD] noms des groupes par Claude : {type(e).__name__}")
+                        return None
+                got = await asyncio.to_thread(ask)
+            for g in chunk:
+                names = (got or {}).get(str(g["id"])) or _local_group_names(g["names"], g["mw"])
+                names = [n for n in dict.fromkeys(names) if n]
+                if names and names[0].strip().lower() != (g["name"] or "").strip().lower():
+                    st["items"].append({"id": g["id"], "name": g["name"], "names": names[:4],
+                                        "by": "claude" if got and got.get(str(g["id"])) else "local"})
+            st["done"] = min(len(todo), i + 15)
+        st["error"] = None
+    except Exception as e:
+        logger.exception("[TRAD] noms des groupes")
+        st["error"] = f"{type(e).__name__} : {e}"
+    finally:
+        st.update(running=False, finished=time.strftime("%Y-%m-%dT%H:%M:%S"))
+
+
+def start_groups_bulk() -> dict:
+    import asyncio
+    if not _GROUPS_RUN["running"]:
+        _GROUPS_RUN.update(running=True, done=0, total=0, items=[], error=None, started=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                           finished=None)
+        asyncio.get_running_loop().create_task(_groups_bulk())
+    return _GROUPS_RUN
+
+
 def _mw_context(did, prof) -> dict:
     """Le titre de la fiche MakerWorld et celui du profil imprime, lus sur disque (rien a demander a MakerWorld)."""
     out = {}

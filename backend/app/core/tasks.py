@@ -137,9 +137,11 @@ def jobs() -> list:
         add("ha_reprice", "Électricité : prix et libellés repris (Home Assistant)", _ha.REPRICE)
     except Exception:
         pass
-    try:      # (14/11/2026) la traduction des noms (et la retraduction par Claude)
+    try:      # (14/11/2026) la traduction des noms (et la retraduction par Claude), les noms proposes des groupes
         from ..services import translate as _tr
         add("translate", "Traduction des noms d'impressions", _tr._BACKFILL)
+        if _tr._GROUPS_RUN.get("started"):
+            add("group_names", "Noms proposés pour les groupes", _tr._GROUPS_RUN)
     except Exception:
         pass
     try:
