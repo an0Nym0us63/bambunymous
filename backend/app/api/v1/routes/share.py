@@ -28,6 +28,12 @@ async def telegram_status(_: str = Depends(require_admin)):
     return await tg.status()
 
 
+@router.post("/telegram/login/resend")
+async def telegram_login_resend(_: str = Depends(require_admin)):
+    """Le code n'est pas arrive : par l'autre moyen que Telegram propose (14/11/2026)."""
+    return await _call(tg.login_resend())
+
+
 @router.post("/telegram/login/start")
 async def telegram_login_start(body: dict = Body({}), _: str = Depends(require_admin)):
     return await _call(tg.login_start(body.get("api_id", ""), body.get("api_hash", ""), body.get("phone", "")))

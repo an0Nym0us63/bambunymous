@@ -361,6 +361,10 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
                 continue
             ph, n = _own(x)
             it["profiles"].append({"rating_id": str(x["rating_id"]), "title": x["profile_title"], "photos": ph, "printed": n})
+        # (14/11/2026) un seul profil attendu : ses photos a lui sont celles de la fiche (evaluer le piment montrait la
+        # photo du champignon, l'impression la plus recente du modele, d'un autre profil)
+        if len(it["profiles"]) == 1 and it["profiles"][0]["photos"]:
+            it["photos"], it["_own"] = it["profiles"][0]["photos"], True
         it["profile_title"] = pd["profile_title"] if len(pds) == 1 else f"{len(pds)} profils"
         if pd["profile_id"]:
             it["url"] = f"https://makerworld.com/fr/models/{did}#profileId-{pd['profile_id']}"
@@ -374,6 +378,9 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
     for x in out:                                           # la carte en dernier
         pids = x.pop("card_prints", None)
+        if x.pop("_own", False):                            # deja les photos et la carte de son seul profil
+            x.pop("group_ids", None)
+            continue
         extra = [u for u in v3_urls(list(reversed(x.get("print_ids") or [])), x.pop("group_ids", [])) if u not in x["photos"]]
         x["photos"] = (x["photos"] + extra)[:POOL_MAX]
         if pids:

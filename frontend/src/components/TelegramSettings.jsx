@@ -30,9 +30,14 @@ export default function TelegramSettings({ card, cardTitle }) {
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { showAlert(errMsg(e)); } setBusy(false); };
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
 
+  const [sent, setSent] = useState(null);         // (14/11/2026) ou le code est parti, et le renvoi possible
   const start = () => run(async () => {
-    await client.post("/share/telegram/login/start", { api_id: f.api_id, api_hash: f.api_hash, phone: f.phone });
-    setStep("code");
+    const { data } = await client.post("/share/telegram/login/start", { api_id: f.api_id, api_hash: f.api_hash, phone: f.phone });
+    setSent(data); setStep("code");
+  });
+  const resend = () => run(async () => {
+    const { data } = await client.post("/share/telegram/login/resend");
+    setSent(data);
   });
   const sendCode = () => run(async () => {
     const { data } = await client.post("/share/telegram/login/code", { code: f.code });
@@ -121,7 +126,11 @@ export default function TelegramSettings({ card, cardTitle }) {
       ) : step === "code" ? (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <label style={lbl}>Code reçu dans Telegram</label>
+          {sent?.via && <div style={{ fontSize:12, color:"var(--text2)", lineHeight:1.45 }}>📨 Code envoyé <b>{sent.via}</b>. Ne le recopie
+            dans aucune discussion Telegram (même à toi-même) : Telegram l'annule aussitôt.</div>}
           <input value={f.code} onChange={set("code")} inputMode="numeric" autoFocus style={inp}/>
+          {sent?.resend && <button type="button" onClick={resend} disabled={busy} style={{ alignSelf:"flex-start", border:"none", background:"none",
+            padding:0, color:"#229ED9", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>Pas reçu ? Le renvoyer {sent.resend}</button>}
           <div style={{ display:"flex", gap:8 }}>
             <button type="button" onClick={() => setStep("idle")} style={btn(false)}>Annuler</button>
             <button type="button" onClick={sendCode} disabled={busy || !f.code} style={btn(true)}>Valider</button>

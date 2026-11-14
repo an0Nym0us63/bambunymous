@@ -172,7 +172,37 @@ async def login_start(api_id: str, api_hash: str, phone: str) -> dict:
     await _set(K_API_ID, api_id)
     await _set(K_API_HASH, api_hash)
     _pending = {"client": c, "phone": phone, "hash": sent.phone_code_hash}
-    return {"step": "code"}
+    return {"step": "code", **_sent_info(sent)}
+
+
+# ou Telegram a envoye le code (14/11/2026) : le plus souvent dans l'appli Telegram elle-meme (discussion « Telegram »,
+# sur un appareil deja connecte), pas par SMS ; un copain l'attendait par SMS
+_VIA = {"SentCodeTypeApp": "dans l'application Telegram : discussion « Telegram » (le compte officiel, coche bleue), sur un téléphone ou un ordinateur déjà connecté à ce compte",
+        "SentCodeTypeSms": "par SMS", "SentCodeTypeFirebaseSms": "par SMS", "SentCodeTypeFragmentSms": "par SMS (numéro Fragment)",
+        "SentCodeTypeCall": "par un appel vocal", "SentCodeTypeFlashCall": "par un appel manqué (le code : la fin du numéro qui appelle)",
+        "SentCodeTypeMissedCall": "par un appel manqué (le code : la fin du numéro qui appelle)",
+        "SentCodeTypeEmailCode": "par e-mail, à l'adresse de connexion du compte"}
+
+
+def _sent_info(sent) -> dict:
+    t = type(getattr(sent, "type", None)).__name__
+    nt = type(getattr(sent, "next_type", None)).__name__ if getattr(sent, "next_type", None) else None
+    nxt = {"CodeTypeSms": "par SMS", "CodeTypeCall": "par un appel", "CodeTypeFlashCall": "par un appel manqué",
+           "CodeTypeMissedCall": "par un appel manqué", "CodeTypeFragmentSms": "par SMS"}.get(nt or "")
+    return {"via": _VIA.get(t, "dans Telegram"), "via_kind": t, "resend": nxt, "timeout": getattr(sent, "timeout", None)}
+
+
+async def login_resend() -> dict:
+    """Renvoyer le code par l'autre moyen que Telegram propose (SMS, appel), quand il n'est pas arrive."""
+    if not _pending:
+        raise ShareError("Aucune connexion en cours : recommence")
+    from telethon.tl.functions.auth import ResendCodeRequest
+    try:
+        sent = await _pending["client"](ResendCodeRequest(_pending["phone"], _pending["hash"]))
+    except Exception as e:
+        raise ShareError(f"Renvoi refusé par Telegram : {e}")
+    _pending["hash"] = sent.phone_code_hash
+    return {"step": "code", **_sent_info(sent)}
 
 
 async def login_code(code: str) -> dict:
