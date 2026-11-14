@@ -16,7 +16,7 @@ import Model3D from "../components/Model3D";
 import { openVue3D } from "../components/Vue3DPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
-import { useToRateSet, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
+import { useToRateSet, useToRateFor, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
 import { useFriend, currentFriend } from "../store/friend";
 import { noPageGesture } from "../utils/pullRefreshGuard";
 import MwImg from "../components/MwImg";
@@ -1529,7 +1529,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   }, [onPrev, onNext]);
   const isAdmin = useIsAdmin();
   const visiting = useFriend(s => s.friend);
-  const toRateSet = useToRateSet(!visiting && !!pProp.design_id);
+  const toRateFor = useToRateFor(!visiting && !!pProp.design_id);   // (14/11/2026) par profil
   const groupe = ungrouped ? null : p.group_name;
   const [editNb, setEditNb] = useState(false);
   const [spoolPicker, setSpoolPicker] = useState(null);
@@ -1774,7 +1774,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {/* (10/11/2026) ses autres plateaux et exemplaires encore prevus, et quand */}
       <div style={{ padding: "0 4px" }}><ObjectRest designId={p.design_id}/></div>
     </div>);
-  const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateSet.has(String(p.design_id));
+  const canRate = !!p.design_id && (p.status === "SUCCESS" || p.status === "PARTIAL") && toRateFor(p.design_id, p.mw_profile_id);
   // MakerWorld : sous les filaments (11/11/2026) ; les categories dans la colonne de gauche, sous les chiffres
   const side = <>
     {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]} rateElsewhere/>}
@@ -1830,7 +1830,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
                   style={{ ...v2Round, fontSize: 20, opacity: onNext ? 1 : 0.3, cursor: onNext ? "pointer" : "default" }}>›</button>
               </div>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
-                {canRate && <RateStar designs={[p.design_id]} name={printTitle(p)} enabled={!visiting}/>}
+                {canRate && <RateStar designs={[p.design_id]} profile={p.mw_profile_id} name={printTitle(p)} enabled={!visiting}/>}
                 {/* le ⋯ est dans la barre du bas, toujours visible (05/11/2026 : en haut aussi, il faisait doublon) */}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>
@@ -2700,7 +2700,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   };
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
   const visiting = useFriend((s) => s.friend);
-  const toRate = useToRateSet(!visiting && !!p.design_id);
+  const toRateFor = useToRateFor(!visiting && !!p.design_id);
   const isAdmin = useIsAdmin();
   const [full, setFull] = useState(null);           // { mode: "edit" | "delete", p } : fiche complete lue a la demande
   const [mw, setMw] = useState(false);
@@ -2726,7 +2726,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   const tint = printTint(p);
   const [day, hour] = whenFr(utcDate(p.print_date));
   const dur = p.duration_seconds || p.estimated_seconds;
-  const rateMe = p.status === "SUCCESS" && p.design_id && toRate.has(String(p.design_id));
+  const rateMe = p.status === "SUCCESS" && p.design_id && toRateFor(p.design_id, p.mw_profile_id);
   const check = selectMode && <div style={{ position:"absolute", top:6, left:6, width:22, height:22, borderRadius:7, zIndex:2,
     border: selected ? "none" : "1.5px solid rgba(255,255,255,0.85)", background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)",
     display:"flex", alignItems:"center", justifyContent:"center" }}>{selected && <Check size={13} color="white" strokeWidth={3}/>}</div>;

@@ -344,6 +344,9 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
                                "creator_name": (m.creator_name if m else None) or pd["creator_name"],
                                "printed": 0, "last_date": pd["date"], "photos": [], "photo_source": None, "print_ids": []}
         it["awaited"] = True
+        # (14/11/2026) les profils que MakerWorld attend : une impression d'un autre profil du modele (deja evalue) n'est
+        # pas « a evaluer » (le champignon affichait l'etoile, et ouvrait l'evaluation du piment)
+        it["profile_ids"] = sorted({str(x.get(k)) for x in pds for k in ("profile_id", "instance_id") if x.get(k)})
         it["rating_id"] = str(pd["rating_id"]) if pd.get("rating_id") else None
         it["rating_ids"] = [str(x["rating_id"]) for x in pds if x.get("rating_id")]
         # chaque profil, ses photos (08/11/2026 : evaluer la noix de coco proposait les photos de la mangue, la plus

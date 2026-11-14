@@ -47,6 +47,12 @@ export function useToRateSet(enabled = true) {
   const d = useToRate(enabled);
   return new Set((d?.items || []).map(x => String(x.design_id)));
 }
+// (14/11/2026) par profil : une impression est a evaluer si MakerWorld attend SON profil (pas un autre du meme modele)
+export const rateProfileOk = (item, prof) => !prof || !item?.profile_ids?.length || item.profile_ids.includes(String(prof));
+export function useToRateFor(enabled = true) {
+  const d = useToRate(enabled);
+  return (did, prof) => (d?.items || []).some(x => String(x.design_id) === String(did) && rateProfileOk(x, prof));
+}
 // Familles de messages tout faits (Parametres), lues une fois.
 let _tpl = null;
 let _lastDrawn = null;                 // dernier message tire : jamais le meme deux ouvertures de suite
@@ -110,11 +116,11 @@ export function RateButton({ did, style, label = "⭐ Évaluer", doneLabel = "�
 }
 // L'etoile du haut d'une fiche (impression, groupe) : un seul modele a evaluer -> son evaluation
 // tout de suite ; plusieurs -> une petite fenetre avec chacun (et « Tout évaluer »).
-export function RateStar({ designs, name, enabled = true, style }) {
+export function RateStar({ designs, name, enabled = true, style, profile = null }) {
   const d = useToRate(enabled);
   const [open, setOpen] = useState(false);
   const ids = new Set((designs || []).map(String));
-  const items = (d?.items || []).filter(x => ids.has(String(x.design_id)));
+  const items = (d?.items || []).filter(x => ids.has(String(x.design_id)) && rateProfileOk(x, profile));
   if (!items.length) return null;
   const st = { ...style, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" };
   if (items.length === 1) return <span data-tip="À évaluer sur MakerWorld" style={{ display: "flex" }}>
