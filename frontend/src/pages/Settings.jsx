@@ -1167,7 +1167,7 @@ function TranslateNamesSection() {
                 Quelques dixièmes de centime par nom ; les autres services ne servent plus qu'en secours.</span></span>
           </label>
           {keysOn.claude && <button onClick={() => act(false, true)} disabled={!!running}
-            data-tip="Retraduit par Claude tous les noms traduits par un autre service (jamais ceux corrigés à la main)"
+            data-tip="Retraduit par Claude tous les noms traduits par un autre service, et les anciens sans service noté (jamais ceux corrigés à la main depuis l'appli)"
             style={{ marginTop:8, padding:"6px 14px", borderRadius:10, fontSize:12.5, fontWeight:800, cursor: running ? "default" : "pointer",
               border:"1px solid color-mix(in srgb, #8B5CF6 45%, var(--border))", background:"color-mix(in srgb, #8B5CF6 10%, var(--surface))", color:"#7C3AED" }}>
             🤖 Tout retraduire par Claude</button>}

@@ -695,8 +695,9 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
             continue
         src = _clean_name(fn or on or "").strip()
         tn = (tn or "").strip()
-        # redo (14/11/2026) : tout ce qu'un service a traduit (pas Claude, pas les corrections a la main)
-        if tn and not (retry_same and tn.lower() == src.lower()) and not (redo and (tb or "") in AUTO_BY):
+        # redo (14/11/2026) : tout ce qu'un service a traduit (pas Claude, pas les corrections a la main « manuel ») ; les
+        # anciens noms sans service note (traduits avant la colonne translated_by) aussi : 497 sur 1 928 seulement sinon
+        if tn and not (retry_same and tn.lower() == src.lower()) and not (redo and ((tb or "") in AUTO_BY or not tb)):
             continue
         todo.append((pid, src, fn or on or ""))
         ctx[pid] = {"fichier": task or on or fn or "", "did": did, "prof": prof}
