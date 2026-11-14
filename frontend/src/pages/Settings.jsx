@@ -1022,7 +1022,7 @@ function TranslateNamesSection() {
       const { data } = await client.get("/prints/translate-missing");
       setRunning(!!data.running);
       setLast(data.last || null);
-      setKeysOn({ gcloud: !!data.gcloud, deepl: !!data.deepl });
+      setKeysOn({ gcloud: !!data.gcloud, deepl: !!data.deepl, claude: !!data.claude, claude_key: !!data.claude_key });
       return !!data.running;
     } catch { setRunning(false); return false; }
   }, []);
@@ -1037,11 +1037,11 @@ function TranslateNamesSection() {
     return () => { alive = false; clearTimeout(timer); };
   }, [poll]);
 
-  const act = async (stop) => {
+  const act = async (stop, redo = false) => {
     setErr(null);
     try {
       await client.post("/prints/translate-missing", null,
-        { params: stop ? { stop } : { retry_same: retrySame } });
+        { params: stop ? { stop } : redo ? { redo: true } : { retry_same: retrySame } });
       setRunning(!stop);
       if (!stop) setTimeout(poll, 5000);
     } catch (e) { setErr(e.response?.data?.detail || e.message); }
@@ -1069,11 +1069,34 @@ function TranslateNamesSection() {
         traduire sont repris seuls toutes les 6 h.
       </CardHelp>
 
+      {/* Claude (14/11/2026) : en option, seulement si la connexion Claude est reglee ; passe avant tous les autres */}
+      <div style={{ padding:"10px 12px", borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)", margin:"8px 0 10px" }}>
+        {keysOn.claude_key ? <>
+          <label style={{ display:"flex", alignItems:"flex-start", gap:8, cursor:"pointer" }}>
+            <input type="checkbox" checked={!!keysOn.claude} style={{ marginTop:3 }} onChange={async e => {
+              const on = e.target.checked;
+              try { await client.put("/prints/translate-claude", { on }); setKeysOn(k => ({ ...k, claude: on })); if (on) egg("traduction_claude"); }
+              catch (er) { setErr(er.response?.data?.detail || er.message); }
+            }}/>
+            <span><span style={{ display:"block", fontSize:13, fontWeight:800, color:"var(--text)" }}>🤖 Traduire par Claude (en premier)</span>
+              <span style={{ display:"block", fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Il lit le nom du fichier, la fiche MakerWorld (titre,
+                descriptif) et le profil imprimé, et donne un vrai titre français de ce qui a été imprimé (« Porte-clés piment articulé »).
+                Quelques dixièmes de centime par nom ; les autres services ne servent plus qu'en secours.</span></span>
+          </label>
+          {keysOn.claude && <button onClick={() => act(false, true)} disabled={!!running}
+            data-tip="Retraduit par Claude tous les noms traduits par un autre service (jamais ceux corrigés à la main)"
+            style={{ marginTop:8, padding:"6px 14px", borderRadius:10, fontSize:12.5, fontWeight:800, cursor: running ? "default" : "pointer",
+              border:"1px solid color-mix(in srgb, #8B5CF6 45%, var(--border))", background:"color-mix(in srgb, #8B5CF6 10%, var(--surface))", color:"#7C3AED" }}>
+            🤖 Tout retraduire par Claude</button>}
+        </> : <span style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>🤖 Règle la connexion Claude (Paramètres › Connexions › Claude) pour
+          pouvoir traduire les noms par Claude : un vrai titre français de ce qui a été imprimé, d'après la fiche MakerWorld et le profil.</span>}
+      </div>
+
       {/* Ordre : Google Cloud (cle, gratuit jusqu'a 500 000 car./mois,
           renouvele), Google public, DeepL (cle, credit gratuit qui ne se
           renouvelle pas), puis MyMemory en dernier. */}
       <TranslateKeyRow label="Clé Google Cloud Translation" on={keysOn.gcloud}
-        hint="Essayée en premier. 500 000 caractères gratuits par mois ; pose un plafond par jour dans la console pour ne jamais payer."
+        hint="Essayée en premier (après Claude s'il est coché). 500 000 caractères gratuits par mois ; pose un plafond par jour dans la console pour ne jamais payer."
         placeholder="AIza…" onSave={k => saveKey("gcloud", k)}/>
       <TranslateKeyRow label="Clé DeepL" on={keysOn.deepl}
         hint="Après Google, avant MyMemory. Son crédit gratuit ne se renouvelle pas : une fois épuisé, MyMemory prend le relais."

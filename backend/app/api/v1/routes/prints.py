@@ -2032,15 +2032,29 @@ async def reenrich_print(print_id: int, _: str = Depends(get_current_user)):
 async def translate_missing_status(_: str = Depends(get_current_user)):
     """Le rattrapage tourne-t-il, bilan du dernier, une cle DeepL est-elle posee
     (jamais la cle elle-meme)."""
-    from ....services.translate import backfill_running, backfill_last, KEY_SETTINGS
+    from ....services.translate import backfill_running, backfill_last, KEY_SETTINGS, CLAUDE_ON
+    from ....services.ai_tags import K_KEY
     from ....services.settings_service import get_setting
     async with AsyncSessionLocal() as db:
         has = {k: bool((await get_setting(db, s, "") or "").strip()) for k, s in KEY_SETTINGS.items()}
+        # Claude (14/11/2026) : sa connexion reglee (Parametres › Claude), et l'option cochee
+        has["claude_key"] = bool((await get_setting(db, K_KEY, "") or "").strip())
+        has["claude"] = (await get_setting(db, CLAUDE_ON, "0")) == "1"
     return {"running": backfill_running(), "last": backfill_last(), **has}
 
 
+@router.put("/translate-claude")
+async def translate_claude(body: dict, _: str = Depends(require_admin)):
+    """Traduire les noms par Claude (en premier) : {on}."""
+    from ....services.translate import CLAUDE_ON
+    from ....services.settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, CLAUDE_ON, "1" if body.get("on") else "0")
+    return {"claude": bool(body.get("on"))}
+
+
 @router.post("/translate-missing")
-async def translate_missing_start(stop: bool = False, retry_same: bool = False,
+async def translate_missing_start(stop: bool = False, retry_same: bool = False, redo: bool = False,
                                   _: str = Depends(require_admin)):
     """
     Demarre le rattrapage en tache de fond, ou l'arrete avec ?stop=1.
@@ -2055,7 +2069,7 @@ async def translate_missing_start(stop: bool = False, retry_same: bool = False,
     if stop:
         stop_backfill()
         return {"running": backfill_running(), "stopping": True}
-    started = start_backfill(retry_same=retry_same)
+    started = start_backfill(retry_same=retry_same, redo=redo)      # redo (14/11/2026) : tout retraduire par Claude
     return {"running": True, "started": started}
 
 

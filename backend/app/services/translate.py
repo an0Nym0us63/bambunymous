@@ -17,6 +17,12 @@ renouvelle pas : autant le consommer, et il detecte la langue source), puis
 MyMemory (gratuit, sans cle, quelques milliers de caracteres par jour, langue
 source supposee anglaise).
 
+Claude (14/11/2026), en option quand la connexion Claude est reglee : passe AVANT
+tous les autres. Il recoit le nom du fichier, le titre de la fiche MakerWorld et
+celui du profil imprime, et rend un vrai titre francais (« Porte-cles legumes
+articules · piment ») au lieu de l'union mot a mot des autres services. Il peut
+aussi tout retraduire d'un coup (sauf les noms corriges a la main).
+
 Regle qui compte : un ECHEC n'est jamais pris pour « deja en francais ». Un
 service a bout de quota renvoie le texte tel quel ; l'ancienne version
 l'enregistrait alors comme nom francais, et le print n'etait plus jamais
@@ -32,6 +38,9 @@ logger = logging.getLogger(__name__)
 DEEPL_KEY = "DEEPL_API_KEY"
 GCLOUD_KEY = "GCLOUD_TRANSLATE_KEY"
 KEY_SETTINGS = {"deepl": DEEPL_KEY, "gcloud": GCLOUD_KEY}
+CLAUDE_ON = "CLAUDE_TRANSLATE"       # "1" : traduire par Claude (sa cle : celle de Parametres › Claude)
+CLAUDE_MODEL = "claude-haiku-5-5"
+AUTO_BY = ("gcloud", "google", "deepl", "mymemory", "identique")   # ce qu'une retraduction peut remplacer
 
 # MyMemory a bout de quota : on ne le sollicite plus jusqu'a cette heure.
 _MYMEMORY_PAUSE = {"until": 0.0}
@@ -88,6 +97,81 @@ def _gcloud_batch(payload: list, key: str):
     except (ValueError, KeyError, TypeError):
         return None
     return out if len(out) == len(payload) else None
+
+
+_CLAUDE_SYSTEM = """Tu donnes un nom francais a des impressions 3D, pour qu'on les retrouve en cherchant en francais.
+
+Pour chaque impression, tu recois le nom du fichier imprime (souvent anglais, chinois, ou un nom de fichier brut), et
+quand ils existent le titre de sa fiche MakerWorld, le debut de son descriptif et le titre du profil imprime. Rends un
+titre francais naturel et court qui dit CE QUI A ETE IMPRIME, pas tout le modele :
+- quand le profil ou le fichier designe une variante precise d'un lot (un legume, un personnage, un animal...), c'est
+  elle le sujet : un lot « Articulated Vegetable Keychains » imprime avec le profil « chili pepper » (fichier « 辣椒 »)
+  donne « Porte-cles piment articule », pas « Porte-cles legumes articules » ;
+- sinon, le modele lui-meme (le descriptif aide a savoir ce qu'il est et a quoi il sert) ;
+- garde les noms propres (personnages, marques, oeuvres) ; le titre francais d'une oeuvre quand il existe ;
+- retire le jargon d'impression : AMS, NO AMS, plate, 0.2mm, couleurs, multicolore, numeros de version, extensions ;
+- en francais correct (ordre des mots, accords), pas une traduction mot a mot ;
+- si le nom est deja francais et clair, rends-le tel quel (nettoye).
+Reponds pour chaque impression avec sa reference "ref" telle quelle."""
+
+_CLAUDE_SCHEMA = {"type": "object", "properties": {"items": {"type": "array", "items": {
+    "type": "object", "properties": {"ref": {"type": "string"}, "fr": {"type": "string"}},
+    "required": ["ref", "fr"], "additionalProperties": False}}}, "required": ["items"], "additionalProperties": False}
+
+
+def _claude_batch(items: list, key: str):
+    """items : [{"ref", "fichier", "titre_makerworld"?, "profil"?}] -> {ref: titre francais}, ou None (indisponible)."""
+    import json as _json
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=key, timeout=90.0, max_retries=2)
+        r = client.messages.create(model=CLAUDE_MODEL, max_tokens=4000, system=_CLAUDE_SYSTEM,
+                                   messages=[{"role": "user", "content": _json.dumps({"impressions": items}, ensure_ascii=False)}],
+                                   output_config={"format": {"type": "json_schema", "schema": _CLAUDE_SCHEMA}})
+        try:
+            import asyncio as _aio
+            from .ai_tags import _count
+            _aio.run(_count(r.usage))            # le compteur de jetons de Parametres › Claude
+        except Exception:
+            pass
+        text = next((b.text for b in r.content if b.type == "text"), "")
+        got = {it.get("ref"): (it.get("fr") or "").strip() for it in (_json.loads(text) if text else {}).get("items") or []}
+    except Exception as e:
+        logger.warning(f"[TRAD] Claude indisponible ({type(e).__name__})")
+        return None
+    return {k: v for k, v in got.items() if v and not _looks_bogus(v)}
+
+
+def _mw_context(did, prof) -> dict:
+    """Le titre de la fiche MakerWorld et celui du profil imprime, lus sur disque (rien a demander a MakerWorld)."""
+    out = {}
+    did = str(did or "").strip()
+    if not did.isdigit():
+        return out
+    try:
+        import json as _json
+        from .makerworld import _disk_path
+        f = _disk_path(did)
+        base = (_json.loads(f.read_text(encoding="utf-8")).get("base") or {}) if f.is_file() else {}
+        t = base.get("title") or base.get("title_fr")
+        if t:
+            out["titre_makerworld"] = t
+        # le descriptif de la fiche (14/11/2026) : ce qu'est l'objet, a quoi il sert ; le debut suffit
+        import re as _re
+        desc = _re.sub(r"<[^>]+>", " ", str(base.get("description") or ""))
+        desc = _re.sub(r"\s+", " ", desc).strip()
+        if desc:
+            out["descriptif"] = desc[:600]
+        prof = str(prof or "")
+        for p in base.get("profiles") or []:
+            if prof and prof in (str(p.get("profile_id") or ""), str(p.get("instance_id") or "")):
+                pt = p.get("title_original") or p.get("title")
+                if pt:
+                    out["profil"] = pt
+                break
+    except Exception:
+        pass
+    return out
 
 
 def _deepl_batch(payload: list, key: str):
@@ -230,11 +314,16 @@ def translate_name(name: str, keys=None) -> tuple:
 
 
 async def _keys() -> dict:
-    """Cles des services payants ou a credit, posees dans les Parametres."""
+    """Cles des services payants ou a credit, posees dans les Parametres ; « claude » : la cle Claude, seulement si
+    l'option « traduire par Claude » est cochee."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
     async with AsyncSessionLocal() as db:
-        return {k: (await get_setting(db, s, "") or "").strip() for k, s in KEY_SETTINGS.items()}
+        out = {k: (await get_setting(db, s, "") or "").strip() for k, s in KEY_SETTINGS.items()}
+        if (await get_setting(db, CLAUDE_ON, "0")) == "1":
+            from .ai_tags import K_KEY
+            out["claude"] = (await get_setting(db, K_KEY, "") or "").strip()
+    return out
 
 
 async def translate_print(pid: int) -> bool:
@@ -261,9 +350,18 @@ async def translate_print(pid: int) -> bool:
         if not p or (p.translated_name or "").strip():
             return False
         source = _clean_name(p.file_name or p.original_name or "").strip()
+        ctx = {"fichier": p.task_name or p.original_name or p.file_name or "", **_mw_context(p.design_id, p.mw_profile_id)}
     if not source:
         return False
     key = await _keys()
+    if key.get("claude"):
+        got = await asyncio.to_thread(_claude_batch, [{"ref": "1", **ctx}], key["claude"])
+        if got and got.get("1"):
+            async with AsyncSessionLocal() as db:
+                await db.execute(update(Print).where(Print.id == pid).values(translated_name=got["1"][:512], translated_by="claude"))
+                await db.commit()
+            logger.info(f"[TRAD] print #{pid} : {source!r} → {got['1']!r} (claude)")
+            return True
 
     try:
         tr, by = await asyncio.to_thread(translate_name, source, key)
@@ -385,7 +483,7 @@ def translate_names(names: list, keys=None) -> dict:
 
 
 async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
-                                   exclude: set = None) -> dict:
+                                   exclude: set = None, redo: bool = False) -> dict:
     """
     Traduit jusqu'a `limit` prints sans nom francais, et rend le reste a faire.
 
@@ -410,22 +508,25 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
 
     # ── 1. Lecture, session refermee aussitot ────────────────────────────
     async with AsyncSessionLocal() as db:
-        q = select(Print.id, Print.file_name, Print.original_name, Print.translated_name)
-        if not retry_same:
+        q = select(Print.id, Print.file_name, Print.original_name, Print.translated_name, Print.translated_by,
+                   Print.task_name, Print.design_id, Print.mw_profile_id)
+        if not retry_same and not redo:
             q = q.where(or_(Print.translated_name.is_(None), Print.translated_name == ""))
         # Du plus recent au plus vieux : ce sont les prints recents qu'on
         # cherche en premier.
         rows = (await db.execute(q.order_by(Print.print_date.desc()))).all()
 
-    todo = []
-    for pid, fn, on, tn in rows:
+    todo, ctx = [], {}
+    for pid, fn, on, tn, tb, task, did, prof in rows:
         if pid in exclude:
             continue
         src = _clean_name(fn or on or "").strip()
         tn = (tn or "").strip()
-        if tn and not (retry_same and tn.lower() == src.lower()):
+        # redo (14/11/2026) : tout ce qu'un service a traduit (pas Claude, pas les corrections a la main)
+        if tn and not (retry_same and tn.lower() == src.lower()) and not (redo and (tb or "") in AUTO_BY):
             continue
         todo.append((pid, src, fn or on or ""))
+        ctx[pid] = {"fichier": task or on or fn or "", "did": did, "prof": prof}
     remaining_before = len(todo)
     batch = todo[:limit]
     if not batch:
@@ -435,12 +536,32 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
 
     # ── 2. Traduction HORS de la boucle d'evenements ─────────────────────
     key = await _keys()
-    table = await asyncio.to_thread(translate_names, [s for _, s, _ in batch if s], key)
+    by_claude = {}
+    if key.get("claude"):
+        items = [{"ref": str(pid), "fichier": ctx[pid]["fichier"], **_mw_context(ctx[pid]["did"], ctx[pid]["prof"])}
+                 for pid, _, _ in batch]
+        for i in range(0, len(items), 20):
+            got = await asyncio.to_thread(_claude_batch, items[i:i + 20], key["claude"])
+            if got is None:
+                break
+            by_claude.update(got)
+    rest = [b for b in batch if str(b[0]) not in by_claude]
+    if redo:
+        rest = []                           # retraduire par Claude seulement : un echec garde l'ancien nom
+    table = await asyncio.to_thread(translate_names, [s for _, s, _ in rest if s], key) if rest else {}
 
     # ── 3. Ecriture, session rouverte ────────────────────────────────────
     done = skipped = failed = 0
     async with AsyncSessionLocal() as db:
         for pid, src, raw in batch:
+            if str(pid) in by_claude:
+                await db.execute(update(Print).where(Print.id == pid)
+                                 .values(translated_name=by_claude[str(pid)][:512], translated_by="claude"))
+                done += 1
+                continue
+            if redo:
+                failed += 1
+                continue
             if src and src not in table:
                 failed += 1                 # echec du service : on n'ecrit rien
                 continue
@@ -483,8 +604,8 @@ def stop_backfill() -> None:
     _BACKFILL["stop"] = True
 
 
-def start_backfill(retry_same: bool = False) -> bool:
-    """Demarre le rattrapage. Rend False s'il tournait deja."""
+def start_backfill(retry_same: bool = False, redo: bool = False) -> bool:
+    """Demarre le rattrapage. Rend False s'il tournait deja. redo (14/11/2026) : tout retraduire par Claude."""
     if _BACKFILL["running"]:
         return False
     _BACKFILL.update(running=True, stop=False)
@@ -497,7 +618,7 @@ def start_backfill(retry_same: bool = False) -> bool:
         try:
             while not _BACKFILL["stop"]:
                 r = loop.run_until_complete(
-                    translate_missing_prints(40, retry_same=retry_same, exclude=seen))
+                    translate_missing_prints(40, retry_same=retry_same, exclude=seen, redo=redo))
                 for k in total:
                     total[k] += r.get(k, 0)
                 if not r.get("remaining"):
