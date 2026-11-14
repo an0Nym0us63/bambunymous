@@ -110,7 +110,8 @@ titre francais naturel et court qui dit CE QUI A ETE IMPRIME, pas tout le modele
 - sinon, le modele lui-meme (le descriptif aide a savoir ce qu'il est et a quoi il sert) ;
 - garde les noms propres (personnages, marques, oeuvres) ; le titre francais d'une oeuvre quand il existe ;
 - retire le jargon d'impression : AMS, NO AMS, plate, 0.2mm, couleurs, multicolore, numeros de version, extensions ;
-- en francais correct (ordre des mots, accords), pas une traduction mot a mot ;
+- en francais correct, AVEC les accents (é, è, à, ç...), l'ordre des mots et les accords, pas une traduction mot a mot ;
+- une forme reguliere : « Sujet · precision » plutot que des parentheses (« Zombie à yeux mobiles · série Goofy ») ;
 - si le nom est deja francais et clair, rends-le tel quel (nettoye).
 Reponds pour chaque impression avec sa reference "ref" telle quelle."""
 
@@ -588,7 +589,7 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
 # L'etat tient en un booleen, en memoire du processus, volontairement : si le
 # serveur redemarre, le thread est mort avec lui et le drapeau doit repartir a
 # faux.
-_BACKFILL = {"running": False, "stop": False, "last": None}
+_BACKFILL = {"running": False, "stop": False, "last": None, "done": 0, "total": None, "current": None, "started": None}
 
 
 def backfill_running() -> bool:
@@ -608,7 +609,9 @@ def start_backfill(retry_same: bool = False, redo: bool = False) -> bool:
     """Demarre le rattrapage. Rend False s'il tournait deja. redo (14/11/2026) : tout retraduire par Claude."""
     if _BACKFILL["running"]:
         return False
-    _BACKFILL.update(running=True, stop=False)
+    # l'avancement (14/11/2026) : suivi dans Parametres et dans Taches
+    _BACKFILL.update(running=True, stop=False, done=0, total=None, started=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                     current="retraduction par Claude" if redo else None)
 
     def _run():
         import asyncio
@@ -621,6 +624,8 @@ def start_backfill(retry_same: bool = False, redo: bool = False) -> bool:
                     translate_missing_prints(40, retry_same=retry_same, exclude=seen, redo=redo))
                 for k in total:
                     total[k] += r.get(k, 0)
+                n = total["translated"] + total["skipped"] + total["failed"]
+                _BACKFILL.update(done=n, total=n + int(r.get("remaining") or 0))
                 if not r.get("remaining"):
                     break
                 # Un lot entierement en echec : services a bout, on s'arrete

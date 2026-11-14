@@ -137,6 +137,11 @@ def jobs() -> list:
         add("ha_reprice", "Électricité : prix et libellés repris (Home Assistant)", _ha.REPRICE)
     except Exception:
         pass
+    try:      # (14/11/2026) la traduction des noms (et la retraduction par Claude)
+        from ..services import translate as _tr
+        add("translate", "Traduction des noms d'impressions", _tr._BACKFILL)
+    except Exception:
+        pass
     try:
         from ..services import mw_relink
         add("mw_relink", "Recherche des modèles MakerWorld manquants", mw_relink.status())

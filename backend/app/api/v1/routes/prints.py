@@ -2040,7 +2040,8 @@ async def translate_missing_status(_: str = Depends(get_current_user)):
         # Claude (14/11/2026) : sa connexion reglee (Parametres › Claude), et l'option cochee
         has["claude_key"] = bool((await get_setting(db, K_KEY, "") or "").strip())
         has["claude"] = (await get_setting(db, CLAUDE_ON, "0")) == "1"
-    return {"running": backfill_running(), "last": backfill_last(), **has}
+    from ....services.translate import _BACKFILL
+    return {"running": backfill_running(), "last": backfill_last(), "done": _BACKFILL.get("done"), "total": _BACKFILL.get("total"), **has}
 
 
 @router.put("/translate-claude")

@@ -1012,6 +1012,7 @@ function TranslateNamesSection() {
   const [last, setLast] = React.useState(null);          // bilan du dernier rattrapage
   const [keysOn, setKeysOn] = React.useState({});        // { gcloud, deepl } : cle posee (jamais la cle)
   const [retrySame, setRetrySame] = React.useState(false);
+  const [prog, setProg] = React.useState(null);          // avancement : { done, total }
 
   // L'etat vit sur le serveur, pas ici : c'est lui qui fait tourner le thread.
   // On l'interroge en arrivant, puis toutes les 5 s tant qu'il tourne. Quitter
@@ -1022,6 +1023,7 @@ function TranslateNamesSection() {
       const { data } = await client.get("/prints/translate-missing");
       setRunning(!!data.running);
       setLast(data.last || null);
+      setProg(data.total ? { done: data.done || 0, total: data.total } : null);
       setKeysOn({ gcloud: !!data.gcloud, deepl: !!data.deepl, claude: !!data.claude, claude_key: !!data.claude_key });
       return !!data.running;
     } catch { setRunning(false); return false; }
@@ -1122,7 +1124,7 @@ function TranslateNamesSection() {
                 faut un signe de vie, sinon on le croit bloque. */}
             <span style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6",
               animation:"pulse 1.2s ease-in-out infinite" }}/>
-            Traduction en cours…
+            Traduction en cours…{prog ? ` ${prog.done} / ${prog.total}` : ""}
           </span>
         )}
         {err && <span style={{ fontSize:12, color:"#ef4444" }}>{err}</span>}
