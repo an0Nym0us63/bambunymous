@@ -1901,6 +1901,19 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
   useTrackDetail("Historique · Modifier un groupe");
   const [form, setForm] = useState({ name: name || "" });
   const [saving, setSaving] = useState(false);
+  const [sugg, setSugg] = useState(null);              // (14/11/2026) des noms proposes d'apres ses impressions
+  const [suggBusy, setSuggBusy] = useState(false);
+  const suggest = async () => {
+    setSuggBusy(true);
+    try { const r = await client.post("/prints/group-names", { group_id: groupId }); setSugg(r.data); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setSuggBusy(false);
+  };
+  const chips = (list, pick, by) => list?.length > 0 && <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8, alignItems:"center" }}>
+    <span style={{ fontSize:11, fontWeight:800, color:"var(--muted)" }}>{by === "claude" ? "🤖" : "💡"} Suggestions :</span>
+    {list.map(n => <button key={n} type="button" onClick={() => pick(n)} style={{ padding:"4px 10px", borderRadius:20, cursor:"pointer",
+      border:"1px solid color-mix(in srgb, #3b82f6 40%, var(--border))", background:"color-mix(in srgb, #3b82f6 8%, var(--surface))",
+      color:"#2563eb", fontSize:12, fontWeight:800, fontFamily:"inherit" }}>{n}</button>)}</div>;
   const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
     padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
   const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4, display:"block" };
@@ -1926,6 +1939,10 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
         <div>
           <label style={lbl}>Nom du groupe</label>
           <input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+          {!sugg && <button type="button" onClick={suggest} disabled={suggBusy} style={{ marginTop:8, border:"none", background:"none", padding:0,
+            color:"#3b82f6", fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>{suggBusy ? "…" : "💡 Proposer des noms"}</button>}
+          {chips(sugg?.names, n => { setForm(f => ({ ...f, name: n })); egg("groupe_nom_suggere"); }, sugg?.by)}
+          {sugg && !sugg.names?.length && <div style={{ marginTop:6, fontSize:11.5, color:"var(--muted)" }}>Pas de nom à proposer pour ce groupe.</div>}
         </div>
         <div style={{ display:"flex", gap:8, marginTop:20 }}>
           <button onClick={onClose} style={{ flex:1, padding:"11px", borderRadius:12,
@@ -4409,6 +4426,18 @@ function fmtGroupDate(d) {
 function GroupPickerSheet({ groups, items = [], onClose, onPick }) {
   useTrackDetail("Historique · Choisir un groupe");
   const [q, setQ] = useState("");
+  // des noms proposes (14/11/2026) d'apres les noms francais des impressions (et la fiche MakerWorld) ; par Claude s'il traduit
+  const [sugg, setSugg] = useState(null);
+  useEffect(() => {
+    const ids = items.map(x => x.id).filter(Boolean);
+    if (!ids.length) return;
+    client.post("/prints/group-names", { print_ids: ids }).then(r => setSugg(r.data)).catch(() => {});
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  const chips = (list, pick, by) => list?.length > 0 && <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8, alignItems:"center" }}>
+    <span style={{ fontSize:11, fontWeight:800, color:"var(--muted)" }}>{by === "claude" ? "🤖" : "💡"} Suggestions :</span>
+    {list.map(n => <button key={n} type="button" onClick={() => pick(n)} style={{ padding:"4px 10px", borderRadius:20, cursor:"pointer",
+      border:"1px solid color-mix(in srgb, #3b82f6 40%, var(--border))", background:"color-mix(in srgb, #3b82f6 8%, var(--surface))",
+      color:"#2563eb", fontSize:12, fontWeight:800, fontFamily:"inherit" }}>{n}</button>)}</div>;
   const norm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const qq = norm(q.trim());
   const filtered = qq ? groups.filter(g => norm(g.name).includes(qq)) : groups;
@@ -4470,7 +4499,8 @@ function GroupPickerSheet({ groups, items = [], onClose, onPick }) {
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher ou nommer un nouveau groupe…" autoFocus
         style={{ width:"100%", boxSizing:"border-box", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:12, padding:"10px 12px",
           fontSize:13.5, color:"var(--text)", outline:"none" }}/>
-      {!q.trim() && name0 && <button type="button" onClick={() => setQ(name0.split(" - ")[0].slice(0, 60))}
+      {!q.trim() && chips(sugg?.names, n => { setQ(n); egg("groupe_nom_suggere"); }, sugg?.by)}
+      {!q.trim() && name0 && !sugg?.names?.length && <button type="button" onClick={() => setQ(name0.split(" - ")[0].slice(0, 60))}
         style={{ marginTop:6, border:"none", background:"none", padding:"2px 2px", color:"#3b82f6", fontSize:12, fontWeight:800, cursor:"pointer" }}>
         ＋ Nouveau groupe « {name0.split(" - ")[0].slice(0, 40)} »</button>}
       {q.trim() && <button type="button" onClick={() => onPick({ group_name: q.trim() })}

@@ -957,6 +957,17 @@ async def _build_gallery(kind: str = "photos") -> dict:
     return {"prints": items, "groups": groups, "n_vue3d": len(vue3d_prints)}
 
 
+@router.post("/group-names")
+async def suggest_group_names(body: dict = Body({}), _: str = Depends(get_current_user)):
+    """Des noms pour un groupe (14/11/2026) : {print_ids} (a la creation) ou {group_id} (ses impressions)."""
+    from ....services.translate import group_names
+    ids = [x for x in (body.get("print_ids") or []) if str(x).isdigit()]
+    if body.get("group_id"):
+        async with AsyncSessionLocal() as db:
+            ids = (await db.execute(select(Print.id).where(Print.group_id == int(body["group_id"])))).scalars().all()
+    return await group_names(list(ids))
+
+
 @router.get("/groups")
 async def list_groups(_: str = Depends(get_current_user)):
     """Retourne les groupes (id BambuNymous + nom + nb de prints + date), pour distinguer

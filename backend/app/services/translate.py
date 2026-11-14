@@ -143,6 +143,88 @@ def _claude_batch(items: list, key: str):
     return {k: v for k, v in got.items() if v and not _looks_bogus(v)}
 
 
+# ── Des noms pour un groupe (14/11/2026) ───────────────────────────────────
+# A la creation d'un groupe (et en le renommant) : quelques noms proposes d'apres les noms francais de ses impressions
+# et le titre de la fiche MakerWorld. Par Claude quand la traduction par Claude est cochee, sinon par un calcul simple.
+_GROUP_SYSTEM = """Tu proposes des noms pour un groupe d'impressions 3D (un objet en plusieurs plateaux, une serie, un lot).
+Tu recois les noms francais de ses impressions et, quand il existe, le titre de la fiche MakerWorld. Propose 3 noms
+francais courts (2 a 6 mots), avec les accents, qui disent ce qu'est l'ensemble : le sujet commun, sans numero de
+plateau, sans jargon d'impression (AMS, plateau, 0.2 mm...), sans le nom d'une seule variante si le groupe en a
+plusieurs. Du plus simple au plus precis."""
+
+_GROUP_SCHEMA = {"type": "object", "properties": {"names": {"type": "array", "items": {"type": "string"}}},
+                 "required": ["names"], "additionalProperties": False}
+
+
+def _local_group_names(names: list, mw_titles: list) -> list:
+    """Sans Claude : le debut commun des noms, le premier nom sans sa precision, le titre MakerWorld."""
+    import re as _re
+    clean = [_re.sub(r"\s*[—-]\s*Plateau\s*\d+.*$", "", n or "", flags=_re.I).strip() for n in names if n]
+    out = []
+    if len(clean) > 1:
+        words = [c.split() for c in clean]
+        common = []
+        for ws in zip(*words):
+            if len({w.lower() for w in ws}) == 1:
+                common.append(ws[0])
+            else:
+                break
+        if len(common) >= 1 and len(" ".join(common)) >= 4:
+            out.append(" ".join(common).strip(" ·-—"))
+    for c in clean[:1]:
+        out.append(c.split(" · ")[0].strip())
+    out += [t for t in mw_titles if t]
+    seen, res = set(), []
+    for x in out:
+        x = (x or "").strip()[:80]
+        if x and x.lower() not in seen:
+            seen.add(x.lower())
+            res.append(x)
+    return res[:4]
+
+
+async def group_names(print_ids: list) -> dict:
+    """{"names": [...], "by": "claude" | "local"} pour un groupe de ces impressions."""
+    import asyncio
+    import json as _json
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    ids = [int(x) for x in print_ids if str(x).isdigit()][:60]
+    if not ids:
+        return {"names": [], "by": "local"}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.translated_name, Print.file_name, Print.design_id).where(Print.id.in_(ids)))).all()
+    names = list(dict.fromkeys((t or f or "").strip() for t, f, _ in rows if (t or f)))
+    mw = list(dict.fromkeys(_mw_context(d, None).get("titre_makerworld") for _, _, d in rows if d))
+    mw = [t for t in mw if t]
+    local = _local_group_names(names, mw)
+    key = await _keys()
+    if key.get("claude"):
+        def ask():
+            try:
+                import anthropic
+                c = anthropic.Anthropic(api_key=key["claude"], timeout=60.0, max_retries=1)
+                r = c.messages.create(model=CLAUDE_MODEL, max_tokens=400, system=_GROUP_SYSTEM,
+                                      messages=[{"role": "user", "content": _json.dumps(
+                                          {"impressions": names[:40], "titres_makerworld": mw[:5]}, ensure_ascii=False)}],
+                                      output_config={"format": {"type": "json_schema", "schema": _GROUP_SCHEMA}})
+                try:
+                    from .ai_tags import _count
+                    asyncio.run(_count(r.usage))
+                except Exception:
+                    pass
+                text = next((b.text for b in r.content if b.type == "text"), "")
+                return [n.strip()[:80] for n in (_json.loads(text) if text else {}).get("names") or [] if n and n.strip()]
+            except Exception as e:
+                logger.warning(f"[TRAD] noms de groupe par Claude : {type(e).__name__}")
+                return None
+        got = await asyncio.to_thread(ask)
+        if got:
+            return {"names": list(dict.fromkeys(got))[:4], "by": "claude"}
+    return {"names": local, "by": "local"}
+
+
 def _mw_context(did, prof) -> dict:
     """Le titre de la fiche MakerWorld et celui du profil imprime, lus sur disque (rien a demander a MakerWorld)."""
     out = {}
