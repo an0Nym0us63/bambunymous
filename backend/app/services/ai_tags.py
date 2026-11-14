@@ -25,6 +25,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 K_KEY, K_USAGE = "CLAUDE_API_KEY", "CLAUDE_USAGE"
+K_PROFS = "CLAUDE_TAGS_PROFS"     # (14/11/2026) {cle du modele: profils imprimes quand Claude l'a classe}
 MODEL = "claude-sonnet-5-5"
 BATCH = 10                      # modeles par demande : la liste des categories grandit d'un lot a l'autre
 FAMILIES = ["Déco & art", "Figurines & personnages", "Jeux & jouets", "Casse-têtes", "Maison & rangement", "Cuisine",
@@ -109,21 +110,28 @@ async def _select(n: int | None = None) -> list:
     from ..models.print_history import Print
     out, seen = [], set()
     async with AsyncSessionLocal() as db:
-        q = select(Print.id, Print.design_id, Print.task_name, Print.group_id).order_by(Print.created_at.desc())
+        q = select(Print.id, Print.design_id, Print.task_name, Print.group_id, Print.mw_profile_id).order_by(Print.created_at.desc())
         rows = (await db.execute(q.limit(n * 30) if n else q)).all()
         groups = {}
         gids = {r[3] for r in rows if r[3]}
         if gids:
             from ..models.print_history import Group
             groups = {g: nm for g, nm in (await db.execute(select(Group.id, Group.name).where(Group.id.in_(gids)))).all()}
-    for pid, did, task, gid in rows:
+    printed = {}       # (14/11/2026) ce qui a ete imprime de chaque modele : ses profils et les noms de fichiers
+    for pid, did, task, gid, prof in rows:
+        e = printed.setdefault(model_key(did, gid, pid), {"profs": [], "tasks": []})
+        if prof and str(prof) not in e["profs"]:
+            e["profs"].append(str(prof))
+        if task and task not in e["tasks"] and len(e["tasks"]) < 12:
+            e["tasks"].append(task)
+    for pid, did, task, gid, prof in rows:
         key = model_key(did, gid, pid)
         if key in seen:
             continue
         seen.add(key)
         did = str(did or "").strip()
         out.append({"key": key, "did": did if did.isdigit() else None, "gid": gid, "task": task or "", "group": groups.get(gid),
-                    "print_id": pid})
+                    "print_id": pid, "printed_profs": printed[key]["profs"], "printed_tasks": printed[key]["tasks"]})
         if n and len(out) >= n:
             break
     return out
@@ -145,6 +153,17 @@ async def _prepare(out: list) -> list:
         m["mw_tags"] = [t for t in (b.get("tags") or []) if t][:25]
         m["description"] = _clean(b.get("description") or "", 1500)
         m["img_url"] = b.get("cover_url") or (b.get("pictures") or [None])[0]
+        # les profils (14/11/2026) : souvent une variante chacun (un legume, un personnage) ; et ceux vraiment imprimes
+        try:
+            from .mw_source import _disk_profiles
+            profs = _disk_profiles(m["did"]) or b.get("profiles") or []
+        except Exception:
+            profs = b.get("profiles") or []
+        name = lambda x: x.get("title") or x.get("title_original") or ""
+        m["profiles"] = [name(x) for x in profs if name(x)][:30]
+        mine = set(m.get("printed_profs") or [])
+        m["profiles_printed"] = [name(x) for x in profs if name(x)
+                                 and ({str(x.get("profile_id") or ""), str(x.get("instance_id") or "")} & mine)]
     # l'image de l'objet (07/11/2026) : c'est elle qui dit ce qu'il est vraiment (le « Kimono de gi » rangé en vêtement)
     await asyncio.gather(*(asyncio.to_thread(_image, m) for m in out))
     return out
@@ -213,6 +232,7 @@ Regles :
 - Tout en francais, sauf les noms propres, qui gardent leur forme.
 - Une etiquette en minuscules (sauf noms propres), au singulier, sans doublon ni variante (pas « porte clé » et « porte-clés »).
 - Les categories et etiquettes MakerWorld fournies sont souvent fausses ou floues : sers-t'en comme d'indices, pas comme d'une verite.
+- Les profils d'un modele ("profils") sont souvent ses variantes : un legume, un animal, un personnage, une taille par profil. Ceux vraiment imprimes ("profils_imprimes", et les noms des fichiers imprimes "fichiers_imprimes", parfois dans une autre langue : traduis-les) disent ce que la personne a fait : chaque variante imprimee a son etiquette (ex. le profil « chili pepper » imprime : « piment »). Les variantes non imprimees n'ont pas d'etiquette, sauf si elles disent ce qu'est tout le modele. Les profils qui ne parlent que de la facon d'imprimer (« sans AMS », « 0.2 mm », « 4 couleurs ») ne donnent aucune etiquette.
 - Un objet sans modele MakerWorld n'a que son nom de fichier et l'image de son plateau : devine au mieux, sans inventer de details.
 - Reponds pour chaque objet fourni, avec sa reference "ref" telle quelle."""
 
@@ -257,7 +277,8 @@ async def _ask(client, batch: list, fams: list, cats: dict, tags: list, acc: dic
         o = {"ref": m["key"], "titre": m["title"]}
         if m.get("did"):
             o.update(categories_makerworld=m.get("mw_categories") or [], etiquettes_makerworld=m.get("mw_tags") or [],
-                     description=m.get("description") or "")
+                     description=m.get("description") or "", profils=m.get("profiles") or [],
+                     profils_imprimes=m.get("profiles_printed") or [], fichiers_imprimes=m.get("printed_tasks") or [])
         else:
             o.update(nom_du_fichier=m["task"], groupe=m.get("group") or "")
         objs.append(o)
@@ -359,10 +380,17 @@ async def _save(batch: list, res: dict) -> int:
             row.source, row.model, row.seen, row.updated_at = "ai", MODEL, 1 if m.get("img") else 0, datetime.utcnow()
             n += 1
         await db.commit()
+        # les profils imprimes qu'il a vus : une impression d'un autre profil fera reclasser le modele
+        from .settings_service import get_setting, set_setting
+        cov = _jl(await get_setting(db, K_PROFS, "") or "{}", {})
+        for m in batch:
+            if res.get(m["key"]):
+                cov[m["key"]] = list(m.get("printed_profs") or [])
+        await set_setting(db, K_PROFS, json.dumps(cov))
     return n
 
 
-async def _run(redo: bool, tok: float = 0) -> None:
+async def _run(redo: bool, tok: float = 0, keys: set | None = None) -> None:
     from anthropic import AsyncAnthropic
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
@@ -375,7 +403,8 @@ async def _run(redo: bool, tok: float = 0) -> None:
             await inherit()                      # groupe, relie ou degroupe depuis : repris sans Claude
         known, manual, fams, cats, tc = await _known()
         skip = manual if redo else known
-        todo = [m for m in await _select() if m["key"] not in skip]
+        # keys (14/11/2026) : seulement ces modeles, deja classes ou non (une nouvelle variante imprimee)
+        todo = [m for m in await _select() if (m["key"] in keys and m["key"] not in manual if keys else m["key"] not in skip)]
         _RUN.update(total=len(todo), done=0)
         client = AsyncAnthropic(api_key=key, timeout=180.0, max_retries=2)
         for i in range(0, len(todo), BATCH):
@@ -417,7 +446,7 @@ PREP_S, ASK_S = 120, 420               # la preparation d'un lot (fiches, images
 STALE_S = 20 * 60                      # « en cours » depuis plus longtemps : bloque, le suivant le remplace
 
 
-def start_run(redo: bool = False) -> dict:
+def start_run(redo: bool = False, keys: set | None = None) -> dict:
     import time as _t
     if _RUN["running"] and _t.time() - (_RUN.get("t0") or 0) > STALE_S:
         logger.warning("[IA-TAGS] le passage précédent est bloqué depuis plus de 20 min : arrêté, un nouveau part")
@@ -426,7 +455,7 @@ def start_run(redo: bool = False) -> dict:
         _RUN["running"] = False
     if not _RUN["running"]:
         _RUN.update({"running": True, "done": 0, "total": 0, "error": None, "stop": False, "in": 0, "out": 0, "t0": _t.time()})
-        t = asyncio.get_running_loop().create_task(_run(bool(redo), _RUN["t0"]))
+        t = asyncio.get_running_loop().create_task(_run(bool(redo), _RUN["t0"], set(keys) if keys else None))
         _TASKS.add(t)
         t.add_done_callback(_TASKS.discard)
     return {k: _RUN[k] for k in _RUN_KEYS}
@@ -542,7 +571,19 @@ async def after_print(pid: int, status: str = "SUCCESS") -> None:
         from ..models.print_history import ModelLabel, Print
         async with AsyncSessionLocal() as db:
             p = await db.get(Print, pid)
-            if p is None or await db.get(ModelLabel, model_key(p.design_id, p.group_id, p.id)) is not None:
+            if p is None:
+                return
+            key = model_key(p.design_id, p.group_id, p.id)
+            row = await db.get(ModelLabel, key)
+            if row is not None:
+                # (14/11/2026) deja classe : reclasse si cette impression est d'un profil qu'il n'a pas vu (une autre
+                # variante du modele : le piment des porte-cles legumes), jamais un classement fait a la main
+                from .settings_service import get_setting
+                cov = _jl(await get_setting(db, K_PROFS, "") or "{}", {}).get(key)
+                prof = str(p.mw_profile_id or "")
+                if row.source == "ai" and prof and (cov is None or prof not in cov):
+                    logger.info(f"[IA-TAGS] impression #{pid} : un profil pas encore vu de {key}, Claude le reclasse")
+                    start_run(keys={key})
                 return
         if await inherit():
             async with AsyncSessionLocal() as db:
