@@ -22,6 +22,7 @@ import { noPageGesture } from "../utils/pullRefreshGuard";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
 import { printTitle } from "../utils/printTitle";
+import { useClaudeOn } from "../utils/claudeOn";
 import { ObjectRest } from "../components/PlanDay";
 import { showAlert, showConfirm, showChoice } from "../utils/dialog";
 import { COPY_CHOICES } from "../utils/queueSort";
@@ -1462,6 +1463,12 @@ async function download3mf(pid, kind, group = false) {
 // deux boutons ronds ‹ › dans la barre du haut, et un glisse horizontal sur l'en-tete. Quand l'impression change,
 // la fiche recharge ses donnees et replie ce qui etait ouvert (cout, identifiants, champs en edition).
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = null, onNext = null }) {
+  // (14/11/2026) reclasser par Claude : seulement si sa connexion est reglee
+  const claudeOn = useClaudeOn();
+  const relabel = async body => {
+    try { await client.post("/prints/relabel", body); egg("reclasser_claude"); toast("🏷️ Claude reclasse : catégories et étiquettes à jour dans quelques secondes", "ok", 5000); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const [sharing, setSharing] = useState(false);
   const [settings3mf, setSettings3mf] = useState(false);
   const [ungrouped, setUngrouped] = useState(false);
@@ -1619,6 +1626,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         ? { icon: "📊", label: "Hors classements des stats", hint: "Imposé par son groupe", tone: "#64748B", disabled: true }
         : { icon: "📊", label: p.stats_excluded ? "Remettre dans les classements des stats" : "Retirer des classements des stats",
             hint: p.stats_excluded ? "Il compte de nouveau dans les tops" : "Les totaux le comptent toujours", tone: "#64748B", onClick: toggleRanked }),
+      isAdmin && claudeOn && !visiting && { icon: "🏷️", label: "Reclasser par Claude", hint: "Catégories et étiquettes de son modèle (et de sa pièce)", tone: "#8B5CF6",
+        onClick: () => relabel({ print_id: p.id }) },
       "-",
       // les fichiers associes (03/11/2026) : 3MF tranche et d'origine (telecharger, recuperer, importer), vues 3D,
       // documents du modele, fichiers joints -- a la place de leurs entrees eparses
@@ -1963,6 +1972,12 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 
 // les photos du groupe (nouvelle fiche) : une bande qui defile ; ⭐ la vignette, 🗑 en deux temps, visionneuse
 export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onDelete, onUngroup, onUpdated }) {
+  // (14/11/2026) reclasser par Claude : seulement si sa connexion est reglee
+  const claudeOn = useClaudeOn();
+  const relabel = async body => {
+    try { await client.post("/prints/relabel", body); egg("reclasser_claude"); toast("🏷️ Claude reclasse : catégories et étiquettes à jour dans quelques secondes", "ok", 5000); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const isAdmin = useIsAdmin();
   const [gMode, setGMode] = useState(null);           // le haut de la fiche : null (tout ce qui est choisi), anim, vues, plate (08/11/2026)
@@ -2156,6 +2171,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       // (03/11/2026) l'inverse : plus de modele MakerWorld, mon 3MF d'origine pour la vue 3D (dans les fichiers associes)
       isAdmin && prints.some(x => String(x.design_id || "").trim()) && { icon: "⛓", label: "Délier du modèle MakerWorld", hint: "Toutes ses impressions ; puis ton propre 3MF d'origine pour la vue 3D",
         tone: "#64748B", onClick: unlinkMw },
+      isAdmin && claudeOn && { icon: "🏷️", label: "Reclasser par Claude", hint: "Catégories et étiquettes de ses modèles (et de leurs pièces)", tone: "#8B5CF6",
+        onClick: () => relabel({ group_id: groupId }) },
       "-",
       // les fichiers associes (03/11/2026) : 3MF tranches et d'origine, vues 3D, documents des modeles, fichiers joints
       !groupVisiting && { icon: "🗂", label: "Fichiers associés", hint: "3MF, vues 3D, documents, fichiers joints", tone: "#8B5CF6", onClick: () => setFiles(true) },
@@ -2675,6 +2692,12 @@ function printTint(p) {
 }
 
 function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress, onGroup = null, row = false }) {
+  // (14/11/2026) reclasser par Claude : seulement si sa connexion est reglee
+  const claudeOn = useClaudeOn();
+  const relabel = async body => {
+    try { await client.post("/prints/relabel", body); egg("reclasser_claude"); toast("🏷️ Claude reclasse : catégories et étiquettes à jour dans quelques secondes", "ok", 5000); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
   const visiting = useFriend((s) => s.friend);
   const toRate = useToRateSet(!visiting && !!p.design_id);
@@ -2691,6 +2714,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour grouper ou supprimer plusieurs prints", onClick: () => onLongPress(p.id) },
       onGroup && isAdmin && { icon: "📁", label: "Grouper…", hint: "Le mettre dans un groupe, nouveau ou existant", onClick: () => onGroup(p.id) },
       p.design_id && { icon: "🌐", label: "Modèle MakerWorld", onClick: () => setMw(true) },
+      isAdmin && claudeOn && { icon: "🏷️", label: "Reclasser par Claude", hint: "Catégories et étiquettes", onClick: () => relabel({ print_id: p.id }) },
       isAdmin && "-",
       isAdmin && { icon: "✏️", label: "Modifier", onClick: () => loadFull("edit") },
       isAdmin && { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => loadFull("delete") },

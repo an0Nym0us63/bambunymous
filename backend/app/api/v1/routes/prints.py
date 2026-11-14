@@ -972,6 +972,31 @@ async def suggest_group_names(body: dict = Body({}), _: str = Depends(get_curren
     return await group_names(list(ids))
 
 
+@router.post("/relabel")
+async def relabel(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Reclasser par Claude (14/11/2026) le modele d'une impression ({print_id}) ou ceux d'un groupe ({group_id}) :
+    familles, categories, etiquettes, et celles de chaque piece. Un classement fait a la main n'est pas touche."""
+    from ....services import ai_tags as AI
+    from ....services.settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        if not (await get_setting(db, AI.K_KEY, "") or "").strip():
+            raise HTTPException(400, "Règle d'abord la connexion Claude (Paramètres › Connexions › Claude)")
+        q = select(Print.id, Print.design_id, Print.group_id)
+        if body.get("group_id"):
+            q = q.where(Print.group_id == int(body["group_id"]))
+        elif body.get("print_id"):
+            q = q.where(Print.id == int(body["print_id"]))
+        else:
+            raise HTTPException(400, "Impression ou groupe manquant")
+        keys = {AI.model_key(d, g, p) for p, d, g in (await db.execute(q)).all()}
+    if not keys:
+        raise HTTPException(404, "Introuvable")
+    if AI._RUN.get("running"):
+        raise HTTPException(409, "Claude classe déjà autre chose : réessaie dans une minute")
+    AI.start_run(keys=keys)
+    return {"started": True, "models": len(keys)}
+
+
 @router.get("/group-names/all")
 async def group_names_all(_: str = Depends(require_admin)):
     """Les noms proposes pour tous les groupes (14/11/2026) : avancement et resultats du dernier calcul."""
