@@ -224,6 +224,7 @@ async def _migrate():
         ("prints",    "translated_name",      "TEXT"),
         ("prints",    "skipped_objects",      "TEXT"),
         ("prints",    "translated_by",        "TEXT"),
+        ("model_labels", "variant",           "TEXT"),
         ("filaments", "translated_name",      "TEXT"),
         ("filaments", "density", "REAL"),
         ("filaments", "nozzle_min", "INTEGER"),

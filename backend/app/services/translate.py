@@ -183,6 +183,16 @@ def _local_group_names(names: list, mw_titles: list) -> list:
     return res[:4]
 
 
+async def _claude_key() -> dict:
+    """{"claude": cle} des que la connexion Claude est reglee (les noms de groupe : pas besoin de traduire par Claude)."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    from .ai_tags import K_KEY
+    async with AsyncSessionLocal() as db:
+        k = (await get_setting(db, K_KEY, "") or "").strip()
+    return {"claude": k} if k else {}
+
+
 async def group_names(print_ids: list) -> dict:
     """{"names": [...], "by": "claude" | "local"} pour un groupe de ces impressions."""
     import asyncio
@@ -199,7 +209,7 @@ async def group_names(print_ids: list) -> dict:
     mw = list(dict.fromkeys(_mw_context(d, None).get("titre_makerworld") for _, _, d in rows if d))
     mw = [t for t in mw if t]
     local = _local_group_names(names, mw)
-    key = await _keys()
+    key = await _claude_key()
     if key.get("claude"):
         def ask():
             try:
@@ -263,7 +273,7 @@ async def _groups_bulk() -> None:
             mw = [t for t in dict.fromkeys(_mw_context(d, None).get("titre_makerworld") for d in e["dids"][:5]) if t]
             todo.append({"id": gid, "name": name or "", "names": e["names"], "mw": mw})
         st.update(total=len(todo), done=0, items=[])
-        key = await _keys()
+        key = await _claude_key()
         st["by"] = "claude" if key.get("claude") else "local"
         for i in range(0, len(todo), 15):
             chunk = todo[i:i + 15]
@@ -303,14 +313,13 @@ async def _groups_bulk() -> None:
         logger.exception("[TRAD] noms des groupes")
         st["error"] = f"{type(e).__name__} : {e}"
     finally:
-        st.update(running=False, finished=time.strftime("%Y-%m-%dT%H:%M:%S"))
+        st.update(running=False, finished=time.time())      # en secondes : Taches dit « il y a … »
 
 
 def start_groups_bulk() -> dict:
     import asyncio
     if not _GROUPS_RUN["running"]:
-        _GROUPS_RUN.update(running=True, done=0, total=0, items=[], error=None, started=time.strftime("%Y-%m-%dT%H:%M:%S"),
-                           finished=None)
+        _GROUPS_RUN.update(running=True, done=0, total=0, items=[], error=None, started=time.time(), finished=None)
         asyncio.get_running_loop().create_task(_groups_bulk())
     return _GROUPS_RUN
 
@@ -762,7 +771,7 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
 # L'etat tient en un booleen, en memoire du processus, volontairement : si le
 # serveur redemarre, le thread est mort avec lui et le drapeau doit repartir a
 # faux.
-_BACKFILL = {"running": False, "stop": False, "last": None, "done": 0, "total": None, "current": None, "started": None}
+_BACKFILL = {"running": False, "stop": False, "last": None, "done": 0, "total": None, "current": None, "started": None, "finished": None}
 
 
 def backfill_running() -> bool:
@@ -783,7 +792,7 @@ def start_backfill(retry_same: bool = False, redo: bool = False) -> bool:
     if _BACKFILL["running"]:
         return False
     # l'avancement (14/11/2026) : suivi dans Parametres et dans Taches
-    _BACKFILL.update(running=True, stop=False, done=0, total=None, started=time.strftime("%Y-%m-%dT%H:%M:%S"),
+    _BACKFILL.update(running=True, stop=False, done=0, total=None, started=time.time(), finished=None,
                      current="retraduction par Claude" if redo else None)
 
     def _run():
@@ -809,7 +818,7 @@ def start_backfill(retry_same: bool = False, redo: bool = False) -> bool:
             logger.exception("[TRAD] rattrapage interrompu")
         finally:
             loop.close()
-            _BACKFILL.update(running=False, stop=False,
+            _BACKFILL.update(running=False, stop=False, finished=time.time(),
                              last={**total, "at": time.strftime("%Y-%m-%dT%H:%M:%S")})
             logger.info(f"[TRAD] rattrapage termine : {total['translated']} traduit(s), "
                         f"{total['skipped']} deja en francais, {total['failed']} en echec")

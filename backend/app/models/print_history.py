@@ -241,8 +241,13 @@ class ModelLabel(Base):
     model      = Column(String(64),  nullable=True)
     seen       = Column(Integer,     nullable=False, default=0)   # Claude a vu son image
     updated_at = Column(DateTime,    nullable=False, default=datetime.utcnow)
+    # (14/11/2026) une variante d'un modele (un profil = une piece : le champignon d'un lot de legumes) : « {design}@{profil} ».
+    # Sa ligne (cle « mw:{design}@{profil} », design_id vide) porte les etiquettes de cette piece seule ; celle du modele
+    # ne garde que ce qui vaut pour toutes. Une impression de ce profil a les deux.
+    variant    = Column(String(200), nullable=True)
 
     __table_args__ = (
+        Index("idx_model_labels_variant", "variant"),
         Index("idx_model_labels_design", "design_id"),
         Index("idx_model_labels_group",  "group_id"),
         Index("idx_model_labels_print",  "print_id"),

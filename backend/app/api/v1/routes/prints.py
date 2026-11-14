@@ -299,6 +299,8 @@ def _search_condition(search: str):
             Print.design_id.in_(_sel(_ML.design_id).where(and_(_ML.design_id.isnot(None), lab))),
             Print.group_id.in_(_sel(_ML.group_id).where(and_(_ML.group_id.isnot(None), lab))),
             Print.id.in_(_sel(_ML.print_id).where(and_(_ML.print_id.isnot(None), lab))),
+            # la piece imprimee (14/11/2026) : les etiquettes de la variante de son profil
+            exists().where(and_(_ML.variant.isnot(None), _ML.variant == Print.design_id.concat("@").concat(Print.mw_profile_id), lab)).correlate(Print),
             # Le nom du groupe fait partie de la condition, et non plus un ajout
             # apres coup : ses prints passent ainsi par les autres filtres
             # (etat, dates, filament) et entrent dans le total.
@@ -326,9 +328,11 @@ def _label_clause(cat: Optional[str] = None, etq: Optional[str] = None):
     if not conds:
         return None
     lab = and_(*conds)
+    from sqlalchemy import exists as _ex
     return or_(Print.design_id.in_(_sel(_ML.design_id).where(and_(_ML.design_id.isnot(None), lab))),
                Print.group_id.in_(_sel(_ML.group_id).where(and_(_ML.group_id.isnot(None), lab))),
-               Print.id.in_(_sel(_ML.print_id).where(and_(_ML.print_id.isnot(None), lab))))
+               Print.id.in_(_sel(_ML.print_id).where(and_(_ML.print_id.isnot(None), lab))),
+               _ex().where(and_(_ML.variant.isnot(None), _ML.variant == Print.design_id.concat("@").concat(Print.mw_profile_id), lab)).correlate(Print))
 
 
 def _apply_search(q, search: str):
@@ -1456,7 +1460,7 @@ async def label_stats(date_from: Optional[str] = None, date_to: Optional[str] = 
     lm = await AI.label_map()
     async with AsyncSessionLocal() as db:
         q = select(Print.id, Print.design_id, Print.group_id, func.coalesce(Print.total_weight_g, 0),
-                   func.coalesce(Print.total_cost, 0), _PRINT_DURATION, Print.status).where(Print.status != "IN_PROGRESS")
+                   func.coalesce(Print.total_cost, 0), _PRINT_DURATION, Print.status, Print.mw_profile_id).where(Print.status != "IN_PROGRESS")
         for c in _period_clauses(date_from, date_to):
             q = q.where(c)
         rows = (await db.execute(q)).all()
@@ -1471,13 +1475,16 @@ async def label_stats(date_from: Optional[str] = None, date_to: Optional[str] = 
         a["cost"] += float(c or 0)
         a["seconds"] += int(d or 0)
         a["ok"] += ok
-    for pid, did, gid, w, c, d, st in rows:
+    for pid, did, gid, w, c, d, st, prof in rows:
         key = AI.model_key(did, gid, pid)
         lab = lm.get(key)
         if not lab:
             continue
         classed += 1
         fams, cats, tags, cm = lab
+        vl = lm.get(f"{key}@{prof}") if prof else None       # (14/11/2026) les etiquettes de sa piece
+        if vl:
+            tags = list(dict.fromkeys(list(vl[2]) + list(tags)))
         ok = 1 if st in ("SUCCESS", "PARTIAL") else 0
         for f in fams:
             add("families", f, key, w, c, d, ok)

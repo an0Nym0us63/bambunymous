@@ -164,6 +164,9 @@ async def _prepare(out: list) -> list:
         mine = set(m.get("printed_profs") or [])
         m["profiles_printed"] = [name(x) for x in profs if name(x)
                                  and ({str(x.get("profile_id") or ""), str(x.get("instance_id") or "")} & mine)]
+        # le titre d'un profil imprime -> son numero (tel que les impressions le portent) : les variantes rendues par Claude
+        m["printed_map"] = {name(x): next(i for i in (str(x.get("profile_id") or ""), str(x.get("instance_id") or "")) if i in mine)
+                            for x in profs if name(x) and ({str(x.get("profile_id") or ""), str(x.get("instance_id") or "")} & mine)}
     # l'image de l'objet (07/11/2026) : c'est elle qui dit ce qu'il est vraiment (le « Kimono de gi » rangé en vêtement)
     await asyncio.gather(*(asyncio.to_thread(_image, m) for m in out))
     return out
@@ -232,7 +235,10 @@ Regles :
 - Tout en francais, sauf les noms propres, qui gardent leur forme.
 - Une etiquette en minuscules (sauf noms propres), au singulier, sans doublon ni variante (pas « porte clé » et « porte-clés »).
 - Les categories et etiquettes MakerWorld fournies sont souvent fausses ou floues : sers-t'en comme d'indices, pas comme d'une verite.
-- Les profils d'un modele ("profils") sont souvent ses variantes : un legume, un animal, un personnage, une taille par profil. Ceux vraiment imprimes ("profils_imprimes", et les noms des fichiers imprimes "fichiers_imprimes", parfois dans une autre langue : traduis-les) disent ce que la personne a fait : chaque variante imprimee a son etiquette (ex. le profil « chili pepper » imprime : « piment »). Les variantes non imprimees n'ont pas d'etiquette, sauf si elles disent ce qu'est tout le modele. Les profils qui ne parlent que de la facon d'imprimer (« sans AMS », « 0.2 mm », « 4 couleurs ») ne donnent aucune etiquette.
+- Les profils d'un modele ("profils") sont parfois ses VARIANTES : une piece differente par profil (un legume, un animal, un personnage). Dans ce cas :
+  * "tags" (et les categories) ne disent que ce qui vaut pour TOUTES les pieces (porte-cles, legume, articule, kawaii...) : jamais le nom d'une seule piece (ni chou, ni champignon, ni citrouille), sinon chercher « citrouille » trouverait le champignon ;
+  * "variantes" : pour chaque profil vraiment imprime ("profils_imprimes", son titre recopie tel quel dans "profil"), les etiquettes de cette piece seule (« champignon », « champi », « amanite »...), 2 a 6, en francais. Les noms des fichiers imprimes ("fichiers_imprimes", parfois en chinois : traduis-les) aident a savoir quelle piece c'est.
+  Quand les profils ne sont pas des pieces differentes (versions AMS / sans AMS, tailles, reglages, « 0.2 mm », « 4 couleurs »), "variantes" reste vide et rien de ces profils ne devient une etiquette.
 - Un objet sans modele MakerWorld n'a que son nom de fichier et l'image de son plateau : devine au mieux, sans inventer de details.
 - Reponds pour chaque objet fourni, avec sa reference "ref" telle quelle."""
 
@@ -248,8 +254,12 @@ _SCHEMA = {
                 "properties": {"name": {"type": "string"}, "family": {"type": "string"}},
                 "required": ["name", "family"], "additionalProperties": False}},
             "tags": {"type": "array", "items": {"type": "string"}},
+            "variantes": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"profil": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}},
+                "required": ["profil", "tags"], "additionalProperties": False}},
         },
-        "required": ["ref", "families", "categories", "tags"], "additionalProperties": False}}},
+        "required": ["ref", "families", "categories", "tags", "variantes"], "additionalProperties": False}}},
     "required": ["items"], "additionalProperties": False,
 }
 
@@ -379,6 +389,19 @@ async def _save(batch: list, res: dict) -> int:
             row.tags = json.dumps(_uniq(it.get("tags")), ensure_ascii=False)
             row.source, row.model, row.seen, row.updated_at = "ai", MODEL, 1 if m.get("img") else 0, datetime.utcnow()
             n += 1
+            # les variantes (14/11/2026) : une ligne par profil imprime qui est une piece a part ; les anciennes refaites
+            if kind == "mw":
+                from sqlalchemy import delete as _del
+                await db.execute(_del(ModelLabel).where(ModelLabel.key.like(f"{m['key']}@%"), ModelLabel.source != "manual"))
+                pm = {str(k).strip().lower(): v for k, v in (m.get("printed_map") or {}).items()}
+                for v in it.get("variantes") or []:
+                    prof = pm.get(str(v.get("profil") or "").strip().lower())
+                    tg = _uniq(v.get("tags"))
+                    if not prof or not tg:
+                        continue
+                    db.add(ModelLabel(key=f"{m['key']}@{prof}", variant=f"{m['did']}@{prof}", title=v.get("profil"),
+                                      families="[]", categories="[]", catmap="{}", tags=json.dumps(tg, ensure_ascii=False),
+                                      source="ai", model=MODEL, seen=0, updated_at=datetime.utcnow()))
         await db.commit()
         # les profils imprimes qu'il a vus : une impression d'un autre profil fera reclasser le modele
         from .settings_service import get_setting, set_setting
@@ -512,12 +535,16 @@ async def labels_for_print(print_id: int) -> dict:
             row = await db.get(ModelLabel, k)
             if row is not None:
                 break
+        # sa piece (14/11/2026) : les etiquettes de la variante de son profil, en plus de celles du modele
+        var = await db.get(ModelLabel, f"{row.key}@{p.mw_profile_id}") if row is not None and p.mw_profile_id else None
     if row is None:
         return {}
     cm = _jl(row.catmap, {})
+    vt = _jl(var.tags, []) if var is not None else []
     return {"families": _jl(row.families, []),
             "categories": [{"name": c, "family": cm.get(c) or ""} for c in _jl(row.categories, [])],
-            "tags": _jl(row.tags, []), "source": row.source, "seen": bool(row.seen)}
+            "tags": _uniq(vt + _jl(row.tags, [])), "variant": var.title if var is not None else None,
+            "source": row.source, "seen": bool(row.seen)}
 
 
 # ── Ce qui sert ailleurs : filtres, statistiques, classement automatique (07/11/2026) ──
@@ -539,6 +566,8 @@ async def facets() -> dict:
     fc, cc, tc, cmap = Counter(), Counter(), Counter(), {}
     for k, (f, c, t, cm) in (await label_map()).items():
         if k not in keys:
+            if "@" in k and k.split("@")[0] in keys:
+                tc.update(t)               # une variante : ses etiquettes
             continue
         fc.update(f)
         cc.update(c)
