@@ -10,6 +10,7 @@ import { Wifi, WifiOff, DoorOpen, DoorClosed, Lightbulb, LightbulbOff, Clock, Pa
 import { useAuth } from "../store/auth";
 import { create } from "zustand";
 import client, { apiUrl, apiThumb } from "../api/client";
+import { printTitle } from "../utils/printTitle";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "../components/medals";
 import { egg, useEggsFound } from "../eggs";
@@ -201,7 +202,7 @@ function StatusBanner({ status, friend = null, switcher = null }) {
           {friend && <span style={{ fontSize:11, fontWeight:600, color:FR_ACCENT, flexShrink:0 }}>👀 {friend.name} ·</span>}
           <p style={{ fontWeight:700, fontSize:14, color:"var(--text)", margin:0,
             flex:1, textAlign:"left", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"clip" }}>
-            {printInfo?.file_name || status.print_name || cfg.label}
+            {printTitle(printInfo) || status.print_name || cfg.label}
           </p>
           {/* (12/11/2026) la prise de l'imprimante (Home Assistant), discrete ; pas chez un copain */}
           {!friend && <PlugChip size={11}/>}
@@ -270,7 +271,7 @@ function StatusBanner({ status, friend = null, switcher = null }) {
 
       {/* plus de volet : un clic ouvre la fenetre de l'imprimante, comme les autres tuiles */}
       {pop && <span onClick={e => e.stopPropagation()}><PrinterPopup status={status} img={printInfo && (friend || printInfo.plate_image) ? img(`/prints/${printInfo.id}/image${imgV(printInfo)}`) : null}
-        name={printInfo?.file_name || status?.print_name} onClose={() => setPop(false)}/></span>}
+        name={printTitle(printInfo) || status?.print_name} onClose={() => setPop(false)}/></span>}
     </div>
   );
 }
@@ -1501,7 +1502,7 @@ function PrinterLine({ status }) {
         {img ? <FitBox key={img} src={apiThumb(img, 192)}
           style={{ width: "100%", height: "100%" }}/> : <Printer size={17}/>}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
-        textOverflow: "ellipsis" }}>{info?.file_name || status?.print_name || info?.translated_name || "Imprimante"}</span>
+        textOverflow: "ellipsis" }}>{printTitle(info) || status?.print_name || "Imprimante"}</span>
       {live ? <>
         {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 700,
           color: "var(--muted)", whiteSpace: "nowrap", flexShrink: 0 }}><Clock size={12}/>{fmtTime(status.remaining_minutes)}</span>}
@@ -1515,7 +1516,7 @@ function PrinterLine({ status }) {
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
       {/* le portail renvoie ses clics a la ligne : on les arrete pour que fermer ne rouvre pas */}
       {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
-      {pop && <PrinterPopup status={status} img={img} name={info?.file_name || status?.print_name} onClose={() => setPop(false)}/>}
+      {pop && <PrinterPopup status={status} img={img} name={printTitle(info) || status?.print_name} onClose={() => setPop(false)}/>}
     </div>
   );
 }
@@ -2032,7 +2033,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
-              textOverflow: "ellipsis", lineHeight: 1.2 }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
+              textOverflow: "ellipsis", lineHeight: 1.2 }}><Words text={printTitle(info) || status?.print_name || "Imprimante"}/></span>
             {/* (12/11/2026) la prise (Home Assistant) : discrete, sur la ligne du nom qui se raccourcit pour elle (sans colonne de droite) */}
             {!sideCol && W >= 300 && <PlugChip size={W < 380 ? 10.5 : 11.5} compact={W < 380}/>}
             {!sideCol && stage}
@@ -2076,7 +2077,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         </div>
       )}
       {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
-      {pop && <PrinterPopup status={status} img={img} name={info?.file_name || status?.print_name} onClose={() => setPop(false)}/>}
+      {pop && <PrinterPopup status={status} img={img} name={printTitle(info) || status?.print_name} onClose={() => setPop(false)}/>}
     </div>
   );
 }
@@ -2115,10 +2116,10 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
   );
   const name = (
     <div style={{ fontSize: small ? 13 : 14, fontWeight: 800, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box",
-      WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: "vertical" }}><Words text={info?.file_name || status?.print_name || s.label}/></div>
+      WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: "vertical" }}><Words text={printTitle(info) || status?.print_name || s.label}/></div>
   );
   // le portail de l'agrandissement renvoie ses clics : on les arrete
-  const popup = pop && <PrinterPopup status={status} img={info ? apiUrl(`/prints/${info.id}/image${imgV(info)}`) : null} name={info?.file_name || status?.print_name}
+  const popup = pop && <PrinterPopup status={status} img={info ? apiUrl(`/prints/${info.id}/image${imgV(info)}`) : null} name={printTitle(info) || status?.print_name}
     onClose={() => setPop(false)}/>;
   const zoom = big && info && <span onClick={e => e.stopPropagation()}>
     <Lightbox images={[apiUrl(`/prints/${info.id}/image${imgV(info)}`)]} index={0} onClose={() => setBig(false)}/></span>;
@@ -2128,7 +2129,7 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
   if (small) return (
     <div onClick={() => setPop(true)} style={{ minHeight: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, cursor: "pointer" }}>
       <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.2, overflow: "hidden", display: "-webkit-box",
-        WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflowWrap: "break-word" }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></div>
+        WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflowWrap: "break-word" }}><Words text={printTitle(info) || status?.print_name || "Imprimante"}/></div>
       <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         {thumb}
         {live ? <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -2202,7 +2203,7 @@ function Greeting({ status, o = {} }) {
   useEffect(() => {
     if (!live) { setName(null); return; }
     client.get("/prints", { params: { limit: 1, status: "IN_PROGRESS" } })
-      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; setName(p ? (p.file_name || p.translated_name) : null); })
+      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; setName(p ? (printTitle(p)) : null); })
       .catch(() => {});
   }, [live, status?.job_id]);
   useEffect(() => {

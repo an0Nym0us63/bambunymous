@@ -21,6 +21,7 @@ import { useFriend, currentFriend } from "../store/friend";
 import { noPageGesture } from "../utils/pullRefreshGuard";
 import MwImg from "../components/MwImg";
 import client, { apiUrl, apiThumb } from "../api/client";
+import { printTitle } from "../utils/printTitle";
 import { ObjectRest } from "../components/PlanDay";
 import { showAlert, showConfirm, showChoice } from "../utils/dialog";
 import { COPY_CHOICES } from "../utils/queueSort";
@@ -314,7 +315,7 @@ function BulkDeleteConfirm({ prints, onCancel, onConfirm, title }) {
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
           {rows.map(({ p, used }) => <div key={p.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, fontWeight:700, color:"var(--text)" }}>
-            <span style={{ flex:1, minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.file_name || "Sans nom"}</span>
+            <span style={{ flex:1, minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{printTitle(p) || "Sans nom"}</span>
             <span style={{ color: frac > 0 ? "#16a34a" : "var(--muted)", fontWeight:900 }}>+{g(used.reduce((a, f) => a + f.grams_used, 0) * frac)} g</span>
           </div>)}
         </div>
@@ -379,7 +380,7 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
           <span style={{ fontSize:19, fontWeight:900, color:"var(--text)", lineHeight:1.2 }}>
             {restoreOnly ? "Restituer les grammes" : "Supprimer ce print ?"}</span>
           <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {p.file_name || "Sans nom"}</span>
+            {printTitle(p) || "Sans nom"}</span>
         </div>
       </div>
       <div style={{ padding:"14px 16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
@@ -1063,7 +1064,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
     // detection » ne vise plus qu'elles (il oubliait les choix de toutes les impressions du modele, d'autres plateaux avec)
     const here = prints.filter(pr => (platesOf(pr) || []).includes(pl.index));
     const hand = here.filter(pr => manualPlates(pr.mw_plates));
-    const nm = pr => pr.translated_name || pr.file_name;
+    const nm = pr => printTitle(pr);
     const backToAuto = async () => {
       const wide = hand.filter(pr => (manualPlates(pr.mw_plates)?.plates || []).some(i => i !== pl.index));
       if (wide.length && !(await showConfirm(wide.map(pr => `« ${nm(pr)} » compte aussi pour le${(manualPlates(pr.mw_plates).plates.length > 2) ? "s" : ""} plateau${(manualPlates(pr.mw_plates).plates.length > 2) ? "x" : ""} `
@@ -1076,7 +1077,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
       title: `${pl.index}. ${pl.name || "Plateau"}`, subtitle: "Imprimé par…", img: pl.thumb ? mwImg(pl.thumb, 120) : null,
       items: [
         ...(probable[pl.index] || []).map(({ pr, score, sure }) => ({ icon: "💡", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128),
-          label: `Valider : ${pr.translated_name || pr.file_name}`,
+          label: `Valider : ${printTitle(pr)}`,
           hint: `Reconnu à l'image (ressemblance ${Math.round(score * 100)} %)`
             + (sure === false ? " · d'autres plateaux se ressemblent : le plus proche, départagé au poids" : ""),
           onClick: () => save(pr, [pl.index]) })),
@@ -1091,7 +1092,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
         ...prints.map(pr => {
           const cur = platesOf(pr) || [];
           const on = cur.includes(pl.index);
-          return { icon: on ? "✅" : "⬜", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128), label: pr.translated_name || pr.file_name,
+          return { icon: on ? "✅" : "⬜", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128), label: printTitle(pr),
             hint: [fmtDate(pr.print_date), STATUS_CFG[pr.status]?.label, on ? "compte pour ce plateau : toucher le dissocie" : "toucher l'associe à ce plateau"].filter(Boolean).join(" · "),
             onClick: () => save(pr, on ? cur.filter(i => i !== pl.index) : [...cur, pl.index]) };
         }),
@@ -1099,7 +1100,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
         ...prints.filter(pr => (platesOf(pr) || []).includes(pl.index) && (pr.status === "SUCCESS" || pr.status === "PARTIAL")).map(pr => {
           const cur = platesOf(pr) || [], c = copiesOf(pr, cur);
           return { icon: "🔢", label: c.n === 0 ? "Ne compte pas (relancé)" : `Exemplaires : ×${c.n} (${{ main: "dit à la main", groupe: "d'après le groupe", elements: "éléments déclarés", poids: "deviné au poids" }[c.how || (c.hand ? "main" : "poids")] || "par défaut"})`,
-            hint: `${pr.translated_name || pr.file_name} · touche pour corriger`,
+            hint: `${printTitle(pr)} · touche pour corriger`,
             onClick: async () => {
               const v = await showChoice(`Combien d'exemplaires de ${cur.length > 1 ? "ces plateaux" : "ce plateau"} ce print a-t-il donnés ?`,
                 COPY_CHOICES);
@@ -1112,7 +1113,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
         // les impressions du groupe pas encore liees a ce modele (28/10/2026 : elles manquaient a la liste) : les choisir
         // les lie au modele et marque le plateau
         others.length > 0 && "-",
-        ...others.map(pr => ({ icon: "🔗", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128), label: pr.translated_name || pr.file_name,
+        ...others.map(pr => ({ icon: "🔗", img: apiThumb(apiUrl(`/prints/${pr.id}/image`), 128), label: printTitle(pr),
           hint: [fmtDate(pr.print_date), "pas encore liée à ce modèle : la lier et marquer ce plateau"].filter(Boolean).join(" · "),
           onClick: async () => {
             try { await client.patch(`/prints/${pr.id}`, { design_id: designId }); await save(pr, [pl.index]); onLinked?.(); }
@@ -1210,7 +1211,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn, onProfile, mod
                   style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
                 {ok && <span style={{ position:"absolute", top:2, right:2, width:16, height:16, borderRadius:"50%",
                   background:"#22c55e", color:"white", fontSize:10, fontWeight:800, lineHeight:"16px" }}>✓</span>}
-                {maybe && <span title={`Probablement imprimé par ${maybe[0].pr.translated_name || maybe[0].pr.file_name}`}
+                {maybe && <span title={`Probablement imprimé par ${printTitle(maybe[0].pr)}`}
                   style={{ position:"absolute", top:2, right:2, width:16, height:16, borderRadius:"50%", background:"#3b82f6",
                     color:"white", fontSize:10, fontWeight:800, lineHeight:"16px" }}>?</span>}
                 {cours && <span title="En cours d'impression" style={{ position:"absolute", top:2, right:2, width:16, height:16,
@@ -1472,7 +1473,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const [heroMode, setHeroMode] = useState(null);     // le haut de la fiche : null (tout ce qui est choisi), anim, vues, plate
   const heroDurs = useRef({});                          // la duree de chaque animation en tete (le defilement l'attend)
   useEffect(() => { setHeroMode(null); }, [p.id]);
-  useTrackDetail(`Fiche print · ${p?.file_name || pProp?.file_name || "#" + pProp.id}`);
+  useTrackDetail(`Fiche print · ${printTitle(p) || printTitle(pProp) || "#" + pProp.id}`);
   const scrollRef = useRef(null);
   const firstId = useRef(pProp.id);
   useEffect(() => {
@@ -1606,13 +1607,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const dur = p.duration_seconds || p.estimated_seconds;
   const fils = p.filament_usage || [];
   const more = e => openMenu(e, {
-    title: p.file_name || "Sans nom", subtitle: `${stL} · ${day} ${hour.split(" · ")[0]}`, color: stC,
+    title: printTitle(p) || "Sans nom", subtitle: `${stL} · ${day} ${hour.split(" · ")[0]}`, color: stC,
     items: [
       { icon: "✏️", label: "Éditer", hint: "Nom, date, état, quantité…", tone: "#3B82F6", onClick: () => setEditMode(true) },
       { icon: "📣", label: "Partager", hint: "Telegram, WhatsApp…", tone: "#229ED9", onClick: () => setSharing(true) },
       objQ && objQ.remaining > 0 ? { icon: "📦", label: "Créer des objets", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
-        onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine / Math.max(1, localNb || 1) }) }
-        : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, tone: "#22C55E", onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine / Math.max(1, localNb || 1) }) } : null,
+        onClick: () => setObjCreate({ name: printTitle(p) || "Sans nom", cost: totalBobine / Math.max(1, localNb || 1) }) }
+        : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, tone: "#22C55E", onClick: () => setObjCreate({ name: printTitle(p) || "Sans nom", cost: totalBobine / Math.max(1, localNb || 1) }) } : null,
       groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, tone: "#A78BFA", onClick: handleUngroup },
       isAdmin && (p.group_stats_excluded
         ? { icon: "📊", label: "Hors classements des stats", hint: "Imposé par son groupe", tone: "#64748B", disabled: true }
@@ -1678,8 +1679,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         background: "linear-gradient(transparent, color-mix(in srgb, var(--sheet-bg) 92%, transparent) 55%)" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
           <h2 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 19, fontWeight: 900, color: "var(--text)", letterSpacing: "-.01em", lineHeight: 1.2,
-            overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{p.file_name || "Sans nom"}</h2>
+            overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{printTitle(p) || "Sans nom"}</h2>
         </div>
+        {printTitle(p) !== p.file_name && p.file_name && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.file_name}</div>}
         {p.original_name && p.original_name !== p.file_name && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.original_name}</div>}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
@@ -1773,7 +1775,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
   const sections = (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* la galerie de la fiche (08/11/2026) : photos, 3D (vues et animations), technique */}
-      <MediaGallery kind="print" id={p.id} title={p.translated_name || p.file_name || ""} refreshKey={p.updated_at || ""}
+      <MediaGallery kind="print" id={p.id} title={printTitle(p) || ""} refreshKey={p.updated_at || ""}
         onCover={name => setP(prev => ({ ...prev, cover_photo: name }))} onChanged={() => { reload(); onChanged?.(); }}/>
       {/* en cours, suivi couche par couche (alpha) : ce que chaque filament a vraiment consomme ; rien sur « Actuel » */}
       {p.status === "IN_PROGRESS" && !currentFriend() && <LiveUsageCard printId={p.id}/>}
@@ -1819,7 +1821,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
                   style={{ ...v2Round, fontSize: 20, opacity: onNext ? 1 : 0.3, cursor: onNext ? "pointer" : "default" }}>›</button>
               </div>}
               <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
-                {canRate && <RateStar designs={[p.design_id]} name={p.file_name} enabled={!visiting}/>}
+                {canRate && <RateStar designs={[p.design_id]} name={printTitle(p)} enabled={!visiting}/>}
                 {/* le ⋯ est dans la barre du bas, toujours visible (05/11/2026 : en haut aussi, il faisait doublon) */}
                 <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
               </div>
@@ -1863,14 +1865,14 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {objCreate && <ObjectCreateSheet parentType="print" parentId={p.id} defaultName={objCreate.name} costFabrication={objCreate.cost}
         onDone={() => { setRefreshKey(k => k + 1); onChanged?.(); }} onClose={() => setObjCreate(null)}/>}
       {sharing && <ShareSheet kind="print" id={p.id} onClose={() => setSharing(false)}/>}
-      {settings3mf && <SliceSettingsSheet printId={p.id} title={p.translated_name || p.file_name} onClose={() => setSettings3mf(false)}/>}
+      {settings3mf && <SliceSettingsSheet printId={p.id} title={printTitle(p)} onClose={() => setSettings3mf(false)}/>}
       {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray}
         multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={() => setSpoolPicker(null)}
         onMapped={() => { setSpoolPicker(null); reload(); onChanged?.(); }}/>}
       {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
-      {own3d && <Model3D designId={`p${p.id}`} title={p.translated_name || p.file_name} printId={p.id} usedPrints={[p.id]}
+      {own3d && <Model3D designId={`p${p.id}`} title={printTitle(p)} printId={p.id} usedPrints={[p.id]}
         scope={`print:${p.id}`} onClose={() => setOwn3d(false)}/>}
-      {files && <FilesSheet kind="print" id={p.id} title={p.translated_name || p.file_name || "Sans nom"} isAdmin={isAdmin} onClose={() => setFiles(false)} actions={{
+      {files && <FilesSheet kind="print" id={p.id} title={printTitle(p) || "Sans nom"} isAdmin={isAdmin} onClose={() => setFiles(false)} actions={{
         download: k => download3mf(p.id, k), importSource, fetchSource, own3d: () => setOwn3d(true),
         manageViews: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
           try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.sel.length ? 1 : 0, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
@@ -2093,7 +2095,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     const several = cards.filter(c => c.d === d).length > 1, x = list[0];
     const ptitle = prof && profOfPrint._titles?.[prof];
     return { key: `${d}:${prof || ""}`, design: d, ids: list.map(y => y.id),
-      label: `${x.translated_name || x.file_name || `modèle ${d}`}${several && ptitle ? ` · ${ptitle}` : ""}`,
+      label: `${printTitle(x) || `modèle ${d}`}${several && ptitle ? ` · ${ptitle}` : ""}`,
       has: list.every(y => y.source_3mf) };
   }), ...(own => own.length ? [{ key: "-", design: "-", ids: own.map(y => y.id), label: "sans modèle MakerWorld",
     has: own.every(y => y.source_3mf) }] : [])(prints.filter(x => !String(x.design_id || "").trim()))];
@@ -2137,7 +2139,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
   };
   const setCoverPrint = async x => { try { await client.patch("/prints/groups/" + groupId, { cover_print_id: x.id }); setCoverPrintId(x.id); onUpdated?.(); } catch { /* rien */ } };
   const removeFromGroup = async x => {
-    if (!(await showConfirm(`Retirer "${x.file_name || "ce print"}" du groupe ?`))) return;
+    if (!(await showConfirm(`Retirer "${printTitle(x) || "ce print"}" du groupe ?`))) return;
     try { await client.post("/prints/" + x.id + "/group", {}); setPrints(ps => ps.filter(y => y.id !== x.id)); onUpdated?.(); } catch { /* rien */ }
   };
   const thumb3d = !!prints[0]?.group_thumb_3d;
@@ -2168,7 +2170,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     ],
   });
   const printMenu = (e, x) => openMenu(e, {
-    title: x.file_name || "Sans nom", subtitle: fmtDate(x.print_date), img: thumbUrl(x, 256),
+    title: printTitle(x) || "Sans nom", subtitle: fmtDate(x.print_date), img: thumbUrl(x, 256),
     items: [
       { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: () => setSelectedPrint(x) },
       isAdmin && { icon: "★", label: coverPrintId === x.id ? "Vignette du groupe" : "En faire la vignette du groupe", tone: "#F59E0B",
@@ -2303,7 +2305,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         </span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
-            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{printTitle(x) || "Sans nom"}</span>
             {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={tagS("#F59E0B")}>★</span>}
             {/* les memes marques que la liste (05/11/2026) : pieces, piece annulee */}
             {x.number_of_items > 1 && <span data-tip={`${x.number_of_items} pièces`} style={tagS("#2563EB")}>×{x.number_of_items}</span>}</span>
@@ -2330,7 +2332,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         </div>
         <div style={{ padding: "6px 8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 800, color: "var(--text)", minWidth: 0 }}>
-            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{printTitle(x) || "Sans nom"}</span>
             {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={tagS("#F59E0B")}>★</span>}</div>
           <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{x.skipped_objects?.objects?.length > 0 && <span data-tip="Pièce annulée pendant l'impression" style={{ color: "#F97316", fontWeight: 900 }}>✂ </span>}{fmtDate(x.print_date)}</div>
         </div>
@@ -2385,7 +2387,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       {(() => { const seen = new Set(), ms = [];
         for (const x of prints) { const k = /^\d+$/.test(String(x.design_id || "").trim()) ? `mw:${String(x.design_id).trim()}` : "g"; if (!seen.has(k)) { seen.add(k); ms.push(x); } }
         return ms.map(x => <div key={x.id}>
-          {ms.length > 1 && <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", margin: "0 0 4px 4px" }}>{x.translated_name || x.file_name}</div>}
+          {ms.length > 1 && <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", margin: "0 0 4px 4px" }}>{printTitle(x)}</div>}
           <ModelLabels printId={x.id} onPick={onClose}/></div>); })()}
   </>;
   const sections = (
@@ -2683,7 +2685,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
     .catch(e => showAlert("Erreur: " + (e.response?.data?.detail || e.message)));
   // Appui long au doigt : selection (grouper, supprimer...) ; clic droit : menu du print.
   const [press, guard] = useLongPress(e => openMenu(e, {
-    title: p.file_name || "Sans nom", subtitle: fmtDate(p.print_date),
+    title: printTitle(p) || "Sans nom", subtitle: fmtDate(p.print_date),
     items: [
       { icon: "📄", label: "Ouvrir", onClick },
       onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour grouper ou supprimer plusieurs prints", onClick: () => onLongPress(p.id) },
@@ -2727,7 +2729,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           {check}
         </span>
         <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
-          <span style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.file_name || "Sans nom"}</span>
+          <span style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{printTitle(p) || "Sans nom"}</span>
           <span style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
             <span style={{ color:stC }}>{stI} {stL}</span>{p.skipped_objects?.objects?.length > 0 && <span style={{ color: "#F97316" }}> · ✂</span>} · {day} {hour}</span>
           <span style={{ display:"flex", alignItems:"center", gap:6 }}>{dots}
@@ -2771,7 +2773,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
           {rateMe && <span data-tip="À évaluer sur MakerWorld" style={tagS("#F59E0B")}>★</span>}
         </div>
         <p style={{ fontWeight:800, fontSize:12.5, color:"var(--text)", margin:"0 0 3px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-          {p.file_name || "Sans nom"}
+          {printTitle(p) || "Sans nom"}
         </p>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
           {/* le statut en pastille seule, son nom au survol (03/11/2026 : « En cours · » mangeait l'heure sur une carte etroite) */}
@@ -4449,7 +4451,7 @@ function GroupPickerSheet({ groups, items = [], onClose, onPick }) {
   // d'un meme modele) ; on propose toujours de creer, les groupes existants juste dessous.
   const exactNameExists = groups.some(g => norm(g.name) === qq);
   const thumb = id => apiThumb(apiUrl(`/prints/${id}/image`), 128);
-  const name0 = items.length === 1 ? (items[0].translated_name || items[0].file_name || "") : "";
+  const name0 = items.length === 1 ? printTitle(items[0]) : "";
   // la vignette du groupe, comme sa tuile dans la liste : sa vue 3D choisie, sinon la mosaique de ses impressions
   const cover = g => {
     const im = (src, st) => <img key={src} src={src} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = "hidden"; }}

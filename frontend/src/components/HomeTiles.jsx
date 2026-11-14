@@ -21,6 +21,7 @@ import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
          BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck, Maximize2, PackageOpen, Layers, PaintBucket } from "lucide-react";
 import client, { apiUrl, apiThumb } from "../api/client";
+import { printTitle } from "../utils/printTitle";
 import StoreLink from "./StoreLink";
 import { RateButton } from "./MwToRate";
 import { mwImg } from "./MwImg";
@@ -851,7 +852,7 @@ function Today({ v, p, o, sz, st, lp }) {
   const nav = useNavigate();
   const t0 = ymd(new Date());
   const mine = (p || []).filter(x => x.print_date && ymd(utc(x.print_date)) === t0);
-  const strip = mine.length > 0 && <Thumbs title="Imprimées aujourd'hui" list={mine.map(x => ({ key: x.id, img: printImg(x.id), title: x.file_name,
+  const strip = mine.length > 0 && <Thumbs title="Imprimées aujourd'hui" list={mine.map(x => ({ key: x.id, img: printImg(x.id), title: printTitle(x),
     dot: okOf(x) ? "#22c55e" : "#ef4444" }))}/>;
   const rate = v?.count ? v.ok / v.count : null;
   const col = rateColor(rate);
@@ -870,7 +871,7 @@ function Today({ v, p, o, sz, st, lp }) {
         ["Poids", fmtG(v.weight_g)], ["Machine", fmtH(v.duration)], ["Coût", fmtEur(v.cost)]] : []}/>
         {versus && <><H2>Face à hier</H2>{versus}</>}
         {mine.length > 0 && <><H2>Imprimées aujourd'hui</H2><div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {mine.map(x => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={52} title={x.file_name || `Impression #${x.id}`}
+          {mine.map(x => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={52} title={printTitle(x) || `Impression #${x.id}`}
             sub={[x.print_date && utc(x.print_date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), x.duration_seconds && fmtDur(x.duration_seconds),
               x.total_weight_g && fmtG(x.total_weight_g)].filter(Boolean).join(" · ")} onClick={() => nav(`/prints?id=${x.id}`)}/>)}</div></>}</>}>
       {({ W, H }) => v && v.count === 0 ? <TodayEmpty st={st} y={v.yesterday} W={W} H={H} lp={lp}/> : <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
@@ -880,7 +881,7 @@ function Today({ v, p, o, sz, st, lp }) {
     </Tile>
   );
 }
-const liveName = (lp, st) => lp?.translated_name || lp?.file_name || st?.print_name || "";
+const liveName = (lp, st) => printTitle(lp) || st?.print_name || "";
 // aujourd'hui, rien encore : la premiere du jour en cours (son anneau, sa fin), ou l'imprimante qui dort
 function TodayEmpty({ st, y, W, H, lp }) {
   const live = isLive(st);
@@ -1287,7 +1288,7 @@ function groupCards(prints) {
     const k = x.group_id;
     if (at[k] == null) {
       at[k] = out.length;
-      out.push({ ...x, file_name: x.group_name || x.file_name, members: [x] });
+      out.push({ ...x, file_name: x.group_name || printTitle(x), translated_name: null, members: [x] });
     } else {
       const g = out[at[k]];
       g.members.push(x);
@@ -1324,7 +1325,7 @@ function Last({ p, o, sz, st, lp }) {
   if (!list.length) return <TileEmpty icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints" sz={sz} text="Pas encore d'impression"/>;
   // la fiche s'ouvre sur place, par-dessus (celle du groupe pour un groupe), comme « À faire »
   const fiche = x => setOpen(x.members ? { group: x } : { print: x });
-  const name = x => x.file_name || x.translated_name || `Impression #${x.id}`;
+  const name = x => printTitle(x) || `Impression #${x.id}`;
   const when = x => x.print_date ? utc(x.print_date) : null;
   const hm = d => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   // sur la vignette : la pastille d'etat, « ×5 » pour un groupe, l'appareil photo s'il manque la photo
@@ -3335,7 +3336,7 @@ function MonthZoom({ v, name, hero, rate }) {
       labels={days.map(x => String(x.day.getDate()))} titles={days.map(x => `${x.day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${m[2](x[m[0]])}`)}/> : <Muted>…</Muted>}
     {longest?.length > 0 && <><H2>Les plus longues du mois</H2>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{longest.map(x => <Item key={x.id} img={printImg(x.id)} size={44}
-        dot={okOf(x) ? "#22c55e" : "#ef4444"} title={x.file_name || x.translated_name} sub={[fmtH(x.duration_seconds || x.estimated_seconds), fmtG(x.total_weight_g), fmtEur(x.total_cost)].join(" · ")}/>)}</div></>}
+        dot={okOf(x) ? "#22c55e" : "#ef4444"} title={printTitle(x)} sub={[fmtH(x.duration_seconds || x.estimated_seconds), fmtG(x.total_weight_g), fmtEur(x.total_cost)].join(" · ")}/>)}</div></>}
   </>;
 }
 // objets et ventes : un anneau vendus / a vendre, le chiffre et la marge ; ce mois-ci, les recettes sur douze mois
@@ -3572,7 +3573,7 @@ function GalleryZoom({ all, nav }) {
       {all.length - ok > 0 && <button type="button" style={chip(only === "ko", "#dc2626")} onClick={() => setOnly("ko")}>Ratées ({all.length - ok})</button>}
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
-      {list.map(p => { const good = okOf(p), name = p.file_name || p.translated_name || `Impression #${p.id}`;
+      {list.map(p => { const good = okOf(p), name = printTitle(p) || `Impression #${p.id}`;
         return <div key={p.id} onClick={() => nav(`/prints?id=${p.id}`)} style={{ position: "relative", aspectRatio: "1", borderRadius: 16, overflow: "hidden", cursor: "pointer",
           background: "linear-gradient(135deg, rgba(20,184,166,0.12), var(--surface2))", boxShadow: good ? "inset 0 0 0 1px var(--border)" : "inset 0 0 0 2px rgba(239,68,68,0.6)" }}>
           <FitBox src={printImg(p.id)}
@@ -3592,7 +3593,7 @@ function Gallery({ g, o, sz }) {
   const nav = useNavigate();
   const all = (g || []).filter(p => !o.okOnly || okOf(p));
   if (!all.length) return <TileEmpty icon={<Images size={15}/>} color="#14B8A6" label="Galerie" to="/prints?tab=gallery" sz={sz} text="Pas encore d'impression"/>;
-  const img = (p, s, extra = {}) => <FitBox key={p.id} data-pk="" src={printImg(p.id)} title={p.file_name || p.translated_name}
+  const img = (p, s, extra = {}) => <FitBox key={p.id} data-pk="" src={printImg(p.id)} title={printTitle(p)}
     onClick={e => { e.stopPropagation(); nav(`/prints?id=${p.id}`); }}
     style={{ width: s, height: s, borderRadius: o.round ? "50%" : Math.max(6, Math.round(s / 7)), background: "var(--surface2)", cursor: "pointer",
       outline: okOf(p) ? "none" : "2px solid rgba(239,68,68,0.6)", outlineOffset: -2, ...extra }}/>;
@@ -3613,7 +3614,7 @@ function Gallery({ g, o, sz }) {
         const best = mosaic(n, W, H, gap);
         const cap = best.c * best.r - (best.big ? 3 : 0);
         const list = all.slice(0, Math.min(n, cap));
-        const tile = (p, k) => { const ok = okOf(p), big = best.big && k === 0, name = p.file_name || p.translated_name || "";
+        const tile = (p, k) => { const ok = okOf(p), big = best.big && k === 0, name = printTitle(p) || "";
           const showName = (big ? best.cell * 2 : best.cell) >= 96;
           return <div key={p.id} data-tip={`${name}${p.print_date ? `\n${utc(p.print_date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}${ok ? "" : "\nratée"}`}
             onClick={e => { e.stopPropagation(); nav(`/prints?id=${p.id}`); }}
