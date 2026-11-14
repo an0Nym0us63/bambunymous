@@ -28,6 +28,17 @@ async def telegram_status(_: str = Depends(require_admin)):
     return await tg.status()
 
 
+@router.post("/telegram/login/qr")
+async def telegram_login_qr(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Se connecter par QR code (14/11/2026), quand le code n'arrive pas."""
+    return await _call(tg.login_qr_start(body.get("api_id", ""), body.get("api_hash", "")))
+
+
+@router.post("/telegram/login/qr/check")
+async def telegram_login_qr_check(_: str = Depends(require_admin)):
+    return await _call(tg.login_qr_check())
+
+
 @router.post("/telegram/login/resend")
 async def telegram_login_resend(_: str = Depends(require_admin)):
     """Le code n'est pas arrive : par l'autre moyen que Telegram propose (14/11/2026)."""

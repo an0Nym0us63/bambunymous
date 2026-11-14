@@ -35,6 +35,24 @@ export default function TelegramSettings({ card, cardTitle }) {
     const { data } = await client.post("/share/telegram/login/start", { api_id: f.api_id, api_hash: f.api_hash, phone: f.phone });
     setSent(data); setStep("code");
   });
+  // (14/11/2026) par QR code : rien a recevoir, on scanne depuis Telegram sur le telephone
+  const [qr, setQr] = useState(null);
+  const qrAlive = React.useRef(false);
+  const startQr = () => run(async () => {
+    const { data } = await client.post("/share/telegram/login/qr", { api_id: f.api_id, api_hash: f.api_hash });
+    setQr(data.qr); setStep("qr"); qrAlive.current = true;
+    (async () => {
+      while (qrAlive.current) {
+        try {
+          const { data: r } = await client.post("/share/telegram/login/qr/check", null, { timeout: 30000 });
+          if (r.qr) setQr(r.qr);
+          if (r.step === "password") { qrAlive.current = false; setStep("password"); return; }
+          if (r.step === "done") { qrAlive.current = false; setStep("idle"); setF(x => ({ ...x, api_hash:"" })); load(); return; }
+        } catch (e) { qrAlive.current = false; showAlert(errMsg(e)); setStep("idle"); return; }
+      }
+    })();
+  });
+  useEffect(() => () => { qrAlive.current = false; }, []);
   const resend = () => run(async () => {
     const { data } = await client.post("/share/telegram/login/resend");
     setSent(data);
@@ -120,8 +138,18 @@ export default function TelegramSettings({ card, cardTitle }) {
           </div>
           <div><label style={lbl}>Numéro (format international)</label>
             <input value={f.phone} onChange={set("phone")} placeholder="+33 6…" inputMode="tel" style={inp}/></div>
-          <div><button type="button" onClick={start} disabled={busy || !f.api_id || !f.api_hash || !f.phone}
-            style={btn(true)}>{busy ? "Envoi…" : "Recevoir le code"}</button></div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}><button type="button" onClick={start} disabled={busy || !f.api_id || !f.api_hash || !f.phone}
+            style={btn(true)}>{busy ? "Envoi…" : "Recevoir le code"}</button>
+            <button type="button" onClick={startQr} disabled={busy || !f.api_id || !f.api_hash} style={btn(false)}
+              data-tip="Sans code ni numéro : scanne un QR depuis Telegram sur ton téléphone (Paramètres › Appareils)">📷 Par QR code</button></div>
+        </div>
+      ) : step === "qr" ? (
+        <div style={{ display:"flex", flexDirection:"column", gap:10, alignItems:"flex-start" }}>
+          <label style={lbl}>Scanne ce QR depuis Telegram</label>
+          <div style={{ fontSize:12, color:"var(--text2)", lineHeight:1.45 }}>Sur ton téléphone : Telegram › <b>Paramètres › Appareils ›
+            Connecter un appareil</b> (Link Desktop Device), puis vise ce code. Il se renouvelle tout seul.</div>
+          {qr && <img src={qr} alt="QR de connexion Telegram" style={{ width:200, height:200, borderRadius:12, background:"#fff", padding:6 }}/>}
+          <button type="button" onClick={() => { qrAlive.current = false; setStep("idle"); }} style={btn(false)}>Annuler</button>
         </div>
       ) : step === "code" ? (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>

@@ -161,6 +161,9 @@ async def login_start(api_id: str, api_hash: str, phone: str) -> dict:
     api_id, api_hash, phone = str(api_id).strip(), api_hash.strip(), phone.strip().replace(" ", "")
     if not api_id.isdigit() or not api_hash or not phone:
         raise ShareError("api_id (nombre), api_hash et numéro sont requis")
+    # (14/11/2026) l'indicatif du pays : « 06… » sans « +33 » envoie le code a un autre numero (ou a personne)
+    if not phone.startswith("+"):
+        raise ShareError("Numéro au format international, avec l'indicatif : +33 6 12 34 56 78 (pas 06…)")
     await _drop_pending()
     c = _new_client("", api_id, api_hash)
     await c.connect()
@@ -203,6 +206,57 @@ async def login_resend() -> dict:
         raise ShareError(f"Renvoi refusé par Telegram : {e}")
     _pending["hash"] = sent.phone_code_hash
     return {"step": "code", **_sent_info(sent)}
+
+
+# ── Par QR code (14/11/2026) ────────────────────────────────────────────────
+# Quand le code n'arrive pas : l'appli montre un QR, a scanner depuis Telegram sur le telephone (Parametres ›
+# Appareils › Connecter un appareil). Aucun code a recevoir. Le QR change toutes les 30 s environ.
+async def login_qr_start(api_id: str, api_hash: str) -> dict:
+    global _pending
+    api_id, api_hash = str(api_id).strip(), api_hash.strip()
+    if not api_id.isdigit() or not api_hash:
+        raise ShareError("api_id (nombre) et api_hash sont requis")
+    await _drop_pending()
+    c = _new_client("", api_id, api_hash)
+    await c.connect()
+    try:
+        qr = await c.qr_login()
+    except Exception as e:
+        await c.disconnect()
+        raise ShareError(f"QR refusé par Telegram : {e}")
+    await _set(K_API_ID, api_id)
+    await _set(K_API_HASH, api_hash)
+    _pending = {"client": c, "qr": qr, "phone": None, "hash": None}
+    return {"step": "qr", "qr": _qr_img(qr.url)}
+
+
+def _qr_img(url: str) -> str:
+    from .totp import qr_data_url
+    return qr_data_url(url)
+
+
+async def login_qr_check() -> dict:
+    """Attend quelques secondes que le QR soit scanne : done, password (validation en deux etapes), ou qr (pas encore ;
+    un nouveau QR s'il a expire)."""
+    import asyncio
+    from datetime import datetime, timezone
+    from telethon.errors import SessionPasswordNeededError
+    qr = (_pending or {}).get("qr")
+    if not qr:
+        raise ShareError("Aucune connexion par QR en cours : recommence")
+    try:
+        await qr.wait(timeout=8)
+    except asyncio.TimeoutError:
+        exp = getattr(qr, "expires", None)
+        if exp and exp <= datetime.now(timezone.utc):
+            await qr.recreate()
+            return {"step": "qr", "qr": _qr_img(qr.url)}
+        return {"step": "qr"}
+    except SessionPasswordNeededError:
+        return {"step": "password"}
+    except Exception as e:
+        raise ShareError(f"Connexion par QR refusée : {e}")
+    return await _finish_login()
 
 
 async def login_code(code: str) -> dict:
