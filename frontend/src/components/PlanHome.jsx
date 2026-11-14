@@ -6,11 +6,11 @@ import { showAlert } from "../utils/dialog";
 import { toast } from "../store/toast";
 import { useCanMw, useCanMwHome } from "../store/auth";
 import { dayEnd, DayStrip, onDay, NowNextTiles, PlateThumb, unretained, hhmm, endDrift, plateTxt, swapTxt, swapLong, runoutTxt, bedTxt, BED_NAMES, SwapLinks, FilLink, finIc, SwapShort, setFilColors, platePics } from "./PlanDay";
-import { JobSheet, LowStockBanner, BlockedList, DryList, ReadyNow, PlanPopup } from "./PlanPanels";
-import { sheetRef } from "./planActs";
+import { JobSheet, LowStockBanner, BlockedList, DryList, ReadyNow, PlanPopup, PoolGrouped } from "./PlanPanels";
+import { sheetRef, usePlanActs } from "./planActs";
 import MakerWorldModelSheet, { IS_MAC, IS_MOBILE, handyUrl, launch } from "./MakerWorldModelSheet";
 import Lightbox from "./Lightbox";
-import { FilDot, UsedFils, MergedList } from "./PlanDay";
+import { FilDot, UsedFils, MergedList, PlanAdvice } from "./PlanDay";
 
 // Le planning sur l'accueil (05/11/2026, revu) : la tuile (la journee en frise, l'etat, l'impression en cours, un
 // agenda des prochains plateaux, les alertes) et sa vue en grand (en cours, prochaines, les 3 prochains jours, les
@@ -88,20 +88,24 @@ function Agenda({ jobs, now, max, onOpen }) {
 }
 
 // les pastilles d'attention, avec leur mot
-function AlertChips({ p, big }) {
+// onPick (14/11/2026) : chaque pastille ouvre sa liste (dans la vue en grand de la tuile)
+function AlertChips({ p, big, onPick }) {
   const jobs = p.jobs || [];
   const low = jobs.reduce((a, j) => a + (j.low_info?.length || 0), 0), locked = jobs.filter(j => j.locked).length;
   const lateDl = (p.deadlines || []).filter(x => !x.ok).length, blocked = (p.blocked || []).length, adv = (p.advice || []).length;
-  const chip = (n, ic, word, c) => n > 0 && <span key={word} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: big ? 12 : 10.5, fontWeight: 900, color: c,
-    background: `color-mix(in srgb, ${c} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${c} 30%, transparent)`, borderRadius: 8, padding: big ? "2px 8px" : "1px 6px",
-    whiteSpace: "nowrap" }}>{ic} {n}{big ? ` ${word}` : ""}</span>;
+  const chip = (n, ic, word, c, kind) => n > 0 && React.createElement(onPick ? "button" : "span", { key: word,
+    ...(onPick ? { type: "button", onClick: e => { e.stopPropagation(); onPick(kind); } } : {}),
+    style: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: big ? 12 : 10.5, fontWeight: 900, color: c, fontFamily: "inherit",
+      cursor: onPick ? "pointer" : "default", background: `color-mix(in srgb, ${c} 12%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${c} 30%, transparent)`, borderRadius: 8, padding: big ? "2px 8px" : "1px 6px", whiteSpace: "nowrap" } },
+    `${ic} ${n}${big ? ` ${word}` : ""}`);
   return <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-    {chip(lateDl, "🎯", "date limite", "#EF4444")}
-    {chip(blocked, "⛔", "non planifiable", "#DC2626")}
-    {chip(low, "📉", "sous le seuil", "#DC2626")}
-    {chip(adv, "💡", "conseil", "#D97706")}
-    {chip((p.ready || []).length, "⚡", "tout de suite", "#0D9488")}
-    {chip(locked, "🔒", "figé", "#4F46E5")}
+    {chip(lateDl, "🎯", "date limite", "#EF4444", "advice")}
+    {chip(blocked, "⛔", "non planifiable", "#DC2626", "blocked")}
+    {chip(low, "📉", "sous le seuil", "#DC2626", "low")}
+    {chip(adv, "💡", "conseil", "#D97706", "advice")}
+    {chip((p.ready || []).length, "⚡", "tout de suite", "#0D9488", "ready")}
+    {chip(locked, "🔒", "figé", "#4F46E5", "locked")}
   </div>;
 }
 
@@ -213,12 +217,12 @@ export function PlanZoom({ p: p0 }) {
   const [p, setP] = useState(p0);
   const [sel, setSel] = useState(null);
   const [sheet, setSheet] = useState(null);
-  const [readyPop, setReadyPop] = useState(false);
+  const [pop, setPop] = useState(null);                 // la liste ouverte depuis une pastille ou « Tout de suite »
   const edit = useCanMw();                            // ranger : droit MakerWorld, jamais chez un copain
   useEffect(() => { setP(p0); }, [p0]);
-  // (13/11/2026) au telephone, « Tout de suite » est un bouton en haut qui ouvre sa fenetre (la liste en ligne obligeait a
-  // defiler toute la vue) ; sur ordinateur, la section reste dans la vue
-  const phone = typeof window !== "undefined" && window.innerWidth < 640;
+  // les actions du calendrier (appliquer un conseil) : le planning rendu remplace celui de la tuile
+  const acts = usePlanActs({ pd: p, setPd: d => setP(x => ({ ...d, today_items: x?.today_items })), setSheet, setModelSel: () => {} });
+  // « Tout de suite » : un bouton en haut qui ouvre sa fenetre (13/11/2026 au telephone, 14/11 partout, comme le calendrier)
   if (!p) return null;
   const send = async (url, body, method = "post") => {
     try { const r = await client[method](url, body); setP(x => ({ ...r.data, today_items: x?.today_items })); return r.data; }
@@ -256,7 +260,7 @@ export function PlanZoom({ p: p0 }) {
     <StateHead p={p}/>
     {/* l'etat dit autre chose que son mot (un retard, une avance) : la phrase ; « Dans les temps » ne se repete plus */}
     {p.status?.text && p.status.state !== "ontime" && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", marginTop: -4 }}>{p.status.text}</div>}
-    {phone && (p.ready || []).length > 0 && <button type="button" onClick={() => setReadyPop(true)} style={{ display: "flex", alignItems: "center", gap: 9,
+    {(p.ready || []).length > 0 && <button type="button" onClick={() => setPop("ready")} style={{ display: "flex", alignItems: "center", gap: 9,
       padding: "10px 12px", borderRadius: 14, border: "1px solid color-mix(in srgb, #0D9488 40%, var(--border))", cursor: "pointer", textAlign: "left",
       background: "color-mix(in srgb, #0D9488 9%, var(--surface))", fontFamily: "inherit" }}>
       <span style={{ fontSize: 20 }}>⚡</span>
@@ -267,7 +271,7 @@ export function PlanZoom({ p: p0 }) {
     {(p.jobs || [])[0] && <NextUp p={p} onSheet={j => setSheet(sheetRef(j))}/>}
     <DayStrip day={(p.now || "").slice(0, 10)} done={p.today_items || []} jobs={(p.jobs || []).filter(j => onDay(j, (p.now || "").slice(0, 10)))} settings={p.settings} now={p.now} live={live}/>
     <NowNextTiles pd={p} wide onOpenPrint={it => nav(`/prints?id=${it.id}`)} onPickJob={setSel}/>
-    <AlertChips p={p} big/>
+    <AlertChips p={p} big onPick={setPop}/>
     {/* le prochain changement de bobine (06/11/2026) : quand, pour quoi, quoi charger a la place de quoi ; et une bobine
         qui se videra en route */}
     {(() => { const j = (p.jobs || []).find(x => x.load?.length), ro = (p.jobs || []).find(x => x.runout?.length), bj = (p.jobs || []).find(x => x.bed_change);
@@ -282,14 +286,18 @@ export function PlanZoom({ p: p0 }) {
         {j && line("🧵", "#6366F1", `${dayLabel(j.day, p.now)} à ${hhmm(j.start)}`, <>Pour {j.title}{` · ${plateTxt(j)}`} : <SwapLinks j={j}/>.</>, j)}
         {ro && line("🔄", "#B45309", `${dayLabel(ro.runout[0].at.slice(0, 10), p.now)} vers ${hhmm(ro.runout[0].at)}`, <>Pendant {ro.title} : <FilLink id={ro.runout[0].id} label={ro.runout[0].name}/>{runoutTxt(ro.runout[0]).slice(3 + ro.runout[0].name.length)}. Prépare une autre bobine.</>, ro)}
       </>; })()}
-    {!phone && (p.ready || []).length > 0 && <>{sec("Tout de suite, sans changer de bobine")}
-      <ReadyNow items={p.ready} jobs={p.jobs} now={p.now} live={p.live} edit={edit} max={6} onOpen={setSel}
-        onNext={(key, after) => send("/makerworld/plan/next", { key, after }).then(Boolean)}
-        onDay={(key, day) => send("/makerworld/plan/place-day", { key, day }).then(Boolean)}/></>}
-    {readyPop && <PlanPopup title={`Tout de suite, sans changer de bobine (${(p.ready || []).length})`} icon="⚡" color="#0D9488" onClose={() => setReadyPop(false)}>
-      <ReadyNow items={p.ready} jobs={p.jobs} now={p.now} live={p.live} edit={edit} onOpen={j => { setReadyPop(false); setSel(j); }}
+    {pop === "ready" && <PlanPopup title={`Tout de suite, sans changer de bobine (${(p.ready || []).length})`} icon="⚡" color="#0D9488" onClose={() => setPop(null)}>
+      <ReadyNow items={p.ready} jobs={p.jobs} now={p.now} live={p.live} edit={edit} onOpen={j => { setPop(null); setSel(j); }}
         onNext={(key, after) => send("/makerworld/plan/next", { key, after }).then(Boolean)}
         onDay={(key, day) => send("/makerworld/plan/place-day", { key, day }).then(Boolean)}/></PlanPopup>}
+    {pop === "blocked" && <PlanPopup title="Non planifiables" icon="⛔" color="#DC2626" onClose={() => setPop(null)}>
+      <BlockedList items={p.blocked || []} onOpen={b => { setPop(null); setSel(b); }}/></PlanPopup>}
+    {pop === "low" && <PlanPopup title="Sous le seuil" icon="📉" color="#DC2626" onClose={() => setPop(null)}>
+      <LowStockBanner jobs={p.jobs} now={p.now} inPopup onOpen={j => { setPop(null); setSel(j); }}/></PlanPopup>}
+    {pop === "advice" && <PlanPopup title={`Conseils (${(p.advice || []).length})`} icon="💡" color="#F59E0B" onClose={() => setPop(null)}>
+      <PlanAdvice items={p.advice} at={p.advice_at} edit={edit} onApply={a => { acts.applyAdvice(a); setPop(null); }} onSheet={r => setSheet(sheetRef(r))}/></PlanPopup>}
+    {pop === "locked" && <PlanPopup title="Plateaux figés" icon="🔒" color="#4F46E5" onClose={() => setPop(null)}>
+      <PoolGrouped jobs={(p.jobs || []).filter(j => j.locked)} now={p.now} edit={edit} onOpen={j => { setPop(null); setSel(j); }}/></PlanPopup>}
     {sec("Les prochains jours")}
     {days.map(d => <div key={d} style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface2)", padding: 9, display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
