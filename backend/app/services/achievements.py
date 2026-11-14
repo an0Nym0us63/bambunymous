@@ -3107,7 +3107,8 @@ TIER_TABLE = {
     "sur_mesure": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "bon_public": [1, 3, 5, 10, 15, 25, 40, 60, 88],
     "fete_days": [1, 2, 4, 6, 9, 12, 16, 21, 27],
-    "sky_layers": [200, 500, 1000, 1500, 2000, 3000, 4000, 6000, 10000],
+    # (14/11/2026) une H2C fait ~325 mm de haut et on imprime rarement sous 0,2 mm : 1400 couches, c'est ~28 cm
+    "sky_layers": [100, 200, 300, 400, 550, 700, 900, 1100, 1400],
     "clean_prints": [5, 10, 25, 50, 100, 200, 400, 700, 1000],
     "door_impatient": [1, 2, 3, 5, 8, 12, 20, 35, 50],
     "door_patient": [1, 2, 3, 5, 8, 12, 20, 35, 50],
