@@ -3901,6 +3901,7 @@ function Alerts({ a, o, sz }) {
 }
 
 // ── Commandes Bambu Lab (28/10/2026) : ce qui arrive, lu dans les mails ──
+const SpoolFicheLazy = React.lazy(() => importRetry(() => import("../pages/Filaments")).then(m => ({ default: m.FilamentSheetFromSpool })));
 const OrderSheetLazy = React.lazy(() => importRetry(() => import("./IncomingOrders")).then(m => ({ default: m.OrderSheet })));
 const ORD_ST = { ordered: ["commandée", "#3b82f6", "📬"], shipping: ["en livraison", "#f59e0b", "🚚"], delivered: ["livrée", "#22c55e", "📦"] };
 function Orders({ list, o, sz }) {
@@ -4072,6 +4073,7 @@ function activeTray(status) {
   return tray ? { ...tray, ams } : null;
 }
 function Spool({ status, o, sz }) {
+  const [fiche, setFiche] = useState(false);          // (15/11/2026) la fiche de la bobine, depuis la vue en grand
   // une bobine posee a la main que l'AMS n'a pas encore lue (06/11/2026) : la tuile la montre comme la bobine qui imprime
   // (avec « ↻ suite · pas lue »), plus comme un emplacement vide qui inquiete
   const t0 = activeTray(status);
@@ -4185,7 +4187,13 @@ function Spool({ status, o, sz }) {
               {tot && g != null && <Muted size={13}>sur {Math.round(tot)} g · {Math.round((pct ?? 0) * 100)} %</Muted>}</div>
             {bar(10)}
             {lv?.target != null && <Muted size={12.5}>→ {Math.round(lv.target)} g à la fin de l'impression · {Math.round(lv.row_used)} g consommés sur {Math.round(lv.row_planned)} g</Muted>}
-            <LiveSwitchButton lv={lv} style={{ alignSelf: "flex-start", marginTop: 2 }}/>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
+              {si.id && <button type="button" onClick={e => { e.stopPropagation(); setFiche(true); }} data-tip="Sa fiche : poids, historique, séchage, impressions…"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
+                  fontSize: 12, fontWeight: 800, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>📄 Fiche de la bobine</button>}
+              <LiveSwitchButton lv={lv}/>
+            </div>
+            {fiche && <React.Suspense fallback={null}><SpoolFicheLazy spoolId={si.id} filamentId={si.filament_id} onClose={() => setFiche(false)}/></React.Suspense>}
           </div>
         </div>
         {(() => {
