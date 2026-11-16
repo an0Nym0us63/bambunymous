@@ -254,7 +254,7 @@ export function PlateThumb({ j, size = 52, onClick, tip }) {
     {/* une image MakerWorld (couverture du modele ou du profil) passe par la reduction de son CDN (06/11/2026 : apiThumb ne
         reduit que les images de l'API ; la file chargeait des couvertures de plusieurs Mo pour des vignettes de 60 px) */}
     {/* repeinte de la couleur de sa bobine (le gris du rendu prend sa teinte, l'ombrage reste) */}
-    {tint ? <PlateRecolor bare src={src} w={size * 2} map={[{ from: "#7a7a7a", to: `#${String(pc.color).replace("#", "").slice(0, 6)}` }]}
+    {tint ? <PlateRecolor bare greyOnly src={src} w={size * 2} map={[{ from: "#7a7a7a", to: `#${String(pc.color).replace("#", "").slice(0, 6)}` }]}
         style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
       : src ? (j.thumb || !String(src).startsWith("/api/") ? <MwImg src={src} w={size * 2} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
       : <img src={apiThumb(src, size * 2)} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }}

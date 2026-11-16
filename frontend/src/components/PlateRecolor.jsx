@@ -40,8 +40,8 @@ const breath = () => new Promise(res => setTimeout(res, 0));
 const idle = () => new Promise(res => (window.requestIdleCallback ? window.requestIdleCallback(() => res(), { timeout: 600 })
   : setTimeout(res, 250)));
 
-async function paint(src, pairs) {
-  const key = src + "|" + pairs.map(p => p.from + ">" + p.to).join(",");
+async function paint(src, pairs, greyOnly = false) {
+  const key = src + "|" + pairs.map(p => p.from + ">" + p.to).join(",") + (greyOnly ? "|g" : "");
   if (CACHE.has(key)) return CACHE.get(key);
   // Une simple image de la meme adresse (lisible pixel par pixel) : l'appli Android
   // abime les reponses binaires lues par requete.
@@ -72,6 +72,17 @@ async function paint(src, pairs) {
     await new Promise(r => setTimeout(r, 400));
   }
   const img = cx.getImageData(0, 0, W, H), px = img.data;
+  // greyOnly (16/11/2026) : seulement un rendu gris (la vignette d'un plateau a une couleur) ; une image deja en couleurs
+  // (la couverture du modele, une photo) passait tout entiere a la teinte de la bobine, comme sous un filtre
+  if (greyOnly) {
+    let opaque = 0, vivid = 0;
+    for (let i = 0; i < px.length; i += 16) {
+      if (px[i + 3] < 8) continue;
+      opaque++;
+      if (Math.max(px[i], px[i + 1], px[i + 2]) - Math.min(px[i], px[i + 1], px[i + 2]) > 40) vivid++;
+    }
+    if (!opaque || vivid / opaque > 0.08) { const res = { url: null, absent: [] }; CACHE.set(key, res); return res; }
+  }
   const src3 = pairs.map(p => { const c = rgbOf(p.from); return { c, L: lumOf(c), lab: lab(c), to: rgbOf(p.to) }; });
   // 1) chaque pixel va a la couleur d'origine la plus proche (la clarte comptant peu :
   //    l'ombrage la fait varier) ; on note la clarte de chaque groupe
@@ -130,7 +141,7 @@ async function paint(src, pairs) {
 }
 
 // bare (09/11/2026) : la vignette seule, sans bouton ni pastille (les petites vignettes du planning)
-export default function PlateRecolor({ src, map, w = 200, style, bare = false }) {
+export default function PlateRecolor({ src, map, w = 200, style, bare = false, greyOnly = false }) {
   const pairs = (map || []).filter(p => rgbOf(p.from) && rgbOf(p.to));
   const active = pairs.some(p => !near(rgbOf(p.from), rgbOf(p.to)));
   const [orig, setOrig] = useState(false);
@@ -154,10 +165,10 @@ export default function PlateRecolor({ src, map, w = 200, style, bare = false })
     setUrl(null); setAbsent([]); setFail(null);
     if (!multi || !seen) return undefined;
     let live = true;
-    const key = src + "|" + sig;
+    const key = src + "|" + sig + (greyOnly ? "|g" : "");
     const hit = CACHE.get(key);
     if (hit) { setUrl(hit.url); setAbsent(hit.absent); return undefined; }
-    queued(async () => { if (!live) return null; await idle(); return live ? paint(src, pairs) : null; })
+    queued(async () => { if (!live) return null; await idle(); return live ? paint(src, pairs, greyOnly) : null; })
       .then(res => { if (live && res) { setUrl(res.url); setAbsent(res.absent); } })
       .catch(e => { if (live) setFail(e?.response?.status ? `${e.response.status}` : (e?.message || "erreur")); });
     return () => { live = false; };
