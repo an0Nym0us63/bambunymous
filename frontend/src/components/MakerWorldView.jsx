@@ -392,8 +392,9 @@ export default function MakerWorldView({ onSearch }) {
   const toRate = useToRate(tab === "favorites" && !coll && !friend);
   const [rateOpen, setRateOpen] = useState(false);
   const all = data?.items || [];
+  // le filtre (16/11/2026) : le titre affiche (francais) ET l'original, et le createur tel que la tuile le montre
   const items = all.filter(x => (pf === "all" || (pf === "new" ? !x.printed : x.printed > 0))
-    && (!cqn || (tab !== "favorites" && !LIST_TABS.includes(tab)) || foldT(x.title).includes(cqn) || foldT(x.creator || x.author || "").includes(cqn)));
+    && (!cqn || (tab !== "favorites" && !LIST_TABS.includes(tab)) || foldT(`${x.title_fr || ""} ${x.title || ""}`).includes(cqn) || foldT(x.creator_name || x.creator || x.author || "").includes(cqn)));
   const colls = (data?.collections || []).filter(c => !cqn || foldT(c.title).includes(cqn));
   const canFilter = (tab === "favorites" || LIST_TABS.includes(tab)) && !!data && !data.error && ((data.collections || []).length > 3 || all.length > 6);
   const mineOf = useMine(showModels ? all.map(x => x.design_id) : []);   // chez un copain : « deja chez moi ? »
