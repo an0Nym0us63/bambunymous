@@ -141,6 +141,7 @@ function NextUp({ p, onSheet }) {
       style={{ ...btn, border: "1px solid color-mix(in srgb, #22C55E 45%, var(--border))", background: "color-mix(in srgb, #22C55E 12%, var(--surface))", color: "color-mix(in srgb, #16A34A 75%, var(--text))",
         opacity: busy ? 0.6 : 1 }}>🖥️ {busy ? "Ouverture…" : "Ouvrir dans Studio"}</button>) : null;
   const todo = [
+    j.note && ["📝", "#B45309", j.note],
     j.load?.length > 0 && ["🧵", "color-mix(in srgb, #0891B2 78%, var(--text2))", <SwapLinks j={j}/>],
     j.bed_change && ["🔲", "#0369A1", bedTxt(j.bed_change).replace(/^🔲 /, "")],
     j.merged && ["🧩", "#6366F1", `Regrouper ses plateaux dans Bambu Studio avant de lancer${j.merge_mode ? `, ${j.merge_mode}` : ""}`],

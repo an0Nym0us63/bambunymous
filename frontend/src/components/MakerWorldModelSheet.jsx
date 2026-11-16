@@ -217,6 +217,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setExactBusy(null);
   };
+  const [notes, setNotes] = useState({});          // (16/11/2026) la note d'un profil en cours de saisie, par profil
   const [planDone, setPlanDone] = useState(null);   // { iid, txt } : « Retenu » / « Ajouté » / « Mis à jour », un instant
   // ce qui est enregistre pour chaque profil retenu (06/11/2026) : plateaux et filaments, tels que lus ou enregistres ;
   // l'ecran qui s'en ecarte le dit (toucher un plateau, changer un filament ne s'enregistrait qu'avec « Mettre a jour »)
@@ -240,6 +241,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     try {
       const vk = add ? null : varSel[p.instance_id] || null, sc = scopeOf(p.instance_id, vk), pk = vk ? `${p.instance_id}|${vk}` : p.instance_id;
       const body = { instance_id: p.instance_id, plates: plateSel[pk] || null, add, ...(vk ? { key: vk } : {}),
+        ...(notes[pk] != null ? { note: notes[pk] } : {}),
         picks: picksOf(sc, m.stock?.[p.instance_id]),
         plate_picks: platePicksOf(sc, m.stock?.[p.instance_id]) };
       const updating = !!planOf(p.instance_id);
@@ -656,6 +658,25 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   {btn(plans.length > 1 ? "⇄ À la place du premier" : "⇄ À la place", `Remplace « ${(m.profiles.find(x => x.instance_id === plan.instance_id) || {}).title || "le profil retenu"} »`, () => pinPlan(p))}
                                 </>;
                               })()}
+                              {/* la note (16/11/2026) : « utiliser une buse 0,2 »... ; elle part avec « Retenir », et se change ensuite
+                                  a tout moment (enregistree en quittant la case) ; le planning la montre avec les autres consignes */}
+                              {!friend && <AdminOnly mw>{(() => {
+                                const nk = vkey ? `${p.instance_id}|${vkey}` : p.instance_id;
+                                const val = notes[nk] ?? mine?.note ?? "";
+                                const save = async () => {
+                                  if (!mine || notes[nk] == null || notes[nk] === (mine.note || "")) return;
+                                  try {
+                                    const { data } = await client.put(`/makerworld/queue/note/${id}`, { key: mine.key, note: notes[nk] });
+                                    setPlans(data.plans || []); egg("note_a_faire");
+                                    setNotes(x => { const y = { ...x }; delete y[nk]; return y; });
+                                  } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+                                };
+                                return <input value={val} maxLength={300} onChange={e => setNotes(x => ({ ...x, [nk]: e.target.value }))} onBlur={save}
+                                  onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                  placeholder="📝 Note (facultatif) : utiliser une buse 0,2…" data-tip="Montrée au planning avec les autres consignes (plateau, bobines…)"
+                                  style={{ flex:"1 1 220px", minWidth:0, padding:"6px 10px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)",
+                                    color:"var(--text)", fontSize:12.5, fontFamily:"inherit", outline:"none" }}/>;
+                              })()}</AdminOnly>}
                               {/* combien d'objets on en veut, comme sur la carte de « A faire » (05/11/2026) : les plateaux
                                   deja faits comptent, « A faire » et le planning preparent le reste */}
                               {mine && (() => {

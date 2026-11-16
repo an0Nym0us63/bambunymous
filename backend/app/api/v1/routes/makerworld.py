@@ -350,6 +350,16 @@ async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(
         raise HTTPException(400, str(e))
 
 
+@router.put("/queue/note/{design_id}")
+async def mw_queue_note(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
+    """La note d'un profil retenu (16/11/2026) : {note, key?}."""
+    from ....services import mw_queue as Q
+    try:
+        return await Q.set_note(design_id, str(body.get("key") or "") or None, str(body.get("note") or ""))
+    except Q.QueueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.put("/queue/order")
 async def mw_queue_order(body: dict = Body({}), _: str = Depends(require_mw)):
     """Ordre de priorite de la file."""

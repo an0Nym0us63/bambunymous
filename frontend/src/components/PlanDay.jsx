@@ -193,6 +193,7 @@ export function PlanTipCard({ j }) {
       {j.fils?.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 10px", paddingLeft: 22 }}>{j.fils.map((f, i) =>
         <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "#e2e8f0" }}>
           <Dot f={f}/>{f.name}{f.g ? <span style={{ color: "#94a3b8" }}>{Math.round(f.g)} g</span> : null}</span>)}</div>}
+      {j.note && line("📝", j.note, "#fde68a")}
       {j.load?.length > 0 && line("🧵", `À charger : ${j.load.join(", ")}`, "#fdba74")}
       {j.bed_change && line("🔲", bedTxt(j.bed_change).replace(/^🔲 /, ""), "#fdba74")}
       {j.merged_plates?.length > 1 && line("🧩", `Plateaux ${j.merged_plates.join(", ")} en une impression`)}
@@ -337,7 +338,8 @@ export function JobCard({ j, edit, onDrag, onDropBefore, onUp, onDown, onDay, on
         </div>
       </div>
     </div>
-    {(j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || j.dry?.length > 0 || j.bed_change || j.bed_warn || j.merged || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+    {(j.note || j.completes || j.due || j.load?.length > 0 || j.runout?.length > 0 || j.dry?.length > 0 || j.bed_change || j.bed_warn || j.merged || unretained(j) || j.locked || j.awaits_order?.length > 0 || j.low_after?.length > 0) && <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+      {j.note && tag(`📝 ${j.note}`, "#B45309", "Ta note sur ce profil (fiche du modèle, à côté de « Retenir »)")}
       {j.awaits_order?.length > 0 && tag(`🚚 compte sur la commande : ${j.awaits_order.join(", ")}`, "#0EA5E9", "Le stock ne suffit pas : ce plateau prend sur une bobine commandée, pas encore reçue")}
       {j.low_after?.length > 0 && tag(`📉 sous le seuil : ${j.low_after.join(", ")}`, "#DC2626", "Après ce plateau, il restera moins d'un quart de bobine de ce filament")}
       {j.locked && tag(`🔒 figé à ${hhmm(j.start)}`, "#4F46E5", "Figé à ce jour et cette heure : optimiser, journée couleur, au mieux ou plus tard ne le déplacent pas")}
@@ -390,7 +392,7 @@ export const dayKindOf = (settings, day) => (settings?.days_off || []).find(x =>
 // les signes d'un plateau prevu (06/11/2026), les memes partout dans le calendrier ; LEGEND les explique
 export const PRIO_IC = { 2: "🔥", 1: "⬆", "-1": "⬇", "-2": "⏬" };
 export const planIcons = j => [j.locked ? "🔒" : j.pinned ? "📌" : "", PRIO_IC[j.prio_m] || "", finIc(j), unretained(j) ? "○" : "",
-  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.bed_change ? "🔲" : "", j.merged ? "🧩" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : "", j.dry?.length ? "♨" : ""].filter(Boolean).join("");
+  j.due && !j.due_ok ? "🎯" : "", j.intercalated ? "↔" : "", j.note ? "📝" : "", j.bed_change ? "🔲" : "", j.merged ? "🧩" : "", j.load?.length ? "🧵" : "", j.runout?.length ? "🔄" : "", j.dry?.length ? "♨" : ""].filter(Boolean).join("");
 export const LEGEND = [
   ["Les impressions", [["▮", "Bloc plein, de la couleur de son état : une impression faite (réussie, échouée, annulée) ou en cours"],
     ["▯", "Bloc teinté, liseré à gauche : un plateau prévu par le planning ; sa couleur dit ce qu'il est (voir « Les couleurs »)"],

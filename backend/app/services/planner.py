@@ -336,6 +336,7 @@ def _jobs(models: list, d: dict, stock_of: dict) -> tuple[list, bool]:
                             "chain": d.get("chain", {}).get(did),
                             "prio_m": int(d.get("prio", {}).get(did) or 0), "prio_p": int(d.get("prio", {}).get(f"{did}:{idx}") or 0),
                             "bed_want": beds.get(idx), "iid": (m.get("profile") or {}).get("instance_id"),
+                            "note": m.get("note"),       # (16/11/2026) la note du profil retenu : « buse 0,2 »...
                             "dev_model": (m.get("profile") or {}).get("dev_model")})
         # entame (13/11/2026) : un plateau de ce modele deja imprime ou en cours ; « finir d'abord » le pousse devant
         if any(obj["plates"].values()):
@@ -2863,6 +2864,8 @@ def _swap_txt(j: dict) -> str:
 def _todo_lines(j: dict) -> list:
     """Ce qu'il faudra faire avant de lancer ce plateau (06/11/2026), une ligne par geste."""
     out = []
+    if j.get("note"):
+        out.append(f"📝 {j['note']}")
     if j.get("load"):
         out.append(_swap_txt(j))
     if j.get("bed_change"):

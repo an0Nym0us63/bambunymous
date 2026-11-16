@@ -231,6 +231,22 @@ async def set_collections(ids: list) -> dict:
     return await config()
 
 
+async def set_note(design_id: str, key: str | None, note: str) -> dict:
+    """La note d'un profil retenu (16/11/2026), a tout moment : ce qu'il faudra faire ou se rappeler au lancement."""
+    did = str(design_id or "").strip()
+    d = await _load()
+    k = key if key and (key == did or key.startswith(did + "~")) else did
+    if k not in d["plans"] or not (d["plans"][k] or {}).get("instance_id"):
+        raise QueueError("Retiens d'abord ce profil")
+    note = str(note or "").strip()[:300]
+    if note:
+        d["plans"][k]["note"] = note
+    else:
+        d["plans"][k].pop("note", None)
+    await _save(d)
+    return {"plans": _plans_of(d, did)}
+
+
 async def set_plan(design_id: str, plan, add: bool = False, which: str | None = None, key: str | None = None,
                    variant: bool = False) -> dict:
     """Retenir un profil (plan : profil, plateaux, filaments) ou l'oublier (plan None ; which : son instance, sinon le
@@ -294,7 +310,10 @@ async def set_plan(design_id: str, plan, add: bool = False, which: str | None = 
         if len(mine) >= 30 and not same and key != did:   # variantes comprises
             raise QueueError("Trente profils retenus au plus")
         qty = _qty(plan.get("qty", (d["plans"].get(key) or {}).get("qty", 1)) if not variant else plan.get("qty", 1))
-        d["plans"][key] = {"instance_id": iid, "plates": plates, "picks": picks, "plate_picks": plate_picks, "qty": qty}
+        # la note (16/11/2026) : « utiliser une buse 0,2 »... ; gardee si on ne la redonne pas
+        note = str(plan["note"]).strip()[:300] if "note" in plan else (d["plans"].get(key) or {}).get("note") or ""
+        d["plans"][key] = {"instance_id": iid, "plates": plates, "picks": picks, "plate_picks": plate_picks, "qty": qty,
+                           **({"note": note} if note else {})}
     await _save(d)
     return {"plans": _plans_of(d, did)}
 
@@ -1151,6 +1170,7 @@ async def _compute(fresh: bool = False) -> dict:
         row = {"design_id": rid, "mw_id": did, "multi": multi, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
                "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []), "coll_ids": where_ids.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
+               "note": (plan or {}).get("note") or None,
                "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_pl": {}, "_inprog": m.get("in_progress") or 0,
                "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown",
                "default_instance": next((p.get("instance_id") for p in profiles if p.get("default")), None)}
