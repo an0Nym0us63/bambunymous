@@ -296,10 +296,18 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
     if (adj.has(geo)) return adj.get(geo);
     const ix = geo.index.array, n = ix.length / 3, edge = new Map(), nb = new Int32Array(n * 3).fill(-1);
     const nv = geo.attributes.position.count;          // une cle exacte tant que nv * nv < 2^53 (des millions de sommets)
+    // (16/11/2026) les sommets au meme endroit sont le meme : certains 3MF donnent a chaque triangle ses propres sommets
+    // (superposes), la face plane ne s'etendait plus au-dela du triangle touche (des centaines de triangles sur une face)
+    const pos = geo.attributes.position, weld = new Int32Array(nv), seenAt = new Map();
+    for (let i = 0; i < nv; i++) {
+      const kk = `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+      const w = seenAt.get(kk);
+      if (w === undefined) { seenAt.set(kk, i); weld[i] = i; } else weld[i] = w;
+    }
     const key = (a, b) => (a < b ? a * nv + b : b * nv + a);
     for (let t = 0; t < n; t++) {
       for (let e = 0; e < 3; e++) {
-        const a = ix[t * 3 + e], b = ix[t * 3 + (e + 1) % 3], k = key(a, b), o = edge.get(k);
+        const a = weld[ix[t * 3 + e]], b = weld[ix[t * 3 + (e + 1) % 3]], k = key(a, b), o = edge.get(k);
         if (o === undefined) edge.set(k, t * 3 + e);
         else { nb[t * 3 + e] = Math.floor(o / 3); nb[o] = t; }
       }
@@ -444,6 +452,18 @@ export async function createAssemblyEditor({ THREE, scene, camera, renderer, con
       }
     }
     if (area <= 0) return null;
+    // (16/11/2026) en dernier recours, une face coupee en triangles qui ne se touchent pas (sommets sur une arete voisine,
+    // pas a ses bouts) : tous les triangles du meme plan (normale a 3°, a 0,05 mm du plan touche)
+    if (seen.size < 4) {
+      const nt = ix.length / 3, p0 = new THREE.Vector3().fromBufferAttribute(pos, ix[t0 * 3]), cosT = Math.cos(THREE.MathUtils.degToRad(3));
+      let area3 = 0; const c3 = new THREE.Vector3(), pts3 = [], seen3 = new Set();
+      for (let t = 0; t < nt && seen3.size < 200000; t++) {
+        const [ar, a, b, cc] = triNormal(pos, ix, t, n);
+        if (n.dot(n0) < cosT || Math.abs(a.clone().sub(p0).dot(n0)) > 0.05) continue;
+        seen3.add(t); area3 += ar; c3.addScaledVector(a.clone().add(b).add(cc).multiplyScalar(1 / 3), ar); pts3.push(a, b, cc);
+      }
+      if (seen3.size > seen.size && area3 > 0) { area = area3; c.copy(c3); pts.length = 0; for (const x of pts3) pts.push(x); seen.clear(); seen3.forEach(x => seen.add(x)); }
+    }
     c.multiplyScalar(1 / area);
     // une face a relief (un tricot, un grain) : la face stricte n'est qu'une bosse de quelques triangles (30/10/2026 :
     // 9 mm² au lieu des 250 de la face d'une aile). On l'etend alors aux triangles voisins proches du plan moyen
