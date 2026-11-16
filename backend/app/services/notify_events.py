@@ -233,7 +233,13 @@ def _reasons(hms, print_error) -> list:
     except Exception:
         pass
     if not out and print_error and int(print_error) != CANCELLED:
-        out = [f"erreur {int(print_error):08X}"]
+        # (16/11/2026) son libelle, comme l'ecran de l'imprimante : « 0300-8011 : la plaque detectee n'est pas celle du G-code »
+        try:
+            from .hms import print_error_label, print_error_code
+            lab = print_error_label(print_error)
+            out = [f"erreur {print_error_code(print_error)}" + (f" : {lab}" if lab else "")]
+        except Exception:
+            out = [f"erreur {int(print_error):08X}"]
     return out
 
 

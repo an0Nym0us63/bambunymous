@@ -41,14 +41,17 @@ def _ingest(data) -> int:
        - liste [{ecode/code, intro/desc}]."""
     n0 = len(_labels)
     if isinstance(data, dict) and isinstance(data.get("data"), dict) \
-            and isinstance(data["data"].get("device_hms"), dict):
-        for lang, arr in data["data"]["device_hms"].items():
-            if isinstance(arr, list):
-                for e in arr:
-                    k = _norm_key(e.get("ecode") or e.get("code") or "")
-                    t = (e.get("intro") or e.get("desc") or "").strip()
-                    if k and t:
-                        _labels[k] = t
+            and (isinstance(data["data"].get("device_hms"), dict) or isinstance(data["data"].get("device_error"), dict)):
+        # device_error (16/11/2026) : les erreurs d'impression (print_error, 8 chiffres : « 0300-8011 », la plaque
+        # detectee n'est pas celle du G-code) ; elles n'etaient pas chargees, la pause disait « erreur 03008011 »
+        for part in ("device_hms", "device_error"):
+            for lang, arr in (data["data"].get(part) or {}).items():
+                if isinstance(arr, list):
+                    for e in arr:
+                        k = _norm_key(e.get("ecode") or e.get("code") or "")
+                        t = (e.get("intro") or e.get("desc") or "").strip()
+                        if k and t:
+                            _labels[k] = t
     elif isinstance(data, dict):
         for k, v in data.items():
             t = v if isinstance(v, str) else (
@@ -181,6 +184,58 @@ async def _fetch_label(code_key: str):
         logger.debug(f"[HMS] fetch {code_key}: {e}")
     finally:
         _fetching.discard(code_key)
+
+
+_ALL = {"done": False}
+
+
+async def _fetch_all():
+    """Toute la liste de Bambu (HMS et erreurs d'impression), une fois par demarrage, quand un code manque."""
+    if not _FETCH or _ALL["done"]:
+        return
+    _ALL["done"] = True
+    try:
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        async with aiohttp.ClientSession(headers=headers) as s:
+            async with s.get(f"https://e.bambulab.com/query.php?lang={_LANG}", timeout=aiohttp.ClientTimeout(total=20)) as r:
+                if r.status == 200:
+                    n = _ingest(await r.json(content_type=None))
+                    if n:
+                        _persist()
+                    logger.info(f"[HMS] liste Bambu relue : {n} libellé(s) de plus")
+    except Exception as e:
+        logger.debug(f"[HMS] liste complete : {e}")
+
+
+def print_error_label(code, schedule_fetch: bool = True):
+    """Le libelle d'une erreur d'impression (print_error, ex. 0x03008011), ou None ; un code inconnu est cherche en ligne."""
+    try:
+        c = int(code or 0)
+    except (TypeError, ValueError):
+        return None
+    if not c:
+        return None
+    init_hms()
+    key = f"{c:08X}"
+    label = _labels.get(key)
+    if label is None and schedule_fetch:
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_fetch_label(key))
+            loop.create_task(_fetch_all())
+        except RuntimeError:
+            pass
+    return label
+
+
+def print_error_code(code) -> str:
+    """« 0300-8011 » (comme l'ecran de l'imprimante)."""
+    try:
+        c = int(code or 0)
+    except (TypeError, ValueError):
+        return ""
+    h = f"{c:08X}"
+    return f"{h[:4]}-{h[4:]}"
 
 
 def decode_hms(hms_errors, model_id: str = "", model_name: str = "", schedule_fetch: bool = True):
