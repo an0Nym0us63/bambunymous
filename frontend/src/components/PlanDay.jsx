@@ -247,7 +247,9 @@ export const plateColor = j => { const fs = (j?.fils || []).filter(f => f.color)
 export function PlateThumb({ j, size = 52, onClick, tip }) {
   const src = j.thumb || j.cover;
   const pc = plateColor(j);
-  const tint = pc && src && /^https:\/\/([a-z0-9-]+\.)*bblmw\.com\//i.test(src) && /\.(png|webp)(\?|$)/i.test(src);
+  // (16/11/2026) plus de repeinte : ce sont les photos du modele et du profil, deja a leurs vraies couleurs (passees a la
+  // teinte de la bobine, elles semblaient sous un filtre)
+  const tint = false && pc;
   return <span onClick={onClick} data-tip={onClick ? tip || "Profil, plateaux et filaments retenus" : undefined}
     style={{ position: "relative", width: size, height: size, borderRadius: 10, flexShrink: 0, overflow: "hidden", cursor: onClick ? "pointer" : "default",
       background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
