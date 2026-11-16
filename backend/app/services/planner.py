@@ -1210,7 +1210,7 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
         ok_front = fix(x["keys"]) if fix else None
         txt = (f"{x['title']} : son dernier plateau finit {_day_fr(end, today)} à {_fmt(end)}, {late} après ta date "
                f"(fini avant le {_due_txt(x['due'])}). ")
-        txt += ("Avance ses plateaux juste ce qu'il faut (le reste garde son ordre) : il tient." if ok_front else
+        txt += ("Fais-lui de la place : ses plateaux restent répartis, ce qui passe juste avant son dernier plateau passe derrière : il tient." if ok_front else
                 "Même en tête de file il ne tiendrait pas : élargis les heures, ou recule la date.")
         out.insert(0, {"kind": "deadline", "icon": "🎯", "text": txt,
                        **({"action": {"kind": "order", "order": ok_front}} if ok_front else {})})
@@ -2409,34 +2409,45 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
 
 
 def _fit_due(jobs: list, order: list, ks: list, d: dict, now: datetime, busy, loaded: set, fixed: int = 0) -> list | None:
-    """Un objet date qui deborde (16/11/2026) : ses plateaux (ks, dans leur ordre) avances JUSTE ASSEZ pour tenir sa date,
-    le reste de la file dans son ordre. Avant, ils passaient tous en tete et la file se regroupait derriere les dates.
-    La position se cherche par dichotomie (tenir sa date est d'autant plus facile qu'on est tot). fixed : les premiers
-    de la file qui ne bougent pas. None : meme en tete il ne tient pas."""
+    """Un objet date qui deborde (16/11/2026) : chacun de ses plateaux doit finir avant la date, pas forcement ensemble.
+    Ses plateaux ne bougent pas (ils restent repartis sur la periode) : ce sont les plateaux non dates poses juste avant
+    son dernier plateau qui passent apres lui, le moins possible (par dichotomie), dans leur ordre. Le reste de la file
+    ne bouge pas. Avant : tous ses plateaux en tete, et la file se regroupait derriere les dates. fixed : les premiers
+    de la file qui ne bougent pas. None : meme sans rien devant ses plateaux, il ne tient pas."""
     kset = set(ks)
-    rest = [k for k in order if k not in kset]
-    pos = [i for i, k in enumerate(order) if k in kset]
-    cur = sum(1 for k in order[:pos[0]] if k not in kset) if pos else len(rest)
-
-    def at(p):
-        return rest[:p] + ks + rest[p:]
-
-    def ok(p):
-        rr = place(_ordered(jobs, at(p), d["pins"]), d, now, busy, loaded, _slots())
-        return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in kset)
-    lo = min(fixed, cur)
-    if not ok(lo):
+    did = next((j["design_id"] for j in jobs if j["key"] in kset), None) if jobs else None
+    due = (d.get("deadlines") or {}).get(did) if did else None
+    try:
+        limit = datetime.strptime(due, "%Y-%m-%d")
+    except (TypeError, ValueError):
         return None
-    hi = cur
-    if ok(hi):
-        return at(hi)
-    while hi - lo > 1:                      # ok(lo) vrai, ok(hi) faux
+    order = list(order)
+    idx = [i for i, k in enumerate(order) if k in kset]
+    if not idx:
+        return None
+    last = idx[-1]
+    before = [k for k in order[fixed:last] if k not in kset]       # ce qui peut passer derriere son dernier plateau
+
+    def arr(m):
+        mv = set(before[len(before) - m:]) if m else set()
+        return [x for x in order[:last + 1] if x not in mv] + [x for x in before if x in mv] + order[last + 1:]
+
+    def ok(m):
+        rr = place(_ordered(jobs, arr(m), d["pins"]), d, now, busy, loaded, _slots())
+        es = [datetime.fromisoformat(x["end"]) for x in rr["jobs"] if x["key"] in kset]
+        return len(es) == len(ks) and all(e <= limit for e in es)
+    if ok(0):
+        return order
+    lo, hi = 0, len(before)                                        # ok(lo) faux, ok(hi) vrai
+    if not ok(hi):
+        return None
+    while hi - lo > 1:
         mid = (lo + hi) // 2
         if ok(mid):
-            lo = mid
-        else:
             hi = mid
-    return at(lo)
+        else:
+            lo = mid
+    return arr(hi)
 
 
 def _cost(r: dict, d: dict, now: datetime, key: str) -> float:
