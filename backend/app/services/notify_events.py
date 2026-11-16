@@ -237,7 +237,8 @@ def _reasons(hms, print_error) -> list:
         try:
             from .hms import print_error_label, print_error_code
             lab = print_error_label(print_error)
-            out = [f"erreur {print_error_code(print_error)}" + (f" : {lab}" if lab else "")]
+            # (16/11/2026) un code absent de la liste publique de Bambu (0500-808C : ni en francais ni en anglais) : on le dit
+            out = [f"erreur {print_error_code(print_error)}" + (f" : {lab}" if lab else " (pas dans la liste publique de Bambu : voir l'écran de l'imprimante)")]
         except Exception:
             out = [f"erreur {int(print_error):08X}"]
     return out
