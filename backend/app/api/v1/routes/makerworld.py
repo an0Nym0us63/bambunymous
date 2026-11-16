@@ -825,6 +825,13 @@ async def mw_boosts(_: str = Depends(get_current_user)):
     return await _call(A.boosts())
 
 
+@router.get("/boosts/given")
+async def mw_boosts_given(offset: int = 0, _: str = Depends(get_current_user)):
+    """Mes boosts donnes (16/11/2026), par pages de 30."""
+    from ....services import makerworld_account as A
+    return await _call(A.boosts_given(offset))
+
+
 @router.get("/me/details")
 async def mw_me_details(_: str = Depends(get_current_user)):
     """Le detail de mon compte : boosts a donner (et leur expiration), abonnes, abonnements."""

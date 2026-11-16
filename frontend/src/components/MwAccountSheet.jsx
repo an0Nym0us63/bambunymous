@@ -4,6 +4,8 @@ import client from "../api/client";
 import { FSheet, FCard } from "./FicheKit";
 import MwImg from "./MwImg";
 import { openCreator } from "./MwCreatorPage";
+import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import { egg } from "../eggs";
 
 // Le detail de mon compte MakerWorld (26/10/2026), ouvert depuis la carte de createur : mes boosts a donner,
 // groupes par date d'expiration (avec ce qui les a fait gagner), mes abonnes et mes abonnements.
@@ -41,7 +43,51 @@ function People({ list, empty }) {
     </div>);
 }
 
+// Mes boosts donnes (16/11/2026) : les jetons utilises, le modele booste quand MakerWorld le dit, page par page
+function GivenBoosts({ onModel }) {
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(null);
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const load = off => {
+    setBusy(true);
+    client.get("/makerworld/boosts/given", { params: { offset: off } })
+      .then(r => { setItems(x => off ? [...x, ...(r.data.items || [])] : (r.data.items || [])); setTotal(r.data.total); setMore(!!r.data.more); })
+      .catch(e => setErr(e.response?.data?.detail || e.message)).finally(() => setBusy(false));
+  };
+  useEffect(() => { load(0); egg("boosts_donnes"); }, []);
+  if (err) return <p style={{ fontSize: 12.5, color: "#ef4444", margin: "8px 0 0" }}>{err}</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+      {total != null && <span style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 700 }}>{total.toLocaleString("fr-FR")} boosts donnés au total</span>}
+      {!items.length && !busy && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0 }}>Aucun boost donné pour l'instant.</p>}
+      {items.map((b, i) => { const dt = asDate(b.used_at);
+        return (
+          <button key={b.id || i} disabled={!b.design_id} onClick={() => b.design_id && onModel(b)}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 9px", borderRadius: 12, border: "1px solid var(--border)",
+              background: "var(--surface)", cursor: b.design_id ? "pointer" : "default", textAlign: "left", font: "inherit", color: "inherit", minWidth: 0 }}>
+            {b.cover ? <MwImg src={b.cover} w={96} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}/>
+              : <span style={{ width: 40, height: 40, borderRadius: 8, flexShrink: 0, background: "rgba(245,158,11,.12)", display: "flex",
+                alignItems: "center", justifyContent: "center", fontSize: 18 }}>⚡</span>}
+            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {b.title || (b.design_id ? `Modèle ${b.design_id}` : "Boost donné")}</span>
+              <span style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 700 }}>
+                {[b.creator && `de ${b.creator}`, dt && dt.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }),
+                  b.reason && reasonLabel(b.reason)].filter(Boolean).join(" · ")}</span>
+            </span>
+          </button>); })}
+      {busy && <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0, textAlign: "center" }}>⏳ Lecture…</p>}
+      {more && !busy && <button onClick={() => load(items.length)} style={{ alignSelf: "flex-start", padding: "6px 12px", borderRadius: 10,
+        border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+        Voir les suivants</button>}
+    </div>);
+}
+
 export default function MwAccountSheet({ profile, fans, onClose }) {
+  const [given, setGiven] = useState(false);
+  const [model, setModel] = useState(null);
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => {
@@ -90,6 +136,11 @@ export default function MwAccountSheet({ profile, fans, onClose }) {
                       </span>
                     </div>); })}
               </div>}
+            <button onClick={() => setGiven(g => !g)} data-tip="Les boosts que tu as offerts, du plus récent au plus ancien"
+              style={{ marginTop: 8, padding: "6px 12px", borderRadius: 10, border: "1px solid rgba(245,158,11,.4)", background: given ? "rgba(245,158,11,.12)" : "var(--surface)",
+                color: "var(--text)", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
+              📜 {given ? "Masquer l'historique" : "Historique des boosts donnés"}</button>
+            {given && <GivenBoosts onModel={setModel}/>}
           </FCard>
           <FCard t={`Abonnés · ${(fans ?? d.fans?.length ?? 0).toLocaleString("fr-FR")}`} i="👥" c="#3B82F6">
             {d.fans_error ? <p style={muted}>La liste des abonnés n'est pas disponible ({d.fans_error}).</p>
@@ -101,6 +152,8 @@ export default function MwAccountSheet({ profile, fans, onClose }) {
           </FCard>
         </>}
       </div>
+      {model && <MakerWorldModelSheet designId={model.design_id} preview={{ design_id: model.design_id, title: model.title, cover_url: model.cover }}
+        onClose={() => setModel(null)}/>}
     </FSheet>,
     document.body);
 }

@@ -41,6 +41,7 @@ DEBUG_PATHS = {
     "points_progression": "/point-service/point-bill/progress",
     # Boosts : droits disponibles (le reste se lit par modele).
     "boosts_dispos": "/point-service/boost/boostingright?filter=available&offset=0&limit=5",
+    "boosts_utilises": "/point-service/boost/boostingright?filter=used&offset=0&limit=5",
     # Mes evaluations publiees (« A evaluer » les retire).
     "mes_evaluations": "/comment-service/rating/my?offset=0&limit=3",
 }
@@ -784,6 +785,57 @@ async def boost_rights() -> list:
         if len(hits) < 50 or offset >= total:
             break
     return out
+
+
+def _find(h, keys, depth=0):
+    """La premiere valeur non vide d'une des cles, a plat ou dans un sous-objet (la forme des jetons utilises n'est
+    pas documentee : designId, design.id, designInfo.designId...)."""
+    if not isinstance(h, dict) or depth > 2:
+        return None
+    for k in keys:
+        v = h.get(k)
+        if v not in (None, "", 0):
+            return v
+    for v in h.values():
+        if isinstance(v, dict):
+            r = _find(v, keys, depth + 1)
+            if r not in (None, "", 0):
+                return r
+    return None
+
+
+async def boosts_given(offset: int = 0, limit: int = 30) -> dict:
+    """Mes boosts donnes (16/11/2026) : les jetons « utilises », du plus recent au plus ancien, avec le modele booste
+    quand MakerWorld le dit. {items: [{id, design_id, title, cover, creator, used_at, reason}], total, more}."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await _tok()
+    off, lim = max(0, int(offset or 0)), max(1, min(50, int(limit or 30)))
+    code, d = await asyncio.to_thread(
+        _get_json, f"/point-service/boost/boostingright?filter=used&offset={off}&limit={lim}", tok)
+    _must(code, d, "L'historique des boosts")
+    hits = d.get("hits") if isinstance(d, dict) else None
+    if not isinstance(hits, list):
+        raise AccountError(f"Historique des boosts illisible (HTTP {code})")
+    s = lambda v: str(v) if v not in (None, "") else None
+    items = []
+    for h in hits:
+        if not isinstance(h, dict):
+            continue
+        did = _find(h, ("designId", "design_id"))
+        items.append({
+            "id": s(h.get("id")),
+            "design_id": s(did) if str(did or "").isdigit() else None,
+            "title": s(_find(h, ("designTitle", "desginTitle", "titleTranslated", "title"))),
+            "cover": s(_find(h, ("designCover", "coverUrl", "cover"))),
+            "creator": s(_find(h, ("designCreatorName", "creatorName", "toUsername", "designerName", "toUserName"))),
+            "used_at": h.get("usedAt") or h.get("useTime") or h.get("usedTime") or h.get("updateTime")
+                       or h.get("updatedAt") or h.get("boostTime") or h.get("createTime"),
+            "reason": h.get("earnReason") or ""})
+    total = d.get("usedTotal") if isinstance(d.get("usedTotal"), int) else d.get("total")
+    total = total if isinstance(total, int) else None
+    return {"items": items, "total": total,
+            "more": len(hits) == lim and (total is None or off + lim < total)}
 
 
 async def boost_state(design_id: str) -> dict:
