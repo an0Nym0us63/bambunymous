@@ -108,7 +108,8 @@ export function usePlanActs({ pd, setPd, setSheet, setModelSel, onDayView }) {
   // regrouper (06/11/2026) : des plateaux d'un meme modele imprimes ensemble ; degrouper : gid
   const merge = keys => send("/makerworld/plan/merge", { keys }, "post").then(ok => { if (ok) { egg("planning_regroupe"); toast("🧩 Regroupés au planning : à faire ensuite dans Bambu Studio", "ok", 6000, ok.__newUndo ? undoAct : null); } });
   const unmerge = gid => send("/makerworld/plan/merge", { gid }, "post");
-  const applyAdvice = a => a.kind === "merge" ? merge(a.action?.keys || a.keys) : a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
+  // « order » (16/11/2026) : un ordre complet calcule par le serveur (une date limite tenue en avancant juste assez)
+  const applyAdvice = a => a.kind === "merge" ? merge(a.action?.keys || a.keys) : a.kind === "order" ? arrange({ order: a.order }) : a.kind === "front" ? toFront(a.keys) : a.kind === "after" ? moveAfter(a.key, a.ref) : moveBefore(a.key, a.ref);
   // le champ date se trouvait cache sous la ligne : sur ordinateur, le clic ne l'ouvrait pas (05/11/2026, showPicker) ;
   // et un message dit ce qui a ete pose
   const setDue = (did, due) => send(`/makerworld/plan/deadline/${did}`, { due }).then(d => {

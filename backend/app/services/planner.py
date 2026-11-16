@@ -1210,10 +1210,10 @@ def advice(placed: list, d: dict, now: datetime, dls: list | None = None, fix=No
         ok_front = fix(x["keys"]) if fix else None
         txt = (f"{x['title']} : son dernier plateau finit {_day_fr(end, today)} à {_fmt(end)}, {late} après ta date "
                f"(fini avant le {_due_txt(x['due'])}). ")
-        txt += ("Passe ses plateaux en tête de file : il tient." if ok_front else
+        txt += ("Avance ses plateaux juste ce qu'il faut (le reste garde son ordre) : il tient." if ok_front else
                 "Même en tête de file il ne tiendrait pas : élargis les heures, ou recule la date.")
         out.insert(0, {"kind": "deadline", "icon": "🎯", "text": txt,
-                       **({"action": {"kind": "front", "keys": x["keys"]}} if ok_front else {})})
+                       **({"action": {"kind": "order", "order": ok_front}} if ok_front else {})})
     # 3. ce qu'il faut charger pour les prochaines
     for j in placed[:8]:
         if j["load"]:
@@ -2011,10 +2011,8 @@ async def _plan(tz: int | None = None, advise: bool = False) -> dict:
         return base_score[0] - mode_score(place(_ordered(jobs, o, pins), dd, now, busy, loaded, _slots()), dd, now, mode)
 
     def fix(ks):
-        # en tete de file, cet objet tiendrait-il sa date ?
-        o = ks + [j["key"] for j in jobs if j["key"] not in set(ks)]
-        rr = place(_ordered(jobs, o, d["pins"]), d, now, busy, loaded, _slots())
-        return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in set(ks))
+        # (16/11/2026) l'ordre ou cet objet tient sa date en avancant juste assez, ou None (meme en tete il ne tient pas)
+        return _fit_due(jobs, [j["key"] for j in jobs], ks, d, now, busy, loaded)
     t1 = time.perf_counter()
     tm["place"] = round((t1 - t0) * 1000) - tm["context"]
     if advise:
@@ -2385,16 +2383,21 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
             break
     if score(order) > floor[0]:
         order, sw = list(floor[1]), dict(floor[2])
-    # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas passe en tete,
-    # les dates les plus proches d'abord (s'il ne tient pas meme en tete, il y reste : c'est le plus urgent)
+    # enchainer les couleurs ne doit pas faire deborder une date limite : un objet qui ne tient pas est avance JUSTE
+    # ASSEZ (16/11/2026 ; avant, en tete de file, et la file se regroupait derriere ses dates), les dates les plus
+    # proches d'abord ; s'il ne tient pas meme en tete, il y passe (c'est le plus urgent)
     for _ in range(3):
         r = place(_ordered(jobs, order, d["pins"]), d, now, busy, loaded, _slots())
-        broke = [x for x in deadlines(r["jobs"], d, now) if not x["ok"]
-                 and order[len(head):len(head) + len(x["keys"])] != x["keys"]]
+        broke = sorted([x for x in deadlines(r["jobs"], d, now) if not x["ok"]
+                        and order[len(head):len(head) + len(x["keys"])] != x["keys"]], key=lambda x: x["due"])
         if not broke:
             break
-        front = [k for x in broke for k in x["keys"] if k not in hs]
-        order = head + front + [k for k in order if k not in set(front) and k not in hs]
+        for x in broke:
+            ks = [k for k in x["keys"] if k not in hs]
+            if not ks:
+                continue
+            fit = _fit_due(jobs, order, ks, d, now, busy, loaded, fixed=len(head))
+            order = fit if fit else head + ks + [k for k in order if k not in set(ks) and k not in hs]
     if preview:
         # l'apercu (06/11/2026) : les chiffres avant et apres ; rien n'est enregistre, « Appliquer » envoie l'ordre
         before = plan_metrics(place(jobs, d, now, busy, loaded, _slots()), d, now)
@@ -2403,6 +2406,37 @@ async def optimize_plan(day: str | None = None, start: str | None = None, mode: 
                             "moved": moved(order)},              # ceux qui changent de plus de deux rangs
                 "order": order, "soft_why": sw}
     return await arrange({"order": order, "soft_why": sw}, "Optimiser la file")
+
+
+def _fit_due(jobs: list, order: list, ks: list, d: dict, now: datetime, busy, loaded: set, fixed: int = 0) -> list | None:
+    """Un objet date qui deborde (16/11/2026) : ses plateaux (ks, dans leur ordre) avances JUSTE ASSEZ pour tenir sa date,
+    le reste de la file dans son ordre. Avant, ils passaient tous en tete et la file se regroupait derriere les dates.
+    La position se cherche par dichotomie (tenir sa date est d'autant plus facile qu'on est tot). fixed : les premiers
+    de la file qui ne bougent pas. None : meme en tete il ne tient pas."""
+    kset = set(ks)
+    rest = [k for k in order if k not in kset]
+    pos = [i for i, k in enumerate(order) if k in kset]
+    cur = sum(1 for k in order[:pos[0]] if k not in kset) if pos else len(rest)
+
+    def at(p):
+        return rest[:p] + ks + rest[p:]
+
+    def ok(p):
+        rr = place(_ordered(jobs, at(p), d["pins"]), d, now, busy, loaded, _slots())
+        return all(x["ok"] for x in deadlines(rr["jobs"], d, now) if x["keys"] and x["keys"][0] in kset)
+    lo = min(fixed, cur)
+    if not ok(lo):
+        return None
+    hi = cur
+    if ok(hi):
+        return at(hi)
+    while hi - lo > 1:                      # ok(lo) vrai, ok(hi) faux
+        mid = (lo + hi) // 2
+        if ok(mid):
+            lo = mid
+        else:
+            hi = mid
+    return at(lo)
 
 
 def _cost(r: dict, d: dict, now: datetime, key: str) -> float:
