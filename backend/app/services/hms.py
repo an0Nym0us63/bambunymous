@@ -186,18 +186,35 @@ async def _fetch_label(code_key: str):
         _fetching.discard(code_key)
 
 
-_ALL = {"done": False}
+_ALL = {"done": False, "dev": set()}
+
+
+def _device() -> str:
+    """Le type de l'imprimante, comme Bambu Studio : les 3 premiers caracteres de son numero de serie (« 31B » : H2C)."""
+    try:
+        from ..core.mqtt import get_state
+        sn = str(get_state().serial or "")
+        return sn[:3] if len(sn) >= 3 and sn[:3].isalnum() else ""
+    except Exception:
+        return ""
 
 
 async def _fetch_all():
-    """Toute la liste de Bambu (HMS et erreurs d'impression), une fois par demarrage, quand un code manque."""
-    if not _FETCH or _ALL["done"]:
+    """La liste de Bambu POUR CETTE IMPRIMANTE (16/11/2026 : comme Studio, « &d= » + son type ; celle de la H2C a 982
+    erreurs d'impression contre 490 dans la liste generale, dont 0500-808C, plateau decale ou debris), sinon la liste
+    generale ; une fois par demarrage et par type, quand un code manque."""
+    dev = _device()
+    if not _FETCH or (dev in _ALL["dev"] if dev else _ALL["done"]):
         return
-    _ALL["done"] = True
+    if dev:
+        _ALL["dev"].add(dev)
+    else:
+        _ALL["done"] = True
     try:
         headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        url = f"https://e.bambulab.com/query.php?lang={_LANG}" + (f"&d={dev}" if dev else "")
         async with aiohttp.ClientSession(headers=headers) as s:
-            async with s.get(f"https://e.bambulab.com/query.php?lang={_LANG}", timeout=aiohttp.ClientTimeout(total=20)) as r:
+            async with s.get(url, timeout=aiohttp.ClientTimeout(total=20)) as r:
                 if r.status == 200:
                     n = _ingest(await r.json(content_type=None))
                     if n:
@@ -258,6 +275,7 @@ def decode_hms(hms_errors, model_id: str = "", model_name: str = "", schedule_fe
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(_fetch_label(key))
+                loop.create_task(_fetch_all())         # (16/11/2026) la liste de cette imprimante
                 if norm_key != key:
                     loop.create_task(_fetch_label(norm_key))
             except RuntimeError:
