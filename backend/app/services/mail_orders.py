@@ -1331,5 +1331,6 @@ async def loop() -> None:
             every = max(1, int(cfg.get("every_h") or 3))
         except Exception:
             logger.exception("[MAIL] boucle")
+            _tasks.error("mail")
             every = 3
         await _tasks.sleep("mail", every * 3600)
