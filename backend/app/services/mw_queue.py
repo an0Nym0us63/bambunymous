@@ -698,9 +698,16 @@ def copies_of(e: dict, plate_g: dict, pieces: dict) -> tuple:
     # plateau d'origine de 3 g) : le plateau a ete refait autrement, le poids ne dit plus rien ; on compte les elements
     w = sum(plate_g.get(n) or 0 for n in ps)
     light = bool(e.get("g") and w and e["g"] < 0.6 * w and items > 1)
-    if all(plate_g.get(n) for n in ps) and e.get("g") and not light:
-        return guess_copies(e.get("g"), ps, plate_g), "poids"
     pc = sum(pieces.get(n) or 0 for n in ps)
+    if all(plate_g.get(n) for n in ps) and e.get("g") and not light:
+        # (17/11/2026) les elements, quand ils tombent juste et que le poids les confirme a 25 % pres : MakerWorld arrondit
+        # le poids d'un plateau (2 g pour 4 clips qui en pesent 1,88) ; 40 clips (18,8 g) donnaient 9 exemplaires et non 10
+        if items > 1 and pc and all(pieces.get(n) for n in ps) and items % pc == 0:
+            ec = items // pc
+            ratio = e["g"] / sum(plate_g.get(n) for n in ps)
+            if 1 < ec <= 50 and abs(ratio - ec) <= 0.25 * ec:
+                return ec, "elements"
+        return guess_copies(e.get("g"), ps, plate_g), "poids"
     if items > 1 and pc and all(pieces.get(n) for n in ps) and items >= pc:
         return max(1, min(50, round(items / pc))), "elements"
     if light:                                         # sans le 3MF d'origine : un objet par exemplaire
