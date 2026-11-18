@@ -516,10 +516,19 @@ async def _group_copies(db, pids) -> dict:
              if n and int(n) > 1}
     if not items:
         return {}
-    rows = (await db.execute(select(Print.id, Print.group_id, Print.design_id, Print.plate_id, Print.print_date).where(
+    rows = (await db.execute(select(Print.id, Print.group_id, Print.design_id, Print.plate_id, Print.print_date,
+                                    Print.number_of_items).where(
         Print.group_id.in_(list(items)), Print.status.in_(("SUCCESS", "PARTIAL", "IN_PROGRESS"))))).all()
+    # (18/11/2026) un groupe qui dit juste la somme des elements de ses impressions (6 impressions de clips, 264 clips)
+    # ne dit rien de plus qu'elles : chacune compte alors les siennes (264 / 6 = 44 « exemplaires » par impression,
+    # alors qu'un plateau porte 4 clips : 66 plateaux en tout, pas 264)
+    tot = {}
+    for _pid, gid, _did, _pl, _at, n in rows:
+        tot[gid] = tot.get(gid, 0) + int(n or 1)
     by = {}
-    for pid, gid, did, plate, at in rows:
+    for pid, gid, did, plate, at, _n in rows:
+        if tot.get(gid) == items[gid]:
+            continue
         by.setdefault((gid, str(did), str(plate or "1")), []).append((at, pid))
     out = {}
     for (gid, _did, _pl), ps in by.items():
