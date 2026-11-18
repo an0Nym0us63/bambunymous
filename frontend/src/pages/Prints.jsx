@@ -494,7 +494,9 @@ function PrintEditSheet({ p, onClose, onSaved }) {
   useTrackDetail("Historique · Modifier une impression");
   const kb = useKeyboardInset();
   const [form, setForm] = useState({
-    file_name:     p.file_name || "",
+    // le nom affiche (18/11/2026) : la traduction s'il y en a une, c'est elle qui s'affiche partout ; la changer pose
+    // un nom « manuel » que la traduction automatique ne remplace plus (changer file_name ne changeait rien a l'ecran)
+    translated_name: p.translated_name || p.file_name || "",
     original_name: p.original_name || "",
     print_date:    (p.print_date || "").slice(0,16),
     status:        p.status || "SUCCESS",
@@ -513,8 +515,13 @@ function PrintEditSheet({ p, onClose, onSaved }) {
       payload.duration_seconds = (parseInt(payload.duration_min)||0)*60;
       delete payload.duration_min;
       delete payload.original_name;
+      const shown0 = p.translated_name || p.file_name || "";
+      if (payload.translated_name.trim() === shown0.trim()) delete payload.translated_name;
+      else payload.translated_name = payload.translated_name.trim() || null;     // vide : la traduction reprend la main
       await client.patch(`/prints/${p.id}`, payload);
-      onSaved(form);
+      const { original_name, duration_min, ...upd } = form;
+      onSaved({ ...upd, translated_name: (form.translated_name || "").trim() || null,
+        ...("translated_name" in payload ? { translated_by: payload.translated_name ? "manuel" : null } : {}) });
     } catch(e) { showAlert("Erreur: " + (e.response?.data?.detail || e.message)); }
     setSaving(false);
   };
@@ -549,7 +556,8 @@ function PrintEditSheet({ p, onClose, onSaved }) {
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <div>
             <label style={lbl}>Nom affiché</label>
-            <input style={inp} value={form.file_name} onChange={e=>set("file_name",e.target.value)}/>
+            <input style={inp} value={form.translated_name} onChange={e=>set("translated_name",e.target.value)}
+              placeholder={p.file_name || ""}/>
           </div>
           <div>
             <label style={lbl}>Nom original (lecture seule)</label>
