@@ -2330,7 +2330,8 @@ export default function Model3D({ designId = null, profileId = null, printId = n
     const top = k => String(k || "").split("#")[0].split(":").slice(0, 2).join(":");
     const mine = new Set((p?.pieces || []).map(x => top(x.k)).filter(Boolean));
     if (!mine.size) return [];
-    const myProf = String(meta?.profile || "");
+    // (le serveur ramene les profils des copains au numero du profil ; le mien peut etre celui de l'instance)
+    const myProf = String(frShared?.profile_alias?.[meta?.profile] || meta?.profile || "");
     const same = e => !!e.profile && String(e.profile) === myProf;
     return (frShared?.friends || []).filter(f => f.status === "ok").map(f => {
       const ok = (f.edits || []).filter(e => {

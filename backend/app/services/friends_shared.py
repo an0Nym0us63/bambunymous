@@ -226,5 +226,22 @@ async def for_assembly(design_id: str) -> dict:
     if not did.isdigit():
         return {"friends": []}
     res = await _each(lambda f: _ask(f, f"makerworld/3d/shared-edits/{did}"))
-    return {"friends": [{"id": f["id"], "name": f["name"], "status": f["status"], "edits": f.get("edits") or []}
-                        for f in res["friends"]]}
+    # un meme profil MakerWorld a deux numeros (18/11/2026) : celui du profil et celui de son instance ; chacun range son
+    # 3MF sous l'un ou l'autre selon d'ou il l'a pris (Magicgg91 : 4144276, moi : 1149292167, le meme « Piege du Temple »),
+    # et l'assemblage du copain etait ecarte comme d'un autre profil. Tout est ramene au numero du profil.
+    alias = {}
+    try:
+        from . import makerworld as mw
+        d = await mw.model_detail(did, stale_ok=True)
+        for x in (d or {}).get("profiles") or []:
+            pid, iid = str(x.get("profile_id") or ""), str(x.get("instance_id") or "")
+            if pid and iid:
+                alias[iid] = pid
+    except Exception:
+        pass                          # sans la liste des profils, chacun garde son numero
+    fr = []
+    for f in res["friends"]:
+        eds = [({**e, "profile": alias.get(str(e.get("profile")), e.get("profile"))} if isinstance(e, dict) and e.get("profile") else e)
+               for e in (f.get("edits") or [])]
+        fr.append({"id": f["id"], "name": f["name"], "status": f["status"], "edits": eds})
+    return {"friends": fr, "profile_alias": alias}
