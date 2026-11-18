@@ -535,6 +535,16 @@ async def achievements_ticket(aid: str, _: str = Depends(require_main)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/exchange")
+async def achievements_exchange(body: dict = Body(default={}), _: str = Depends(require_main)):
+    """Echange des cles contre des tickets de palier (3 cles le ticket, 100 tickets par semaine au plus)."""
+    from ....services import achievements as A
+    try:
+        return await A.exchange_keys(int((body or {}).get("n") or 1))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/keys-auto")
 async def achievements_keys_auto(body: dict = Body(...), _: str = Depends(require_main)):
     """Depenser n cles d'un coup, au mieux (le plus d'indices possible). dry : l'apercu seul."""

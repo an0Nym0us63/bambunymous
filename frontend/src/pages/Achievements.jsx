@@ -1437,6 +1437,62 @@ function useNarrow(px = 640) {
 
 // Depenser plusieurs cles d'un coup : on choisit combien, le serveur choisit ou
 // (le plus d'indices possible) ; on voit l'apercu avant de valider.
+// Echanger des cles contre des tickets de palier (18/11/2026) : 3 cles le ticket, 100 tickets par semaine au plus
+function ExchangeKeys({ keys, onSpent }) {
+  const w = keys.wheel || {};
+  const cost = w.xchg_cost || 3, left = w.xchg_left ?? 0;
+  const max = Math.min(left, Math.floor((keys.balance || 0) / cost));
+  const [open, setOpen] = useState(false);
+  const [n, setN] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [done, setDone] = useState(null);
+  useEffect(() => { if (!open) { setErr(null); setN(1); } }, [open]);
+  if (!onSpent || !w.xchg_cost) return null;
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try { const r = await client.post("/achievements/exchange", { n }); setDone(r.data.n); setOpen(false); egg("cles_en_tickets"); await onSpent(); }
+    catch (e) { setErr(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+  const off = max < 1;
+  const why = left < 1 ? `Déjà ${w.xchg_weekly || 100} tickets échangés cette semaine : la suite lundi`
+    : `Il faut ${cost} clés pour un ticket`;
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ position:"relative", marginTop:8 }}>
+      {!open ? (
+        <button onClick={() => { if (off) return; setDone(null); setOpen(true); }} data-tip={off ? why : `${cost} clés le ticket · encore ${left} cette semaine`}
+          style={{ width:"100%", padding:"7px 10px", borderRadius:10, cursor: off ? "default" : "pointer", opacity: off ? .55 : 1,
+          border:"1px solid rgba(249,115,22,.5)", background:"rgba(249,115,22,.12)", color:"#ea580c", fontWeight:800, fontSize:12.5 }}>
+          🔁 Échanger des clés contre des tickets ({cost} 🔑 = 1 🎟️)</button>
+      ) : (
+        <div style={{ borderRadius:12, padding:"10px 12px", background:"var(--surface2)", border:"1px solid rgba(249,115,22,.45)",
+          display:"flex", flexDirection:"column", gap:8, fontSize:12.5, color:"var(--text2)", textAlign:"left" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontWeight:800, color:"var(--text)" }}>Tickets</span>
+            {max > 1 && <input type="range" min={1} max={max} value={Math.min(n, max)}
+              onChange={e => setN(+e.target.value)} style={{ flex:1, minWidth:0, accentColor:"#f97316" }}/>}
+            <span style={{ fontWeight:900, color:"#ea580c", marginLeft:"auto", whiteSpace:"nowrap" }}>{n} 🎟️ = {n * cost} 🔑</span>
+          </div>
+          <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.45 }}>
+            Dans ce sens seulement : un ticket ne se rend pas contre des clés. Encore {left} ticket{left > 1 ? "s" : ""} à échanger
+            cette semaine (jusqu'à dimanche).</div>
+          {err && <div style={{ color:"#ef4444", fontSize:12 }}>{err}</div>}
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <button onClick={() => setOpen(false)} style={{ padding:"6px 12px", borderRadius:9, border:"1px solid var(--border)",
+              background:"var(--surface)", color:"var(--text2)", cursor:"pointer", fontWeight:700 }}>Annuler</button>
+            <button disabled={busy} onClick={go} style={{ padding:"6px 14px", borderRadius:9, border:"none",
+              cursor: busy ? "default" : "pointer", opacity: busy ? .6 : 1, fontWeight:800, color:"#fff",
+              background:"linear-gradient(180deg,#fb923c,#ea580c)" }}>Échanger</button>
+          </div>
+        </div>
+      )}
+      {done && !open && <div style={{ marginTop:6, fontSize:12, color:"#16a34a", fontWeight:700 }}>
+        ✓ +{done} ticket{done > 1 ? "s" : ""} de palier, à utiliser dans un succès.</div>}
+    </div>
+  );
+}
+
 function AutoSpend({ keys, onSpent }) {
   const [open, setOpen] = useState(false);
   const [n, setN] = useState(keys.balance);
@@ -1596,6 +1652,7 @@ function TreasureRow({ keys, onRules, onWheel, onSpent, loupes = null }) {
         <div style={{ borderRadius:12, padding:"8px 10px", background:"var(--surface2)", border:"1px solid var(--border)",
           display:"flex", flexDirection:"column", gap:3, fontSize:12, color:"var(--text2)" }}>
           <AutoSpend keys={keys} onSpent={onSpent}/>
+          <ExchangeKeys keys={keys} onSpent={onSpent}/>
           {log.slice(0, 12).map((l, i) => (
             <div key={i} style={{ display:"flex", gap:8 }}>
               <span style={{ width:30, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : l.n < 0 ? "#ef4444" : "var(--muted)" }}>
@@ -1689,6 +1746,7 @@ function TreasureWide({ keys, onRules, onWheel, onSpent }) {
                   prochain dans {toTP} impression{toTP > 1 ? "s" : ""} réussie{toTP > 1 ? "s" : ""} (ou {toT} secret{toT > 1 ? "s" : ""}) · à utiliser dans un succès</div>
               </div>
             </div>
+            <ExchangeKeys keys={keys} onSpent={onSpent}/>
           </div>
         )}
       </div>
@@ -2185,6 +2243,10 @@ function Rules({ data, onClose }) {
             ))}
           </div>
           <P>Un palier passé avec des tickets ne rapporte pas de clé, et il est marqué 🎟️, chez toi comme chez tes copains.</P>
+          {k.wheel.xchg_cost && <P><b>Échanger des clés</b> : {k.wheel.xchg_cost} clés donnent un ticket (bouton 🔁 sous les
+            tickets, ou dans le détail des clés sur téléphone), {k.wheel.xchg_weekly || 100} tickets par semaine au plus, du lundi au
+            dimanche. Dans ce sens seulement : un ticket ne se rend pas contre des clés. Les clés échangées comptent comme
+            dépensées ; les tickets obtenus ainsi ne comptent pas comme gagnés.</P>}
           <P>Un tour peut aussi faire franchir des paliers ou débloquer un secret : leurs clés s'ajoutent au lot, et la
             machine les affiche en bonus. Les paliers de la section « Clés et roue » ne rapportent pas de clé (sinon, des
             clés en appelleraient d'autres sans fin) ; ses secrets, si.</P>

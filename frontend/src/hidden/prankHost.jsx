@@ -79,9 +79,9 @@ function effectOf(slug) {
 // Surprise a l'ouverture : a la premiere arrivee sur l'accueil d'un lancement de
 // l'appli (pas a chaque retour sur l'accueil), le serveur tire au sort avec un compteur
 // PAR COMPTE (navigateur, PWA et appli Android confondus). Le jour d'une fete, c'est
-// elle, a coup sur, une fois par compte (sans toucher au compteur). : p(n) = 0,3 % x n jusqu'a
-// 9,9 % a n = 33, puis 10 % et +1 % par ouverture ; n repart a 0 quand la surprise s'affiche.
-// Puis 70 % une farce / 30 % une page cachee, et dans le lot choisi 70 % une
+// elle, a coup sur, une fois par compte (sans toucher au compteur). : p(n) = 1 % x n jusqu'a
+// 10 % a n = 10, puis 10 % et +1 % par ouverture ; n repart a 0 quand la surprise s'affiche.
+// Puis 80 % une farce / 20 % une page cachee (70/30 avant le 18/11/2026), et dans le lot choisi 70 % une
 // pas encore trouvee / 30 % une deja trouvee (s'il y en a). Jamais chez un copain. Le secret suit la
 // regle des comptes (enregistre, ou « non comptabilise »).
 // Chaque arrivee sur l'accueil compte (26/10/2026 ; avant : seulement la premiere de chaque lancement). Le serveur
@@ -100,7 +100,7 @@ function openPassage() {
   }).catch(() => {});
 }
 
-export const SURPRISE_MIX = { farce: 0.7, fresh: 0.7 };
+export const SURPRISE_MIX = { farce: 0.8, fresh: 0.7 };
 const eggOf = (kind, slug) => (kind === "farce" ? "p_" : slug === "anonymous" || slug === "teapot" ? "" : "h_") + slug.replace(/-/g, "_");
 function pickSurprise(found) {
   const kind = Math.random() < SURPRISE_MIX.farce ? "farce" : "page";

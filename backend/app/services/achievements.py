@@ -177,6 +177,7 @@ CATALOG = [
     _a("keys_max", "game", "💼", "Coffre-fort", "{n} clés détenues en même temps", [1]),
     _a("reveals", "game", "🔓", "Révélateur", "{n} étapes de secret révélées", [1]),
     _a("tickets_won", "game", "🎟️", "Chasseur de tickets", "{n} tickets de palier gagnés", [1]),
+    _a("tickets_bought", "game", "🔁", "Bureau de change", "{n} tickets de palier échangés contre des clés", [1]),
     _a("tickets_used", "game", "🪜", "Raccourci", "{n} tickets de palier utilisés", [1]),
     _a("video_prints", "photos", "🎞️", "Court-métrage", "{n} impressions avec au moins une vidéo", [1]),
     # Dans l'appli
@@ -1809,6 +1810,9 @@ EGGS = {
     "planning_couleur": ('🎨', 'Journée blanche', "Faire une journée couleur : tous les plateaux d'un filament sur un jour",
                          "Aujourd'hui, tout ce qui est blanc.",
                          "Une bobine, une journée, et pas un changement de filament."),
+    "cles_en_tickets": ('🔁', 'Petite monnaie', "Échanger des clés contre des tickets de palier",
+                        "Trois clés au guichet, un ticket au retour.",
+                        "Les clés deviennent des tickets, au cours du jour."),
     "nom_par_defaut": ('↺', 'Retour aux sources', "Rendre à une impression son nom d'origine et sa traduction automatique",
                        "Finalement, le premier nom n'était pas si mal.",
                        "Le nom d'origine revient, la traduction est refaite."),
@@ -2933,7 +2937,7 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
         "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs", "videos", "video_prints",
-        "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals", "tickets_won", "tickets_used",
+        "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals", "tickets_won", "tickets_used", "tickets_bought",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs",
         "to_order", "acc_images", "bunker", "devices", "mw_income",
@@ -3104,6 +3108,7 @@ TIER_TABLE = {
     "reveals": [1, 5, 10, 20, 35, 50, 75, 100, 150],
     "tickets_won": [1, 2, 3, 5, 8, 12, 16, 20, 30],
     "tickets_used": [1, 2, 3, 5, 8, 12, 16, 20, 30],
+    "tickets_bought": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     # Photos : videos (21/10/2026)
     "videos": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "video_prints": [1, 2, 4, 8, 15, 25, 40, 60, 80],
@@ -4465,7 +4470,8 @@ def _game(push, d, now) -> None:
     for key, v in (("wheel_played", w.get("played")), ("wheel_keys", w.get("keys")),
                    ("keys_earned", k.get("earned")), ("keys_spent", k.get("spent_total")),
                    ("keys_max", k.get("max_balance")), ("reveals", k.get("reveal_steps")),
-                   ("tickets_won", w.get("tickets_won")), ("tickets_used", w.get("tickets_used"))):
+                   ("tickets_won", w.get("tickets_won")), ("tickets_used", w.get("tickets_used")),
+                   ("tickets_bought", (w.get("xchg") or {}).get("total"))):
         if v:
             push(key, now, int(v))
     for aid, at in {**(w.get("flags") or {}), **(k.get("flags") or {})}.items():
@@ -5273,7 +5279,8 @@ async def open_passage(username: str) -> bool:
 # (un tirage gagnant mais l'accueil deja quitte ne compte pas).
 # Crescendo : 0,3 % x n jusqu'a 9,9 % (n = 33), puis 10 % et +1 % a chaque ouverture (27/10/2026 ; 0,5 % x n
 # jusqu'a n = 20 avant) : une surprise toutes les 22 ouvertures comptees en moyenne, contre 17.
-SURPRISE_STEP, SURPRISE_RAMP = 0.003, 33
+# 18/11/2026 : 1 % x n jusqu'a 10 % (n = 10), puis 10 % et +1 % : une toutes les 12 ouvertures en moyenne (trop rares avant).
+SURPRISE_STEP, SURPRISE_RAMP = 0.01, 10
 
 
 def surprise_p(n: int) -> float:
@@ -5282,7 +5289,7 @@ def surprise_p(n: int) -> float:
 
 def surprise_n_for(pct: float) -> int:
     """Le compteur qui donne cette chance a la PROCHAINE ouverture (l'inverse de surprise_p, a son pas :
-    0,3 % jusqu'a 9,9 %, puis 1 %)."""
+    1 % jusqu'a 10 %, puis 1 %)."""
     p = max(0.0, min(100.0, float(pct))) / 100
     if p <= 0:
         return 0
@@ -7741,6 +7748,50 @@ async def add_keys(n: int, why: str = "Coup de pouce") -> dict:
     return {"added": n, "keys": k["balance"]}
 
 
+# Echanger des cles contre des tickets de palier (18/11/2026) : 3 cles le ticket, 100 tickets par semaine au plus (du
+# lundi au dimanche). Dans ce sens seulement : un palier passe avec un ticket ne rapporte pas de cle, rien ne tourne en boucle.
+# Un ticket achete n'est pas un ticket « gagne » (succes Chasseur de tickets) ; les cles comptent comme depensees.
+KEYS_PER_TICKET, XCHG_WEEKLY = 3, 100
+
+
+def _xchg_week() -> str:
+    y, wk, _d = _local(datetime.utcnow()).isocalendar()
+    return f"{y}-W{wk:02d}"
+
+
+def _xchg_left(w: dict) -> int:
+    x = w.get("xchg") or {}
+    return max(0, XCHG_WEEKLY - (int(x.get("n", 0)) if x.get("week") == _xchg_week() else 0))
+
+
+async def exchange_keys(n: int = 1) -> dict:
+    """n tickets de palier, KEYS_PER_TICKET cles chacun."""
+    n = max(1, int(n or 1))
+    async with _lock():
+        st = await _state_get()
+        if st is None:
+            raise ValueError("Pas encore d'état des succès : attends le premier passage")
+        k, w = _keys_init(st), _wheel_init(st)
+        left = _xchg_left(w)
+        if left <= 0:
+            raise ValueError(f"Déjà {XCHG_WEEKLY} tickets échangés cette semaine : la suite lundi")
+        if n > left:
+            raise ValueError(f"Plus que {left} ticket{'s' if left > 1 else ''} à échanger cette semaine")
+        if k.get("balance", 0) < KEYS_PER_TICKET * n:
+            raise ValueError(f"Il faut {KEYS_PER_TICKET * n} clés pour {n} ticket{'s' if n > 1 else ''} (tu en as {k.get('balance', 0)})")
+        wk = _xchg_week()
+        x = w.get("xchg") or {}
+        w["xchg"] = {"week": wk, "n": (int(x.get("n", 0)) if x.get("week") == wk else 0) + n, "total": int(x.get("total", 0)) + n}
+        k["balance"] -= KEYS_PER_TICKET * n
+        k["spent_total"] = k.get("spent_total", 0) + KEYS_PER_TICKET * n
+        w["tickets"] = w.get("tickets", 0) + n
+        now = datetime.utcnow().isoformat()
+        k["log"] = ([{"at": now, "n": -KEYS_PER_TICKET * n, "why": f"Échangées contre {n} ticket{'s' if n > 1 else ''} de palier"}] + (k.get("log") or []))[:KEY_LOG_MAX]
+        await _state_put(st)
+        _CACHE["v"] = None
+    return {"n": n, "keys": k["balance"], "tickets": w["tickets"], "left": _xchg_left(w)}
+
+
 async def add_tickets(n: int) -> dict:
     """Des tickets de palier en plus pour la maison (coup de pouce, 28/10/2026)."""
     n = max(1, int(n or 1))
@@ -7764,6 +7815,7 @@ def wheel_view(st: dict) -> dict | None:
     return {"spins": w.get("spins", 0), "played": w.get("played", 0), "next": nxt.isoformat(), "tickets": w.get("tickets", 0),
             "weekly": WHEEL_WEEKLY, "start": WHEEL_START, "per_secret": SPINS_PER_SECRET,
             "weekly_tickets": TICKETS_WEEKLY, "ticket_costs": TICKET_COST,
+            "xchg_cost": KEYS_PER_TICKET, "xchg_weekly": XCHG_WEEKLY, "xchg_left": _xchg_left(w),
             "secrets_per_ticket": SECRETS_PER_TICKET,
             "to_ticket": SECRETS_PER_TICKET - (w.get("secrets", 0) % SECRETS_PER_TICKET),
             "prints_per_spin": PRINTS_PER_SPIN, "prints_per_ticket": PRINTS_PER_TICKET,
@@ -8070,7 +8122,7 @@ async def export_csv() -> str:
 # ── Secrets : ce qu'un autre compte en voit ──────────────────────────────────
 # (11/11/2026) ce que la maison a fait de ses cles et de ses tickets ne regarde qu'elle : pour tout autre compte (un
 # copain, la famille, un autre administrateur), ni ou ils sont passes, ni combien.
-SPEND_IDS = {"keys_spent", "tickets_used", "reveals", "keys_earned", "tickets_won"}
+SPEND_IDS = {"keys_spent", "tickets_used", "reveals", "keys_earned", "tickets_won", "tickets_bought"}
 
 
 def _secret_shown(a: dict, rv: int, it: dict) -> dict:
