@@ -2609,6 +2609,55 @@ async def update_print(print_id: int, body: dict, _: str = Depends(get_current_u
     return {"ok": True}
 
 
+def _title_of_3mf(path) -> str:
+    """Le titre que porte le 3MF tranche (3D/3dmodel.model), comme a l'enregistrement de l'impression."""
+    import zipfile, xml.etree.ElementTree as ET
+    try:
+        with zipfile.ZipFile(path) as z:
+            if "3D/3dmodel.model" not in z.namelist():
+                return ""
+            with z.open("3D/3dmodel.model") as f:
+                for _ev, el in ET.iterparse(f):
+                    if el.tag.endswith("metadata") and el.attrib.get("name", "").lower() == "title":
+                        return (el.text or "").strip()
+                    if el.tag.endswith("resources"):        # les metadonnees sont avant : inutile de tout lire
+                        break
+    except Exception:
+        pass
+    return ""
+
+
+@router.post("/{print_id}/reset-name")
+async def reset_print_name(print_id: int, _: str = Depends(get_current_user)):
+    """Le nom et la traduction d'origine (18/11/2026) : le nom repris du 3MF comme a l'enregistrement (sinon celui de la
+    tache), et la traduction automatique refaite aussitot."""
+    from ....services.archive import local_or_archive
+    from ....services.tmf_parser import _clean_name as _tmf_clean
+    from ....services.translate import translate_print
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404)
+        f = local_or_archive(p.model_3mf) if p.model_3mf else None
+        title = await asyncio.to_thread(_title_of_3mf, f) if f and f.is_file() else ""
+        task = p.task_name or p.original_name or ""
+        name = _tmf_clean(title or task) or html.unescape(task)
+        if name and title and str(p.plate_id or "1") != "1":
+            name += " — Plateau " + str(p.plate_id)
+        if name:
+            p.file_name = name[:512]
+        p.translated_name, p.translated_by = None, None
+        p.updated_at = datetime.utcnow()
+        await db.commit()
+    try:
+        await asyncio.wait_for(translate_print(print_id), timeout=40)
+    except Exception:
+        logging.getLogger(__name__).info(f"[TRAD] print #{print_id} : traduction reprise plus tard")
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        return {"file_name": p.file_name, "translated_name": p.translated_name, "translated_by": p.translated_by}
+
+
 @router.delete("/{print_id}")
 async def delete_print(print_id: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:

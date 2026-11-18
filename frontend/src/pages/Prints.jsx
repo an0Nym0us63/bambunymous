@@ -490,7 +490,8 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
   );
 }
 
-function PrintEditSheet({ p, onClose, onSaved }) {
+function PrintEditSheet({ p: p0, onClose, onSaved, onRenamed }) {
+  const [p, setP0] = useState(p0);
   useTrackDetail("Historique · Modifier une impression");
   const kb = useKeyboardInset();
   const [form, setForm] = useState({
@@ -507,6 +508,20 @@ function PrintEditSheet({ p, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  // le nom et la traduction d'origine (18/11/2026) : enregistres tout de suite, le reste du formulaire n'est pas touche
+  const [resetting, setResetting] = useState(false);
+  const resetName = async () => {
+    setResetting(true);
+    try {
+      const r = await client.post(`/prints/${p.id}/reset-name`);
+      const shown = r.data.translated_name || r.data.file_name || "";
+      setP0(x => ({ ...x, ...r.data }));
+      setForm(f => ({ ...f, translated_name: shown }));
+      onRenamed?.(r.data);
+      egg("nom_par_defaut");
+    } catch(e) { showAlert("Erreur: " + (e.response?.data?.detail || e.message)); }
+    setResetting(false);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -555,7 +570,14 @@ function PrintEditSheet({ p, onClose, onSaved }) {
 
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <div>
-            <label style={lbl}>Nom affiché</label>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+              <label style={lbl}>Nom affiché</label>
+              <button type="button" onClick={resetName} disabled={resetting}
+                data-tip="Reprendre le nom d'origine (celui du 3MF) et refaire la traduction automatique"
+                style={{ marginBottom:4, padding:"3px 10px", borderRadius:999, border:"1px solid var(--border)", background:"var(--surface2)",
+                  color:"var(--muted)", fontSize:11, fontWeight:700, cursor: resetting ? "wait" : "pointer", whiteSpace:"nowrap" }}>
+                {resetting ? "⏳ Traduction…" : "↺ Par défaut"}</button>
+            </div>
             <input style={inp} value={form.translated_name} onChange={e=>set("translated_name",e.target.value)}
               placeholder={p.file_name || ""}/>
           </div>
@@ -1894,7 +1916,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
         manageViews: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
           try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.sel.length ? 1 : 0, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
           catch { /* rien */ } } }) }}/>}
-      {editMode && <PrintEditSheet p={p} onClose={() => setEditMode(false)} onSaved={updated => { setP(prev => ({ ...prev, ...updated })); setEditMode(false); onChanged?.(); }}/>}
+      {editMode && <PrintEditSheet p={p} onClose={() => setEditMode(false)} onSaved={updated => { setP(prev => ({ ...prev, ...updated })); setEditMode(false); onChanged?.(); }}
+        onRenamed={d => { setP(prev => ({ ...prev, ...d })); onChanged?.(); }}/>}
       {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); reload(); onChanged?.(); }}/>}
       {showDeleteConfirm && <DeletePrintConfirm p={p} restoreOnly={showDeleteConfirm === "restore"} onCancel={() => setShowDeleteConfirm(false)}
         onConfirm={async fracs => {
