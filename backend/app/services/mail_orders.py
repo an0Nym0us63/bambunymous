@@ -329,7 +329,9 @@ def totals(text: str) -> dict:
         am = _amounts(ln)
         if not am:
             continue
-        v, cur = am[0]
+        # le montant est en fin de ligne (19/11/2026) : « €40 Discount voucher -€40.00 EUR » lisait le « €40 » du
+        # libelle, positif, et le bon de 40 € n'etait pas reparti sur les bobines
+        v, cur = am[-1]
         if cur and not t["currency"]:
             t["currency"] = cur
         if low.startswith(("sous-total", "subtotal", "zwischensumme", "sous total")):
