@@ -551,6 +551,22 @@ def _catch_up(job_id: str) -> bool:
     return True
 
 
+# Les etapes de preparation de l'imprimante (stg_cur, table de frontend/src/utils/printStage.js) : nivellement, chauffes,
+# calibrations, controles, mise a l'origine. Pas les changements de filament, les pauses ni le controle de 1re couche,
+# qui arrivent en pleine impression, ni les refroidissements (plateau, chambre) de la fin.
+PREP_STAGES = frozenset({1, 2, 3, 7, 8, 9, 11, 12, 13, 14, 15, 18, 19, 25, 31, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+                         45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 65, 66, 77})
+
+
+def _stage():
+    try:
+        from ..core.mqtt import get_state
+        v = getattr(get_state(), "print_stage", None)
+        return int(v) if v is not None else None
+    except Exception:
+        return None
+
+
 def on_progress(job_id: str, pct: float, layer: int):
     if not job_id or job_id in _PROCESSED: return
     st = _job(job_id); pid = st.get("print_id")
@@ -574,6 +590,18 @@ def on_progress(job_id: str, pct: float, layer: int):
             if not _catch_up(job_id):
                 logger.warning(f"[FINISH] job_id={job_id} introuvable en mémoire ni en DB")
             return
+
+    # pendant une etape de preparation (nivellement, chauffe, calibrations…), l'imprimante annonce deja l'avancement et
+    # la couche du G-code qu'elle a lu d'avance (20/11/2026 : « couche 1/35, 28 % » en plein nivellement, notification
+    # de 1re couche et 79 % du filament compte consomme) : rien ne compte avant la fin de la preparation
+    stage = _stage()
+    if stage in PREP_STAGES and pct < 99:
+        if layer is not None and 0 <= layer <= 1:
+            with _LOCK: st["low"] = True
+        if not st.get("prep_logged"):
+            with _LOCK: st["prep_logged"] = True
+            logger.info(f"[MILESTONE] preparation en cours (etape {stage}, {pct:.0f} %, couche {layer}) : progression ignoree print_id={pid}")
+        return
 
     prev = st["last_pct"]
     # Premiere progression d'un job tout juste lance, deja avancee : c'est celle
