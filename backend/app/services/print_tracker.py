@@ -632,10 +632,27 @@ def on_progress(job_id: str, pct: float, layer: int):
     # couche 0 ou 1 (29/10/2026) : pendant la preparation, l'imprimante renvoie encore la couche de l'impression
     # precedente (« couche 210/210 » notifie au lancement) ; et apres un redemarrage du serveur en pleine impression,
     # sans cliche garde (pas de camera), la notification repartait a chaque fois.
+    now = time.time()
     if layer is not None and 0 <= layer <= 1:
-        with _LOCK: st["low"] = True
+        with _LOCK:
+            st["low"] = True
+            if layer >= st.get("last_layer", 0):
+                st["last_layer"], st["layer_t"] = layer, now
+    # une couche qui saute plus vite que l'impression ne peut aller (22/11/2026 : couche 0 puis « couche 117 » quatre
+    # secondes apres le lancement, celle de l'impression precedente revenue dans un rapport complet) : ni jalon de couche
+    # ni suivi du filament sur elle. Une coupure du MQTT en pleine impression laisse passer le saut : le temps ecoule
+    # depuis la derniere couche vue le couvre (deux secondes par couche au plus vite).
+    if layer and layer >= 2:
+        jump = layer - st.get("last_layer", 0)
+        if jump > 3 and jump > (now - st.get("layer_t", st.get("start_time", now))) / 2:
+            if st.get("bad_layer") != layer:
+                with _LOCK: st["bad_layer"] = layer
+                logger.info(f"[MILESTONE] couche {layer} improbable (derniere vue {st.get('last_layer', 0)}) : ignoree print_id={pid}")
+            return
     if layer and st.get("low"):
         with _LOCK:
+            if layer > st.get("last_layer", 0):
+                st["layer_t"] = now
             st["last_layer"] = max(st.get("last_layer", 0), layer)
             if not st["l2"] and layer >= 2:
                 st["l2"] = True
