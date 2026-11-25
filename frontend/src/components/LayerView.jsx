@@ -153,7 +153,10 @@ export function Layer3D({ s, d, now, w, h }) {
       // pleine (06/11/2026) : chaque trace a la largeur d'extrusion (0,42 mm), sans plafond ; plafonne a 2,4 px, on voyait
       // des hachures sur la vue en grand. Un liseré clair d'abord, pour la detacher de ce qui est imprime dessous
       const lw = Math.max(0.9, 4.4 * k);
+      // la piece seule (25/11/2026) : ses supports et la tour de purge (x) restent dans la vue 2D ; poses ici, ils
+      // flottaient a cote de la silhouette (une piece enfoncee sous le plateau ne commence que par une tige)
       const trace = q => {
+        if (q.x) return false;
         const p = unpack(q.p);
         if (p.length < 4) return false;
         g.beginPath();
