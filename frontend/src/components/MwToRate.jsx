@@ -488,7 +488,11 @@ export function ToRateSheet({ data, onClose, onOpen }) {
                     {x.title || x.print_name || `Modèle ${x.design_id}`}</div>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
                     {[x.creator_name && `par ${x.creator_name}`, x.printed > 0 && `imprimé ${x.printed}×`, x.last_date && `le ${day(x.last_date)}`].filter(Boolean).join(" · ")}</div>
-                  {x.awaited && <div style={{ display: "inline-block", maxWidth: "100%", marginTop: 3, fontSize: 10.5, fontWeight: 800, color: "#d97706", padding: "1px 8px",
+                  {x.gone ? <div style={{ display: "inline-block", maxWidth: "100%", marginTop: 3, fontSize: 10.5, fontWeight: 800, color: "#dc2626", padding: "1px 8px",
+                    borderRadius: 20, background: "rgba(220,38,38,0.12)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxSizing: "border-box" }}
+                    data-tip="MakerWorld le garde dans tes évaluations à faire mais refuse de le remplir : il ne reste qu'à l'oublier">
+                    🚫 Profil retiré par le créateur{x.profile_title ? ` · « ${x.profile_title} »` : ""}</div>
+                  : x.awaited && <div style={{ display: "inline-block", maxWidth: "100%", marginTop: 3, fontSize: 10.5, fontWeight: 800, color: "#d97706", padding: "1px 8px",
                     borderRadius: 20, background: "rgba(245,158,11,0.14)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxSizing: "border-box" }}>
                     ⏳ Attendu par MakerWorld{x.profile_title ? ` · profil « ${x.profile_title} »` : ""}</div>}
                 </div>
@@ -503,13 +507,13 @@ export function ToRateSheet({ data, onClose, onOpen }) {
                 </div>
               ) : <div style={{ fontSize: 11, color: "var(--muted)" }}>Pas de photo de cette impression.</div>}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
-                {x.rating_id ? (
+                {x.rating_id && !x.gone ? (
                   <button onClick={() => setOpen(o => o === x.design_id ? null : x.design_id)} style={{ ...act, border: "none", color: "white",
                     background: open === x.design_id ? "var(--muted)" : "linear-gradient(135deg, #F59E0B, #F97316)", boxShadow: "0 6px 14px -8px #F59E0B" }}>
                     {open === x.design_id ? "Fermer" : "⭐ Évaluer ici"}</button>
                 ) : null}
                 {x.rating_id && (
-                  <button onClick={() => forgetIt(x, () => setDone(s => new Set(s).add(x.design_id)))} title="Ne plus me demander d'évaluer ce modèle"
+                  <button onClick={() => forgetIt(x, () => setDone(s => new Set(s).add(x.design_id)))} data-tip="Ne plus me demander d'évaluer ce modèle"
                     style={{ ...act, color: "var(--muted)" }}>Oublier</button>
                 )}
                 <a href={x.url} target="_blank" rel="noopener noreferrer" data-tip={x.rating_id ? "Le modèle sur MakerWorld" : "Évaluer sur MakerWorld"}

@@ -47,7 +47,42 @@ def _pending_of(h) -> dict:
             "profile_title": inst.get("titleTranslated") or inst.get("title"),
             "profile_cover": inst.get("cover"), "title": des.get("titleTranslated") or des.get("title"),
             "cover_url": des.get("coverUrl"), "date": h.get("createTime"),
-            "success": h.get("successPrinted"), "creator_name": (inst.get("instUser") or {}).get("name")}
+            "success": h.get("successPrinted"), "creator_name": (inst.get("instUser") or {}).get("name"),
+            # (25/11/2026) les petits champs du profil (etats, drapeaux), pour le journal d'un profil retire
+            "flags": {k: v for k, v in inst.items() if isinstance(v, (bool, int)) or (isinstance(v, str) and len(v) < 24)}}
+
+
+# (25/11/2026) les fiches dont le profil n'est plus public : le createur l'a retire, MakerWorld garde la fiche « a
+# evaluer » mais refuse de la remplir (404). Gardees sur disque, la carte le dit au lieu de proposer d'evaluer
+# « hidden » : une de ces fiches oubliee alors que MakerWorld refuse aussi de la supprimer (404) ; masquee ici
+def _ids_file(kind: str):
+    return _tmp_dir().parent / f"mw_rate_{kind}.json"
+
+
+def _ids(kind: str) -> set:
+    import json
+    try:
+        return {str(x) for x in json.loads(_ids_file(kind).read_text(encoding="utf-8"))}
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def _add_id(kind: str, rid: str):
+    import json
+    ids = _ids(kind) | {str(rid)}
+    try:
+        _ids_file(kind).parent.mkdir(parents=True, exist_ok=True)
+        _ids_file(kind).write_text(json.dumps(sorted(ids)[-500:]), encoding="utf-8")
+    except OSError:
+        logger.exception(f"[MW] fiches {kind} : ecriture impossible")
+
+
+def gone_ids() -> set:
+    return _ids("gone")
+
+
+def _mark_gone(rid: str):
+    _add_id("gone", rid)
 
 
 _RATINGS_TASK = {"t": None}
@@ -77,6 +112,7 @@ async def _read_ratings():
         return None
     rated, pending, off = set(), {}, 0
     details = []
+    hidden = _ids("hidden")
     for _ in range(40):
         code, d = await asyncio.to_thread(_get_json, RATED.format(offset=off), tok)
         if not isinstance(d, dict):
@@ -96,6 +132,8 @@ async def _read_ratings():
                                 "images": len(imgs) if isinstance(imgs, list) else 0})
             elif h.get("userCanRating", True):
                 pd = _pending_of(h)
+                if str(pd["rating_id"]) in hidden:
+                    continue
                 lst = pending.setdefault(did, [])
                 if pd["rating_id"] and all(x["rating_id"] != pd["rating_id"] for x in lst):
                     lst.append(pd)
@@ -267,7 +305,8 @@ async def to_rate(fresh: bool = False) -> dict:
     hit_r = _CACHE.get("ratings")
     key = (id(hit_r), hit_r[0] if hit_r else None, len(rated or ()),
            tuple(sorted((k, len(v)) for k, v in pending.items())), tuple(sorted(mine)) if mine else (), my_uid,
-           data_version("prints", "print_snapshots", "groups", "filament_usage", "makerworld_designs"), _GALLERY["disk"])
+           data_version("prints", "print_snapshots", "groups", "filament_usage", "makerworld_designs"), _GALLERY["disk"],
+           tuple(sorted(gone_ids())))
     memo = _CACHE.get("to_rate")
     if memo and memo[0] == key and time.time() - memo[1] < 600:
         return memo[2]
@@ -334,6 +373,7 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
     # impressions partagees absentes de mon historique local.
     # MakerWorld cree une fiche a remplir par PROFIL imprime : un modele peut en
     # attendre plusieurs ; une seule evaluation dans l'appli les remplit toutes.
+    gone = gone_ids()
     for did, pds in pending.items():
         pd = pds[0]
         it = items.get(did)
@@ -363,7 +403,11 @@ async def _to_rate(rated, pending, stats, my_uid, mine) -> dict:
             if not x.get("rating_id"):
                 continue
             ph, n = _own(x)
-            it["profiles"].append({"rating_id": str(x["rating_id"]), "title": x["profile_title"], "photos": ph, "printed": n})
+            it["profiles"].append({"rating_id": str(x["rating_id"]), "title": x["profile_title"], "photos": ph, "printed": n,
+                                   **({"gone": True} if str(x["rating_id"]) in gone else {})})
+        # chaque profil attendu retire par le createur : plus rien a evaluer, seulement a oublier
+        if it["profiles"] and all(q.get("gone") for q in it["profiles"]):
+            it["gone"] = True
         # (14/11/2026) un seul profil attendu : ses photos a lui sont celles de la fiche (evaluer le piment montrait la
         # photo du champignon, l'impression la plus recente du modele, d'un autre profil)
         if len(it["profiles"]) == 1 and it["profiles"][0]["photos"]:
@@ -576,7 +620,17 @@ async def _forget(design_id: str, rating_id: str) -> dict:
     if not rid.isdigit() or rid not in {str(x.get("rating_id")) for x in pend}:
         raise AccountError("Cette évaluation n'est plus attendue par MakerWorld (déjà faite ou oubliée ?)")
     tok = await _tok()
-    await asyncio.to_thread(_send, "DELETE", f"/comment-service/rating/{rid}", {"ratingId": int(rid)}, tok)
+    try:
+        await asyncio.to_thread(_send, "DELETE", f"/comment-service/rating/{rid}", {"ratingId": int(rid)}, tok)
+    except AccountError as e:
+        # (25/11/2026) un profil retire par le createur : MakerWorld ne la supprime pas non plus ; masquee ici
+        if "cannot find" not in str(e).lower():
+            raise
+        _add_id("gone", rid)
+        _add_id("hidden", rid)
+        logger.info(f"[MW] evaluation a faire masquee (profil retire, MakerWorld ne la supprime pas) : modele {did}, fiche {rid}")
+        _forget_pending(did, rid)
+        return {"ok": True}
     logger.info(f"[MW] evaluation a faire oubliee : modele {did}, fiche {rid}")
     _forget_pending(did, rid)
     return {"ok": True}
@@ -618,9 +672,20 @@ async def _submit(design_id: str, rating_id: str, score: int, content: str, phot
         files.append(f)
     tok = await _tok()
     images = [await asyncio.to_thread(_upload_photo, f, tok) for f in files]
-    await asyncio.to_thread(_send, "PUT", f"/comment-service/rating/{rid}",
-                            {"score": score, "content": content, "images": images,
-                             "ratingExtension": {"lowScoreDetails": []}}, tok)
+    try:
+        await asyncio.to_thread(_send, "PUT", f"/comment-service/rating/{rid}",
+                                {"score": score, "content": content, "images": images,
+                                 "ratingExtension": {"lowScoreDetails": []}}, tok)
+    except AccountError as e:
+        # (25/11/2026) « cannot find the requested resource » : le profil n'est plus public (vu sur makerworld.com,
+        # logo GTA VI), la fiche reste listee mais ne se remplit plus
+        if "cannot find" not in str(e).lower():
+            raise
+        _mark_gone(rid)
+        flags = next((x.get("flags") for x in pend if str(x.get("rating_id")) == rid), None)
+        logger.warning(f"[MW] profil retire : modele {did}, fiche {rid}, champs du profil {flags}")
+        raise AccountError("Le créateur a retiré ce profil (il n'est plus public sur MakerWorld) : l'évaluation ne peut "
+                           "plus être publiée. Tu peux l'oublier.")
     logger.info(f"[MW] evaluation publiee : modele {did}, {score} etoiles, {len(images)} photo(s)")
     _forget_pending(did, rid)
     for f in files:                               # photos ajoutees : plus utiles une fois publiees
