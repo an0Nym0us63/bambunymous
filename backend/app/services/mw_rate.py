@@ -767,6 +767,9 @@ async def _work():
                 j["status"], j["detail"] = "done", f"{r.get('photos', 0)} photo(s)"
         except AccountError as e:
             j["status"], j["detail"] = "error", str(e)
+            # (25/11/2026) dit seulement dans la puce d'etat, effacee au bout de 10 min : un refus restait introuvable
+            logger.warning(f"[MW] {'oubli' if j.get('action') == 'forget' else 'evaluation'} refusee : modele {j['design_id']}, "
+                           f"fiche {j['rating_id']} : {e}")
         except Exception as e:
             logger.exception("[MW] publication d'une evaluation")
             j["status"], j["detail"] = "error", f"Erreur inattendue ({type(e).__name__})"
