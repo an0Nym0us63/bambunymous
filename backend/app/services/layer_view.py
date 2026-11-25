@@ -32,10 +32,6 @@ _OBJ = re.compile(rb"(?m)^; (start|stop) printing object(?:, unique label id: (\
 _ZH = re.compile(rb"(?m)^; Z_HEIGHT: (-?\d*\.?\d+)")
 # la vue 3D (05/11/2026) ne garde que le contour exterieur de chaque couche
 _SHELL = (b"; FEATURE: Outer wall", b"; FEATURE: Overhang wall")
-# (25/11/2026) ce qui n'est pas la piece : marque « x », la vue 3D ne le pose pas sur la couche en cours. Une piece
-# enfoncee sous le plateau ne commencait que par une tige fine ; ses supports et la tour de purge, remplis a sa
-# hauteur, flottaient a cote de la silhouette (la tour hors du cadre, qui ne suit que les parois)
-_AUX = (b"; FEATURE: Support", b"; FEATURE: Prime tower", b"; FEATURE: Skirt")
 
 
 def _index(raw: bytes) -> dict:
@@ -92,7 +88,6 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
     e_tot = 0.0
     box = [math.inf, math.inf, -math.inf, -math.inf]
     keep = not shell                                  # shell : seulement les parois exterieures (vue 3D)
-    aux = False                                       # support, tour de purge, jupe : pas la piece
 
     def put(px, py):
         q = (round(px * 10), round(py * 10))
@@ -110,10 +105,8 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
                 continue
             c = line[0]
         if c == 59:                                   # ';' : le debut et la fin d'une piece
-            if line.startswith(b"; FEATURE:"):
-                aux = line.startswith(_AUX)
-                if shell:
-                    keep = line.startswith(_SHELL)
+            if shell and line.startswith(b"; FEATURE:"):
+                keep = line.startswith(_SHELL)
                 cur = None
             elif line.startswith(b"; start printing object") or line.startswith(b"; stop printing object"):
                 m = _OBJ.match(line)
@@ -159,8 +152,6 @@ def _paths(raw: bytes, a: int, b: int, tool: Optional[int], obj: Optional[str] =
                 cur = {"t": tool, "e0": round(e_tot, 2), "p": []}
                 if obj is not None:
                     cur["o"] = obj
-                if aux:
-                    cur["x"] = 1
                 out.append(cur)
                 put(x, y)
             if g in (b"G2 ", b"G3 ") and (b"I" in vals or b"J" in vals):
@@ -270,8 +261,8 @@ async def layer(pid: int, p, n: Optional[int]) -> dict:
 
     def lean(j):
         ps, e, bx = one(j)
-        return [{"t": q["t"], "e0": q["e0"], "p": _deltas(_simplify(q["p"])), **({"o": q["o"]} if "o" in q else {}),
-                 **({"x": 1} if "x" in q else {})} for q in ps], e, bx
+        return [{"t": q["t"], "e0": q["e0"], "p": _deltas(_simplify(q["p"])), **({"o": q["o"]} if "o" in q else {})}
+                for q in ps], e, bx
 
     paths, e_tot, box = await asyncio.to_thread(lean, i)
     return {"ok": True, "layer": L[i], "first": L[0], "last": L[-1], "count": len(L), "e_total": e_tot,
