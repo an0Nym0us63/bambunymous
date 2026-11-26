@@ -368,8 +368,19 @@ def _slots(t0: datetime, t1: datetime) -> list:
     return [s for s in out if s[1] > s[0]]
 
 
+# (26/11/2026) plus qu'aucune imprimante ne tire (une H2D chauffe sa chambre vers 2,2 kW) : un saut du compteur, pas
+# une consommation. Une prise retombee a 0 puis revenue a son total (668 kWh) comptait tout son total sur 10 h d'un
+# print (88 € d'electricite au boitier de sechage)
+MAX_W = 3000.0
+
+
+def _too_much(kwh: float, seconds: float) -> bool:
+    return kwh > 0.05 and kwh * 1000 > MAX_W * max(seconds, 60.0) / 3600
+
+
 def _cumul(pts: list, k: float) -> list:
-    """Un compteur (kWh) rendu croissant : une remise a zero (prise debranchee) repart de la derniere valeur."""
+    """Un compteur (kWh) rendu croissant : une remise a zero (prise debranchee) repart de la derniere valeur ; un saut
+    impossible (le compteur qui revient a son total apres une remise a zero passagere) est ignore."""
     out, off, last = [], 0.0, None
     for t, v in pts:
         x = _f(v)
@@ -379,6 +390,8 @@ def _cumul(pts: list, k: float) -> list:
         if last is not None and x < last - 1e-6:
             off += last                    # remis a zero : le compteur repart de 0, on continue depuis l'ancien total
         last = x
+        if out and _too_much(x + off - out[-1][1], (t - out[-1][0]).total_seconds()):
+            off -= x + off - out[-1][1]    # le saut ne compte pas
         out.append((t, x + off))
     return out
 
@@ -428,7 +441,7 @@ def _spread(rows, slots, kwh_of):
     out = [0.0] * len(slots)
     for t, x in rows:
         e = kwh_of(x)
-        if e is None:
+        if e is None or _too_much(e, span.total_seconds()):    # un saut du compteur, pas une consommation
             continue
         te = t + span
         for i, (a, b) in enumerate(slots):
@@ -785,6 +798,36 @@ async def reprice_all() -> int:
     return n
 
 
+async def fix_aberrant() -> int:
+    """Les impressions dont la puissance moyenne mesuree depasse MAX_W (un saut du compteur compte comme une
+    consommation) : remesurees ; si Home Assistant n'a plus de quoi, la mesure part et le cout revient a l'estimation."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from .print_tracker import _costs
+    async with AsyncSessionLocal() as db:
+        ids = (await db.execute(select(Print.id).where(Print.energy_avg_w > MAX_W))).scalars().all()
+    n = 0
+    for pid in ids:
+        try:
+            r = await measure(pid, force=True)
+            ok = r.get("avg_w") is not None and r["avg_w"] <= MAX_W
+        except HAError as e:
+            if "injoignable" in str(e) or "jeton" in str(e):
+                raise
+            ok = False
+        if not ok:
+            async with AsyncSessionLocal() as db:
+                p = await db.get(Print, pid)
+                p.energy_kwh = p.energy_avg_w = p.energy_cost = p.energy_source = p.energy_slots = None
+                p.energy_tries = 99                    # la boucle ne la remesure pas
+                await _costs(db, p)
+                await db.commit()
+            logger.info(f"[HA] print #{pid} : mesure aberrante retiree, cout estime")
+        n += 1
+    return n
+
+
 # ── Le rattrapage, et la boucle ──────────────────────────────────────────────────
 _RUN = {"task": None}
 # (12/11/2026) l'avancement, lu par Parametres › Taches (« Travaux lances a la demande »)
@@ -852,6 +895,13 @@ async def loop() -> None:
             logger.info(f"[HA] prix et libelles du passe : {n} impression(s) reprise(s)")
     except Exception:
         logger.exception("[HA] prix du passe")
+    try:      # (26/11/2026) une fois : les mesures faussees par un saut du compteur, refaites
+        if await configured() and not await _get("HA_FIX_JUMPS", ""):
+            n = await fix_aberrant()
+            await _set("HA_FIX_JUMPS", datetime.now().isoformat(timespec="seconds"))
+            logger.info(f"[HA] mesures aberrantes : {n} impression(s) reprise(s)")
+    except Exception:
+        logger.exception("[HA] mesures aberrantes")
     while True:
         try:
             if await configured():
