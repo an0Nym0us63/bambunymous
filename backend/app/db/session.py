@@ -177,6 +177,7 @@ async def init_db():
     await _purge_activity_log()
     await _normalize_print_dates()
     await _repair_print_durations()
+    await _repair_zero_durations()
     try:        # l'emplacement ecrit sur chaque bobine rangee suit le mode et les noms (07/11/2026)
         from ..services import storage_places as _sp
         await _sp.refresh_all()
@@ -569,6 +570,52 @@ async def _repair_print_durations():
             print(f"[migration] {len(fixed)} duree(s) d'impression reparee(s)")
     except Exception as e:
         print(f"[migration] reparation des durees ignoree : {e}")
+
+
+async def _repair_zero_durations():
+    """Une fois (26/11/2026) : les durees ecrites a 0 par l'ecran Editer (ouvert depuis une liste qui ne connaissait pas
+    la duree, il l'enregistrait a chaque renommage). Refaites comme a la fin d'une impression : de la creation de la
+    fiche a la photo de fin, pauses retirees ; hors de toute mesure (plus du double de l'estimation), l'estimation.
+    Les couts suivent (electricite estimee, usure), et les objets tires de ces impressions."""
+    from sqlalchemy import select, func as _f
+    from .session import AsyncSessionLocal as _S
+    from ..services.settings_service import get_setting, set_setting
+    from ..models.print_history import Print, PrintSnapshot
+    FLAG = "MIGR_DURATIONS_ZERO_20261126"
+    try:
+        async with _S() as db:
+            if await get_setting(db, FLAG):
+                return
+            ps = (await db.execute(select(Print).where(Print.duration_seconds == 0))).scalars().all()
+            fixed = []
+            from ..services.print_tracker import _costs
+            for p in ps:
+                end = (await db.execute(select(_f.max(PrintSnapshot.taken_at)).where(
+                    PrintSnapshot.print_id == p.id,
+                    (PrintSnapshot.trigger == "pct100") | PrintSnapshot.trigger.like("fail-%")))).scalar()
+                est = float(p.estimated_seconds or 0)
+                real = ((end - p.created_at).total_seconds() - float(p.paused_seconds or 0)) if end and p.created_at else None
+                if real is not None and real > 0 and (est <= 0 or real <= est * 2):
+                    p.duration_seconds = round(real)
+                elif est > 0:
+                    p.duration_seconds = est
+                else:
+                    p.duration_seconds = None
+                await _costs(db, p)
+                fixed.append(p.id)
+            await db.commit()
+            if fixed:
+                try:
+                    from ..api.v1.routes.prints import _propagate_from_print
+                    for pid in fixed:
+                        await _propagate_from_print(db, pid)
+                    await db.commit()
+                except Exception as e:
+                    print(f"[migration] couts des objets non repercutes : {e}")
+            await set_setting(db, FLAG, "1")
+            print(f"[migration] {len(fixed)} duree(s) d'impression a 0 refaite(s)")
+    except Exception as e:
+        print(f"[migration] durees a 0 ignorees : {e}")
 
 
 async def _normalize_print_dates():

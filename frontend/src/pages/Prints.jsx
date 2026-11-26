@@ -506,6 +506,7 @@ function PrintEditSheet({ p: p0, onClose, onSaved, onRenamed }) {
     duration_min: Math.round((p.duration_seconds||p.estimated_seconds||0)/60),
   });
   const [saving, setSaving] = useState(false);
+  const dur0 = useRef(Math.round((p.duration_seconds||p.estimated_seconds||0)/60));
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   // le nom et la traduction d'origine (18/11/2026) : enregistres tout de suite, le reste du formulaire n'est pas touche
@@ -527,7 +528,10 @@ function PrintEditSheet({ p: p0, onClose, onSaved, onRenamed }) {
     setSaving(true);
     try {
       const payload = {...form};
-      payload.duration_seconds = (parseInt(payload.duration_min)||0)*60;
+      // (26/11/2026) la duree seulement si on l'a changee : ouverte depuis une liste qui ne la connait pas, la fiche
+      // affichait 0 et l'enregistrait a chaque renommage (le Sonic perdait 8 de ses 10 durees)
+      const dm = parseInt(payload.duration_min) || 0;
+      if (String(payload.duration_min) !== String(dur0.current) && dm > 0) payload.duration_seconds = dm * 60;
       delete payload.duration_min;
       delete payload.original_name;
       const shown0 = p.translated_name || p.file_name || "";

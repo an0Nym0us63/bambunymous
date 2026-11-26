@@ -371,7 +371,7 @@ def _filament_filter_subq(material, fila_type, filament_id, color=None):
 # Tris disponibles pour l'historique
 SORTS = ("recent", "oldest", "cost", "weight", "duration")
 
-_PRINT_DURATION = func.coalesce(Print.duration_seconds, Print.estimated_seconds, 0)
+_PRINT_DURATION = func.coalesce(func.nullif(Print.duration_seconds, 0), Print.estimated_seconds, 0)
 
 
 def _group_aggregates():
@@ -384,7 +384,7 @@ def _group_aggregates():
                 Print.group_id.label("gid"),
                 func.sum(func.coalesce(Print.total_cost, 0)).label("g_cost"),
                 func.sum(func.coalesce(Print.total_weight_g, 0)).label("g_weight"),
-                func.sum(func.coalesce(Print.duration_seconds,
+                func.sum(func.coalesce(func.nullif(Print.duration_seconds, 0),
                                        Print.estimated_seconds, 0)).label("g_duration"),
                 func.max(Print.print_date).label("g_max_date"),
                 func.min(Print.print_date).label("g_min_date"),
@@ -1605,7 +1605,7 @@ async def _prints_stats_calc(days: int, date_from: Optional[str], date_to: Optio
         d_to = d_to + timedelta(days=1)   # borne de fin incluse (jour entier)
 
     async with AsyncSessionLocal() as db:
-        DUR = func.coalesce(Print.duration_seconds, Print.estimated_seconds, 0)
+        DUR = func.coalesce(func.nullif(Print.duration_seconds, 0), Print.estimated_seconds, 0)   # 0 : inconnue
         # Base des stats = tous les resultats REELS d'impression (on exclut les
         # en-cours et les annules). Le taux de reussite et le donut partagent donc
         # la meme base -> ils concordent.
@@ -2579,6 +2579,14 @@ async def update_print(print_id: int, body: dict, _: str = Depends(get_current_u
         if not p: raise HTTPException(404)
         for k, v in body.items():
             if k not in allowed:
+                continue
+            if k == "duration_seconds":
+                # (26/11/2026) une duree nulle ou vide n'en est pas une : l'ecran Editer en envoyait 0
+                try:
+                    if float(v or 0) > 0:
+                        p.duration_seconds = float(v)
+                except (TypeError, ValueError):
+                    pass
                 continue
             if k == "design_id":
                 # Saisie manuelle de l'ID MakerWorld : chaine vide -> NULL (effacer),
