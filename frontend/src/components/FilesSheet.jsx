@@ -139,11 +139,13 @@ export default function FilesSheet({ kind, id, title, isAdmin, actions = {}, onC
           {sec("📦", "3MF d'origine", null, <>
             {g ? (actions.sourceRows || []).map(m => row("📦", m.label, m.has ? "importé ou récupéré" : "pas encore là",
               <>{m.has && btn("⤓", () => actions.download?.("source"), "Télécharger les 3MF d'origine", "#F97316")}
+                {isAdmin && m.has && /^\d+$/.test(m.design || "") && actions.refetchGroupSource && btn("🔄", async () => { await actions.refetchGroupSource(m); refresh(); }, "Reprendre chez MakerWorld (le créateur a changé le profil)", "#F97316")}
                 {isAdmin && btn(m.has ? "📤 Remplacer" : "📤 Importer", () => actions.importGroupSource?.(m)?.then?.(refresh), "Le projet Bambu Studio", "#F97316")}</>, m.key))
               : row("📦", d.source ? "Le projet d'origine" : "Pas de 3MF d'origine", d.source ? (d.design_id ? "MakerWorld · à retrancher" : "importé · à retrancher")
                   : d.can_fetch_source ? "il se récupère depuis MakerWorld" : "importe-le pour la vue 3D et les couleurs",
                 <>{d.source && btn("⤓", () => actions.download?.("source"), "Télécharger le 3MF d'origine", "#F97316")}
                   {d.source && !d.design_id && actions.own3d && btn("🧊", actions.own3d, "Vue 3D de mon 3MF d'origine")}
+                  {isAdmin && d.source && d.design_id && actions.refetchSource && btn("🔄", async () => { await actions.refetchSource(); refresh(); }, "Reprendre chez MakerWorld (le créateur a changé le profil)", "#F97316")}
                   {!d.source && d.can_fetch_source && btn("⇣ Récupérer", async () => { await actions.fetchSource?.(); refresh(); }, "Depuis MakerWorld", "#F97316")}
                   {isAdmin && btn(d.source ? "📤" : "📤 Importer", () => actions.importSource?.()?.then?.(refresh), d.source ? "Remplacer le 3MF d'origine" : "Le projet Bambu Studio", "#F97316")}</>, "src")}
             {g && actions.own3d && row("🧊", "Vue 3D", "depuis le 3MF d'origine importé", btn("🧊 Voir", actions.own3d, "Vue 3D"), "o3d")}

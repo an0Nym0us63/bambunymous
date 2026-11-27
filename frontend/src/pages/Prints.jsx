@@ -1599,6 +1599,17 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
     try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
+  // reprendre le 3MF d'origine chez MakerWorld (27/11/2026) : le createur a remplace le profil, on gardait l'ancien
+  const refetchSource = async () => {
+    if (!(await showConfirm("Reprendre chez MakerWorld le 3MF d'origine de cette impression ? La dernière version du profil remplace celle gardée ici (l'ancienne n'est supprimée qu'une fois la nouvelle reçue et vérifiée). Compte comme un téléchargement.", { confirmLabel: "Reprendre" }))) return;
+    toast("Téléchargement chez MakerWorld…");
+    try {
+      const { data } = await client.post(`/makerworld/source3mf/refresh/print/${p.id}`, null, { timeout: 600000 });
+      egg("mw_3mf_repris");
+      toast(`3MF d'origine repris (${Math.max(1, Math.round((data.done?.[0]?.kb || 0) / 1024))} Mo) : la vue 3D se refait`);
+      onChanged?.();
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const [selSpool, setSelSpool] = useState(null);
   // le detail du cout : ouvert par defaut (comme l'ancien bloc) ; l'appareil retient le choix
   // le compte des objets crees (pour l'entree du menu, comme le faisait le bouton)
@@ -1916,7 +1927,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
       {own3d && <Model3D designId={`p${p.id}`} title={printTitle(p)} printId={p.id} usedPrints={[p.id]}
         scope={`print:${p.id}`} onClose={() => setOwn3d(false)}/>}
       {files && <FilesSheet kind="print" id={p.id} title={printTitle(p) || "Sans nom"} isAdmin={isAdmin} onClose={() => setFiles(false)} actions={{
-        download: k => download3mf(p.id, k), importSource, fetchSource, own3d: () => setOwn3d(true),
+        download: k => download3mf(p.id, k), importSource, fetchSource, refetchSource, own3d: () => setOwn3d(true),
         manageViews: () => openVue3D({ kind: "print", id: p.id, onDone: async () => {
           try { const r = await client.get(`/prints/${p.id}/vue3d`); setP(prev => ({ ...prev, thumb_3d: r.data.sel.length ? 1 : 0, has_vue3d: r.data.slots.length > 0, updated_at: new Date().toISOString() })); }
           catch { /* rien */ } } }) }}/>}
@@ -2066,6 +2077,18 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     inp.onchange = () => { const f = inp.files?.[0]; if (f) send(f); else resolve(false); };
     inp.click();
   });
+  // reprendre chez MakerWorld le 3MF d'origine d'une ligne (un modele, un profil) du groupe (27/11/2026)
+  const refetchGroupSource = async m => {
+    if (!(await showConfirm(`Reprendre chez MakerWorld le 3MF d'origine (${m.label}) ? La dernière version du profil remplace celle gardée ici (l'ancienne n'est supprimée qu'une fois la nouvelle reçue et vérifiée). Compte comme un téléchargement.`, { confirmLabel: "Reprendre" }))) return;
+    toast("Téléchargement chez MakerWorld…");
+    try {
+      const { data } = await client.post(`/makerworld/source3mf/refresh/group/${groupId}`, { prints: m.ids || [] }, { timeout: 600000 });
+      egg("mw_3mf_repris");
+      const n = (data.done || []).reduce((a, x) => a + x.print_ids.length, 0), sk = (data.skipped || []).length;
+      toast(`3MF d'origine repris pour ${n} impression${n > 1 ? "s" : ""}${sk ? ` (${sk} sans profil retrouvé)` : ""} : la vue 3D se refait`);
+      loadPrints(); onUpdated?.();
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
   const [sharing, setSharing] = useState(false);
   const [nbItems, setNbItems] = useState(nbItemsProp || 1);
   const [editNb, setEditNb] = useState(false);
@@ -2492,7 +2515,7 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
         usedPrints={prints.filter(x => !String(x.design_id || "").trim()).map(x => x.id)} scope={`group:${groupId}`} onClose={() => setOwn3d(null)}/>}
       {files && <FilesSheet kind="group" id={groupId} title={name} isAdmin={isAdmin} onClose={() => setFiles(false)} actions={{
         download: k => download3mf(groupId, k, true), sourceRows: groupModels,
-        importGroupSource: m => importGroupSource(m),
+        importGroupSource: m => importGroupSource(m), refetchGroupSource,
         // un 3MF joint qui devient le 3MF d'origine : pour le seul modele du groupe (s'il en melange plusieurs, par sa ligne)
         importSource: groupModels.length === 1 ? f => importGroupSource(groupModels[0], f) : null,
         own3d: own3dPrint ? () => setOwn3d(own3dPrint) : null,

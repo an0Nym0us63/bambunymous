@@ -2346,6 +2346,46 @@ async def mw_source_print(print_id: int, _: str = Depends(require_mw)):
     return r
 
 
+async def _refetch(rows):
+    from ....services.mw_source import refetch
+    from ....services.mw_3mf import ExactError
+    try:
+        return await refetch(rows)
+    except ExactError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/source3mf/refresh/print/{print_id}")
+async def mw_source_refresh_print(print_id: int, _: str = Depends(require_mw)):
+    """Reprend chez MakerWorld le 3MF d'origine d'une impression (27/11/2026 : profil remplace par le createur) ; l'ancien
+    n'est remplace qu'une fois le nouveau telecharge et verifie."""
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import Print
+    async with AsyncSessionLocal() as db:
+        r = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.task_name)
+                              .where(Print.id == print_id))).first()
+    if not r:
+        raise HTTPException(404, "Impression introuvable")
+    return await _refetch([tuple(r)])
+
+
+@router.post("/source3mf/refresh/group/{group_id}")
+async def mw_source_refresh_group(group_id: int, body: dict = Body({}), _: str = Depends(require_mw)):
+    """Pareil pour les impressions d'un groupe ; prints : seulement celles-la (une ligne de « Fichiers associes »)."""
+    from sqlalchemy import select
+    from ....db.session import AsyncSessionLocal
+    from ....models.print_history import Print
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.id, Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.task_name)
+                                 .where(Print.group_id == group_id))).all()
+    only = {int(x) for x in (body.get("prints") or []) if str(x).isdigit()}
+    rows = [tuple(r) for r in rows if not only or r[0] in only]
+    if not rows:
+        raise HTTPException(404, "Aucune impression de ce groupe")
+    return await _refetch(rows)
+
+
 @router.post("/source3mf/backfill")
 async def mw_source_backfill(_: str = Depends(require_mw)):
     """Lance le rattrapage en arriere-plan (toutes les impressions liees a un profil)."""

@@ -528,6 +528,166 @@ def print_file(design_id, profile_id, manual=None, pid=None, task=None) -> Path 
     return path_of(iid) if iid else None
 
 
+# ── Reprendre le 3MF d'origine chez MakerWorld (27/11/2026) ──
+# Un createur qui remplace un profil (nouvelle version, ou nouveau profil a la place de l'ancien) : on gardait l'ancien
+# fichier a jamais (fetch ne retelecharge rien de ce qui est la), et l'assemblage montrait l'ancien modele. Ici : la
+# fiche du modele relue chez MakerWorld, le profil de l'impression retrouve (ou celui qui l'a remplace, au nom de la
+# tache ; ou le seul du modele), son 3MF telecharge a cote et verifie (un 3MF lisible, avec sa geometrie) ; seulement
+# alors il prend la place de l'ancien, et l'ancien fichier, s'il n'est plus relie a rien, est supprime.
+def _check_source(data: bytes) -> None:
+    from .mw_3mf import ExactError
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            names = z.namelist()
+            if "3D/3dmodel.model" not in names:
+                raise ExactError("Le fichier reçu de MakerWorld n'est pas un projet 3MF (pas de 3D/3dmodel.model) : l'ancien est gardé")
+            root = z.read("3D/3dmodel.model")
+            if b"<vertex" not in root and not any(n.startswith("3D/Objects/") for n in names):
+                raise ExactError("Le 3MF reçu de MakerWorld n'a pas de modèle : l'ancien est gardé")
+    except zipfile.BadZipFile:
+        raise ExactError("Le fichier reçu de MakerWorld n'est pas un 3MF : l'ancien est gardé")
+
+
+def _forget_file(iid: str) -> bool:
+    """Supprime le 3MF d'origine local d'une instance et ce qui en derive ici (filaments exacts, vue 3D), s'il n'est
+    plus relie a rien dans l'index. La copie du NAS, s'il y en a une, reste (la purge du NAS s'en charge)."""
+    import shutil
+    if not iid or iid in set(_index().values()):
+        return False
+    gone = False
+    for f in (local_path_of(iid), _dir() / f"{iid}.json"):
+        try:
+            if f.is_file():
+                f.unlink()
+                gone = True
+        except OSError:
+            pass
+    try:
+        from .mw_3d import _root
+        d = _root() / iid
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
+    except Exception:
+        pass
+    return gone
+
+
+async def refetch(rows: list) -> dict:
+    """rows : [(impression, modele, profil imprime, plateaux choisis, nom de la tache)]. Rend {"done": [...],
+    "skipped": [...]} ; leve mw_3mf.ExactError quand rien n'a pu etre repris (l'ancien fichier reste alors en place)."""
+    from sqlalchemy import update
+    from .mw_3mf import ExactError, _download, parse_project
+    from .makerworld_account import token
+    from . import makerworld as mw
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    rows = [r for r in rows if str(r[1] or "").strip().isdigit()]
+    if not rows:
+        raise ExactError("Pas de modèle MakerWorld : rien à reprendre (importe ton 3MF d'origine)")
+    tok = await token()
+    if not tok:
+        raise ExactError("Compte MakerWorld non connecté (Paramètres → Données → MakerWorld)")
+    # 1. la fiche de chaque modele, relue chez MakerWorld (pas celle gardee : c'est elle qui a vieilli)
+    bases = {}
+    for did in dict.fromkeys(str(r[1]).strip() for r in rows):
+        base = await mw._fetch_base(did)
+        if not isinstance(base, dict) or "error" in base:
+            bases[did] = (base or {}).get("error") if isinstance(base, dict) else "MakerWorld ne répond pas"
+            continue
+        mw._MODEL_CACHE[did] = (time.time(), base)
+        await asyncio.to_thread(mw._disk_put, did, base)
+        bases[did] = base
+    # 2. pour chaque impression : le profil d'aujourd'hui et l'instance a telecharger
+    plan: dict = {}                                   # (modele, instance) -> [(impression, profil, ancienne instance)]
+    skipped = []
+    for pid, did, prof_raw, manual, task in rows:
+        did = str(did).strip()
+        base = bases.get(did)
+        if not isinstance(base, dict):
+            skipped.append({"print_id": pid, "why": base or "fiche MakerWorld introuvable"})
+            continue
+        old = print_file(did, prof_raw, manual, pid, task)
+        old_iid = old.stem if old is not None else None
+        prof = _profile(prof_raw, manual, did, task)
+        profs = [p for p in base.get("profiles") or [] if isinstance(p, dict) and p.get("instance_id")]
+        hit = next((p for p in profs if prof and prof in (str(p.get("instance_id")), str(p.get("profile_id") or ""))), None)
+        if hit is None and len(profs) == 1:
+            hit = profs[0]                            # un seul profil sur le modele : c'est lui
+        if hit is None and not prof and old_iid:
+            hit = next((p for p in profs if str(p.get("instance_id")) == old_iid), None)
+        if hit is None:
+            skipped.append({"print_id": pid, "why": "son profil n'est plus sur MakerWorld (choisis le profil dans « Plateaux »)"
+                            if prof else "profil imprimé inconnu (choisis-le dans « Plateaux »)"})
+            continue
+        plan.setdefault((did, str(hit["instance_id"])), []).append((pid, prof, str(prof_raw or "").strip(), str(hit.get("profile_id") or ""), old_iid))
+    if not plan:
+        raise ExactError(" ; ".join(dict.fromkeys(s["why"] for s in skipped)) or "Rien à reprendre")
+    # 3. chaque instance : telechargee a cote, verifiee, puis a la place de l'ancienne
+    done, errors, olds = [], [], set()
+    for (did, iid), members in plan.items():
+        with _LOCK:
+            if iid in _BUSY:
+                errors.append("déjà en cours de récupération")
+                continue
+            _BUSY.add(iid)
+        try:
+            try:
+                data = await asyncio.to_thread(_download, iid, tok)
+                _check_source(data)
+            except ExactError as e:
+                errors.append(str(e))
+                if daily_limited(e) or rate_limited(e) or "Jeton" in str(e):
+                    break
+                continue
+            dest = local_path_of(iid)
+            tmp = dest.with_suffix(".part")
+            tmp.write_bytes(data)
+            tmp.replace(dest)                         # meme instance (profil mis a jour) : ecrase ; sinon, a cote
+            try:
+                (_dir() / f"{iid}.json").write_text(json.dumps(parse_project(data), ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                (_dir() / f"{iid}.json").unlink(missing_ok=True)
+            # l'index : ce modele et ce profil (tels que l'imprimante les a donnes aussi), et tout ce qui pointait sur
+            # l'ancien fichier pour ce modele
+            keys = []
+            for _pid, prof, raw, new_prof, old_iid in members:
+                keys += [f"{did}:{k}" for k in (prof, raw, new_prof) if k and k != "0"]
+                if old_iid and old_iid != iid:
+                    olds.add(old_iid)
+                    keys += [k for k, v in _index().items() if v == old_iid and k.split(":", 1)[0] == did]
+            if not _index().get(f"{did}:") or _index().get(f"{did}:") in olds:
+                keys.append(f"{did}:")
+            for k in dict.fromkeys(keys):
+                _index_put(k, iid)
+            ids = [m[0] for m in members]
+            # les plateaux reconnus d'office (pas ceux choisis a la main) : refaits sur le nouveau fichier
+            async with AsyncSessionLocal() as db:
+                await db.execute(update(Print).where(Print.id.in_(ids), Print.mw_plates.like('%"auto"%')).values(mw_plates=None))
+                await db.commit()
+            for pid in ids:
+                await attribute_plate(pid, iid)
+            logger.info(f"[MW-3MF] modele {did} : 3MF d'origine repris chez MakerWorld (instance {iid}, {len(data) // 1024} Ko, "
+                        f"impression(s) {', '.join(map(str, ids))})")
+            done.append({"design_id": did, "instance_id": iid, "print_ids": ids, "kb": len(data) // 1024})
+            try:
+                from .mw_3d import prepare
+                t = asyncio.get_running_loop().create_task(prepare(iid))
+                _PREP.add(t)
+                t.add_done_callback(_PREP.discard)
+            except Exception:
+                pass
+        finally:
+            with _LOCK:
+                _BUSY.discard(iid)
+    removed = [o for o in olds if _forget_file(o)]
+    if removed:
+        logger.info(f"[MW-3MF] ancien(s) 3MF d'origine supprime(s) : {', '.join(removed)}")
+    if not done:
+        raise ExactError(" ; ".join(dict.fromkeys(errors + [s["why"] for s in skipped])) or "Rien à reprendre")
+    _queue_stale()
+    return {"done": done, "skipped": skipped, "errors": errors, "removed": len(removed)}
+
+
 # les profils imprimes sans fichier exact (01/11/2026), notes par le rattrapage : « guessed » (le profil n'existe plus
 # sur MakerWorld, le fichier du profil le plus proche est garde) ou « gone » (modele introuvable). Le bilan les comptait
 # « a recuperer » a jamais, et « Reprendre » les reessayait pour rien.
