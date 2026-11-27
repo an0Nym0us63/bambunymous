@@ -14,6 +14,7 @@ import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPick
 import MwDocs from "../components/MwDocs";
 import Model3D from "../components/Model3D";
 import { openVue3D } from "../components/Vue3DPicker";
+import { askProfile } from "../components/ProfilePickSheet";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
 import { useToRateSet, useToRateFor, RateButton, RateStar as RateStarBtn } from "../components/MwToRate";
@@ -1604,7 +1605,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged, onPrev = n
     if (!(await showConfirm("Reprendre chez MakerWorld le 3MF d'origine de cette impression ? La dernière version du profil remplace celle gardée ici (l'ancienne n'est supprimée qu'une fois la nouvelle reçue et vérifiée). Compte comme un téléchargement.", { confirmLabel: "Reprendre" }))) return;
     toast("Téléchargement chez MakerWorld…");
     try {
-      const { data } = await client.post(`/makerworld/source3mf/refresh/print/${p.id}`, null, { timeout: 600000 });
+      // le profil ne se retrouve pas (remplace par le createur) : la fenetre des profils, puis le profil choisi
+      const data = await refetchWithPick(pick => client.post(`/makerworld/source3mf/refresh/print/${p.id}`, { pick }, { timeout: 600000 }));
+      if (!data) return;
       egg("mw_3mf_repris");
       toast(`3MF d'origine repris (${Math.max(1, Math.round((data.done?.[0]?.kb || 0) / 1024))} Mo) : la vue 3D se refait`);
       onChanged?.();
@@ -2082,7 +2085,8 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
     if (!(await showConfirm(`Reprendre chez MakerWorld le 3MF d'origine (${m.label}) ? La dernière version du profil remplace celle gardée ici (l'ancienne n'est supprimée qu'une fois la nouvelle reçue et vérifiée). Compte comme un téléchargement.`, { confirmLabel: "Reprendre" }))) return;
     toast("Téléchargement chez MakerWorld…");
     try {
-      const { data } = await client.post(`/makerworld/source3mf/refresh/group/${groupId}`, { prints: m.ids || [] }, { timeout: 600000 });
+      const data = await refetchWithPick(pick => client.post(`/makerworld/source3mf/refresh/group/${groupId}`, { prints: m.ids || [], pick }, { timeout: 600000 }));
+      if (!data) return;
       egg("mw_3mf_repris");
       const n = (data.done || []).reduce((a, x) => a + x.print_ids.length, 0), sk = (data.skipped || []).length;
       toast(`3MF d'origine repris pour ${n} impression${n > 1 ? "s" : ""}${sk ? ` (${sk} sans profil retrouvé)` : ""} : la vue 3D se refait`);
@@ -3408,6 +3412,24 @@ function EnergyLine({ p, isAdmin, onMeasured }) {
       </div>
     </>}
   </div>;
+}
+
+// reprendre le 3MF d'origine (27/11/2026) : tant que le serveur ne retrouve pas un profil, il propose ceux du modele ;
+// chaque choix fait repart avec les precedents. Rend la reponse finale (ce qui a ete repris), null si on annule.
+async function refetchWithPick(send) {
+  const pick = {};
+  let all = { done: [], skipped: [] };
+  for (let i = 0; i < 6; i++) {
+    const { data } = await send(pick);
+    all = { ...data, done: [...all.done, ...(data.done || [])] };
+    const a = (data.ask || []).find(x => !(x.design_id in pick));
+    if (!a) break;
+    const iid = await askProfile(a);
+    if (!iid) return all.done.length ? all : null;
+    pick[a.design_id] = iid;
+    toast("Téléchargement chez MakerWorld…");
+  }
+  return all.done.length ? all : null;
 }
 
 export default function Prints() {

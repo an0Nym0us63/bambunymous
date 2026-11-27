@@ -2346,17 +2346,17 @@ async def mw_source_print(print_id: int, _: str = Depends(require_mw)):
     return r
 
 
-async def _refetch(rows):
+async def _refetch(rows, pick=None):
     from ....services.mw_source import refetch
     from ....services.mw_3mf import ExactError
     try:
-        return await refetch(rows)
+        return await refetch(rows, pick if isinstance(pick, dict) else None)
     except ExactError as e:
         raise HTTPException(400, str(e))
 
 
 @router.post("/source3mf/refresh/print/{print_id}")
-async def mw_source_refresh_print(print_id: int, _: str = Depends(require_mw)):
+async def mw_source_refresh_print(print_id: int, body: dict = Body({}), _: str = Depends(require_mw)):
     """Reprend chez MakerWorld le 3MF d'origine d'une impression (27/11/2026 : profil remplace par le createur) ; l'ancien
     n'est remplace qu'une fois le nouveau telecharge et verifie."""
     from sqlalchemy import select
@@ -2367,7 +2367,7 @@ async def mw_source_refresh_print(print_id: int, _: str = Depends(require_mw)):
                               .where(Print.id == print_id))).first()
     if not r:
         raise HTTPException(404, "Impression introuvable")
-    return await _refetch([tuple(r)])
+    return await _refetch([tuple(r)], (body or {}).get("pick"))
 
 
 @router.post("/source3mf/refresh/group/{group_id}")
@@ -2383,7 +2383,7 @@ async def mw_source_refresh_group(group_id: int, body: dict = Body({}), _: str =
     rows = [tuple(r) for r in rows if not only or r[0] in only]
     if not rows:
         raise HTTPException(404, "Aucune impression de ce groupe")
-    return await _refetch(rows)
+    return await _refetch(rows, (body or {}).get("pick"))
 
 
 @router.post("/source3mf/backfill")

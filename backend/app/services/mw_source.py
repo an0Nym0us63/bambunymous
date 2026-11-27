@@ -572,9 +572,24 @@ def _forget_file(iid: str) -> bool:
     return gone
 
 
-async def refetch(rows: list) -> dict:
-    """rows : [(impression, modele, profil imprime, plateaux choisis, nom de la tache)]. Rend {"done": [...],
-    "skipped": [...]} ; leve mw_3mf.ExactError quand rien n'a pu etre repris (l'ancien fichier reste alors en place)."""
+def _pick_view(p: dict) -> dict:
+    """Un profil de la fiche, tel que la fenetre de choix le montre (vignette, resume, caracteristiques)."""
+    import re
+    s = re.sub(r"\[\[(img|video):[^\]]*\]\]", " ", str(p.get("summary") or ""))
+    s = re.sub(r"\[\[h:([^\]]*)\]\]", r"\1 :", s)
+    s = re.sub(r"\[\[a:[^|\]]*\|([^\]]*)\]\]", r"\1", s)
+    s = re.sub(r"[ \t]+", " ", re.sub(r"\n{3,}", "\n\n", s)).strip()
+    keep = ("instance_id", "profile_id", "title", "title_original", "cover", "default", "printer", "also_for", "by_designer",
+            "author", "rating", "rating_count", "weight_g", "seconds", "settings", "print_count", "filaments", "fit", "main")
+    return {**{k: p.get(k) for k in keep}, "summary": s[:900] + ("…" if len(s) > 900 else ""),
+            "plates": len(p.get("plates") or []), "pictures": (p.get("pictures") or [])[:6]}
+
+
+async def refetch(rows: list, pick: dict | None = None) -> dict:
+    """rows : [(impression, modele, profil imprime, plateaux choisis, nom de la tache)] ; pick : {modele: instance}
+    choisie dans la fenetre des profils. Rend {"done": [...], "skipped": [...], "ask": [...]} -- ask : les modeles dont le
+    profil ne se retrouve pas, avec leurs profils a proposer ; leve mw_3mf.ExactError quand rien n'a pu etre repris ni
+    demande (l'ancien fichier reste alors en place)."""
     from sqlalchemy import update
     from .mw_3mf import ExactError, _download, parse_project
     from .makerworld_account import token
@@ -599,7 +614,8 @@ async def refetch(rows: list) -> dict:
         bases[did] = base
     # 2. pour chaque impression : le profil d'aujourd'hui et l'instance a telecharger
     plan: dict = {}                                   # (modele, instance) -> [(impression, profil, ancienne instance)]
-    skipped = []
+    skipped, ask, picked = [], {}, set()
+    pick = {str(k): str(v) for k, v in (pick or {}).items()}
     for pid, did, prof_raw, manual, task in rows:
         did = str(did).strip()
         base = bases.get(did)
@@ -610,17 +626,37 @@ async def refetch(rows: list) -> dict:
         old_iid = old.stem if old is not None else None
         prof = _profile(prof_raw, manual, did, task)
         profs = [p for p in base.get("profiles") or [] if isinstance(p, dict) and p.get("instance_id")]
-        hit = next((p for p in profs if prof and prof in (str(p.get("instance_id")), str(p.get("profile_id") or ""))), None)
+        hit = None
+        if pick.get(did):
+            hit = next((p for p in profs if str(p.get("instance_id")) == pick[did]), None)
+            if hit is not None:
+                picked.add(pid)
+        if hit is None:
+            hit = next((p for p in profs if prof and prof in (str(p.get("instance_id")), str(p.get("profile_id") or ""))), None)
         if hit is None and len(profs) == 1:
             hit = profs[0]                            # un seul profil sur le modele : c'est lui
         if hit is None and not prof and old_iid:
             hit = next((p for p in profs if str(p.get("instance_id")) == old_iid), None)
+        if hit is None and profs:
+            # plusieurs profils et aucun ne se reconnait : on les propose (fenetre de choix)
+            a = ask.setdefault(did, {"design_id": did, "title": html.unescape(base.get("title_fr") or base.get("title") or f"Modèle {did}"),
+                                     "cover": base.get("cover_url"), "task": html.unescape(str(task or "")), "gone": bool(prof),
+                                     "print_ids": [], "profiles": None})
+            a["print_ids"].append(pid)
+            if a["profiles"] is None:
+                try:
+                    ranked = mw.rank_profiles(profs, await mw.my_printer())
+                except Exception:
+                    ranked = profs
+                a["profiles"] = [_pick_view(p) for p in ranked]
+            continue
         if hit is None:
-            skipped.append({"print_id": pid, "why": "son profil n'est plus sur MakerWorld (choisis le profil dans « Plateaux »)"
-                            if prof else "profil imprimé inconnu (choisis-le dans « Plateaux »)"})
+            skipped.append({"print_id": pid, "why": "le modèle n'a plus aucun profil sur MakerWorld"})
             continue
         plan.setdefault((did, str(hit["instance_id"])), []).append((pid, prof, str(prof_raw or "").strip(), str(hit.get("profile_id") or ""), old_iid))
     if not plan:
+        if ask:
+            return {"done": [], "skipped": skipped, "errors": [], "removed": 0, "ask": list(ask.values())}
         raise ExactError(" ; ".join(dict.fromkeys(s["why"] for s in skipped)) or "Rien à reprendre")
     # 3. chaque instance : telechargee a cote, verifiee, puis a la place de l'ancienne
     done, errors, olds = [], [], set()
@@ -663,6 +699,12 @@ async def refetch(rows: list) -> dict:
             # les plateaux reconnus d'office (pas ceux choisis a la main) : refaits sur le nouveau fichier
             async with AsyncSessionLocal() as db:
                 await db.execute(update(Print).where(Print.id.in_(ids), Print.mw_plates.like('%"auto"%')).values(mw_plates=None))
+                # un profil choisi dans la fenetre : il devient celui de l'impression (l'ancien n'existe plus), et des
+                # plateaux choisis pour l'ancien ne disent plus rien du nouveau
+                chosen = [m[0] for m in members if m[0] in picked]
+                newp = next((m[3] for m in members if m[0] in picked and m[3]), None)
+                if chosen and newp:
+                    await db.execute(update(Print).where(Print.id.in_(chosen)).values(mw_profile_id=newp, mw_plates=None))
                 await db.commit()
             for pid in ids:
                 await attribute_plate(pid, iid)
@@ -682,10 +724,11 @@ async def refetch(rows: list) -> dict:
     removed = [o for o in olds if _forget_file(o)]
     if removed:
         logger.info(f"[MW-3MF] ancien(s) 3MF d'origine supprime(s) : {', '.join(removed)}")
-    if not done:
+    if not done and not ask:
         raise ExactError(" ; ".join(dict.fromkeys(errors + [s["why"] for s in skipped])) or "Rien à reprendre")
-    _queue_stale()
-    return {"done": done, "skipped": skipped, "errors": errors, "removed": len(removed)}
+    if done:
+        _queue_stale()
+    return {"done": done, "skipped": skipped, "errors": errors, "removed": len(removed), "ask": list(ask.values())}
 
 
 # les profils imprimes sans fichier exact (01/11/2026), notes par le rattrapage : « guessed » (le profil n'existe plus
